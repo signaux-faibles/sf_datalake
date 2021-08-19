@@ -1,13 +1,12 @@
-from pyspark.ml.feature import PCA, StandardScaler
-from pyspark.ml.stat import Correlation
-from pyspark.ml import Pipeline
-from pyspark.ml.classification import LogisticRegression
 from pyspark.sql import functions as f
-from pyspark.sql import SparkSession, types
-from pyspark.ml.feature import VectorAssembler
+from pyspark.sql import SparkSession
+from pyspark.sql.window import Window
+
 
 ## Instanciating Spark session
 spark = SparkSession.builder.getOrCreate()
+# spark.conf.set("spark.shuffle.blockTransferService", "nio")
+spark.conf.set("spark.driver.maxResultSize", "1300M")
 
 #########
 # Utils #
@@ -32,8 +31,7 @@ src = {
     "refent_etab": "pub_refent-t_ref_etablissements.orc",
     "refent_entr": "pub_refent-t_ref_entreprise.orc",
     "jugements": "etl_refent_oracle-t_jugement_histo.orc",
-    "signaux_faibles": "export_clean.orc",
-    "groupes": "",   
+    "rar_tva": "rar.rar_tva_exercice.orc", 
 }
 
 indmap = load_source("decla_indmap")
@@ -42,8 +40,9 @@ defa = load_source("defaillances")
 refent_entr = load_source("refent_entr")
 refent_etab = load_source("refent_etab")
 jugements = load_source("jugements")
+rar_tva = load_source("rar_tva")
 
-sf = spark.read.options(inferSchema='True', header="True", sep=",").csv("/projets/TSF/sources/data_sf.csv")
+sf = spark.read.orc("/projets/TSF/sources/data_sf_padded.orc")
 
 #####
 # Building yearly indicators, following MRV's model (originally in SAS)
@@ -102,14 +101,25 @@ df = indmap.join(
     "year_exercice", f.year("date_fin_exercice")
 )
 
+# join RAR_TVA
+df = df.join(
+    rar_tva,
+    on=["siren", "date_deb_exercice", "date_fin_exercice"],
+    how="left"
+)
 
-from pyspark.sql.window import Window
+#df = df.join(
+#    refent_entr,
+#    on=["siren", "date_deb_exercice", "date_fin_exercice"],
+#    how="left"
+#)
 
+# Calcul taux d'accroissement
 df = df.withColumn(
     "per_rank", f.dense_rank().over(
         Window.partitionBy("siren").orderBy("date_deb_exercice")
     )
-)
+).drop_duplicates(subset = ["siren", "per_rank"]) # 2 obs with the same "date_deb_exercice" --> only keep 1
 
 df_ante = df.alias("df_ante")
 for col in df_ante.columns:
@@ -139,7 +149,7 @@ for col in df.columns:
         (tac_base[col]-tac_base[f"{col}_ante"])/(tac_base[f"{col}_ante"])
     )
     tac_columns.append(f"tac_1y_{col}")
-    
+
 tac = tac_base.select(tac_columns+key_columns)
 
 df_v = df.join(
@@ -148,21 +158,37 @@ df_v = df.join(
     how="left",
 )
 
-indics_annuels = df_v.join(
-    sf.withColumnRenamed("siren", "siren_sf"),
+# indics_annuels = df_v.join(
+#     sf.withColumnRenamed("siren", "siren_sf"),
+#     [
+#         f.months_between(
+#             f.to_date(sf["periode"]),
+#             f.to_date(df_v["date_deb_exercice"]),
+#         ) >= 0,
+#         f.months_between(
+#             f.to_date(sf["periode"]),
+#             f.to_date(df_v["date_fin_exercice"]),
+#         ) <= 0,
+#         sf.siren == df_v.siren
+#     ],
+#     how="full"
+# )
+
+df_v = df_v.withColumn("year", f.year(f.to_date(df_v["date_deb_exercice"])))
+sf = sf.withColumn("year_sf", f.year(sf["periode"]))
+sf = sf.withColumnRenamed("siren", "siren_sf")
+
+indics_annuels = sf.join(
+    df_v,
     [
-        f.months_between(
-            f.to_date(sf["periode"]),
-            f.to_date(df_v["date_deb_exercice"]),
-        ) >= 0,
-        f.months_between(
-            f.to_date(sf["periode"]),
-            f.to_date(df_v["date_fin_exercice"]),
-        ) <= 0,
+        sf.year_sf == df_v.year,
+        sf.siren_sf == df_v.siren
     ],
-    how = "full"
+    how = "left"
 )
 
-indics_annuels = indics_annuels.filter(indics_annuels.siren == indics_annuels.siren_sf).drop("siren_sf")
+# indics_annuels = indics_annuels.filter(indics_annuels.siren == indics_annuels.siren_sf).drop("siren_sf")
 
-indics_annuels.write.format("orc").save("/projets/TSF/sources/base/indicateurs_annuels.orc")
+indics_annuels = indics_annuels.drop("siren_sf")
+indics_annuels = indics_annuels.drop("year_sf")
+indics_annuels.write.format("orc").save("/projets/TSF/sources/base/joined_data_annuel.orc")
