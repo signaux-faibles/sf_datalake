@@ -1,57 +1,75 @@
-from pyspark.sql import functions as f
+from os import path
+
+import pyspark.sql.functions as F
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 
-
 ## Instanciating Spark session
 spark = SparkSession.builder.getOrCreate()
-# spark.conf.set("spark.shuffle.blockTransferService", "nio")
+spark.conf.set("spark.shuffle.blockTransferService", "nio")
 spark.conf.set("spark.driver.maxResultSize", "1300M")
 
 #########
 # Utils #
 #########
 
-def load_source(src_name, spl_size = None):
-    df = spark.read.orc(f"{vues_rootfolder}/{src[src_name]}")
+
+def load_source(src_name, spl_size=None):
+    df = spark.read.orc(SRC_PATHS[src_name])
     if spl_size is not None:
-        df = df.sample(n=spl_size)
+        df = df.sample(spl_size)
     return df
+
+
+def null_values_stats(df, columns=None):
+    """Computes percentage of null values in given DataFrame columns."""
+    if columns is None:
+        columns = df.columns
+    df_size = df.count()
+    return df.select(
+        [(F.count(F.when(F.isnull(c), c)) / df_size).alias(c) for c in columns]
+    )
+
 
 ####################
 # Loading datasets #
 ####################
 
-vues_rootfolder = "/projets/TSF/sources/livraison_MRV-DTNUM_juin_2021"
+# SAMPLE_SIZE = 0.05  # set to None to get all dataset
+SAMPLE_SIZE = None
 
-src = {
-    "decla_indmap":  "etl_decla-declarations_indmap.orc",
-    "decla_af": "etl_decla-declarations_af.orc",
-    "defaillances": "pub_medoc_oracle-t_defaillance.orc",
-    "refent_etab": "pub_refent-t_ref_etablissements.orc",
-    "refent_entr": "pub_refent-t_ref_entreprise.orc",
-    "jugements": "etl_refent_oracle-t_jugement_histo.orc",
-    "rar_tva": "rar.rar_tva_exercice.orc", 
+ROOT_FOLDER = "/projets/TSF/sources/"
+MRV_DTNUM_FOLDER = path.join(ROOT_FOLDER, "livraison_MRV-DTNUM_juin_2021")
+
+SRC_PATHS = {
+    "decla_indmap": path.join(MRV_DTNUM_FOLDER, "etl_decla-declarations_indmap.orc"),
+    "decla_af": path.join(MRV_DTNUM_FOLDER, "etl_decla-declarations_af.orc"),
+    "defaillances": path.join(MRV_DTNUM_FOLDER, "pub_medoc_oracle-t_defaillance.orc"),
+    "refent_etab": path.join(MRV_DTNUM_FOLDER, "pub_refent-t_ref_etablissements.orc"),
+    "refent_entr": path.join(MRV_DTNUM_FOLDER, "pub_refent-t_ref_entreprise.orc"),
+    "jugements": path.join(MRV_DTNUM_FOLDER, "etl_refent_oracle-t_jugement_histo.orc"),
+    "rar_tva": path.join(MRV_DTNUM_FOLDER, "rar.rar_tva_exercice.orc"),
+    "sf": path.join(ROOT_FOLDER, "data_sf_padded.orc"),
 }
 
-indmap = load_source("decla_indmap")
-af = load_source("decla_af")
-defa = load_source("defaillances")
-refent_entr = load_source("refent_entr")
-refent_etab = load_source("refent_etab")
-jugements = load_source("jugements")
-rar_tva = load_source("rar_tva")
+indmap = load_source("decla_indmap", SAMPLE_SIZE)
+af = load_source("decla_af", SAMPLE_SIZE)
+defa = load_source("defaillances", SAMPLE_SIZE)
+refent_entr = load_source("refent_entr", SAMPLE_SIZE)
+refent_etab = load_source("refent_etab", SAMPLE_SIZE)
+jugements = load_source("jugements", SAMPLE_SIZE)
+rar_tva = load_source("rar_tva", SAMPLE_SIZE)
 
-sf = spark.read.orc("/projets/TSF/sources/data_sf_padded.orc")
+sf = load_source("sf", SAMPLE_SIZE)
 
-#####
+####################
+# Merge datasets   #
+####################
+
 # Building yearly indicators, following MRV's model (originally in SAS)
-####
 
 df = indmap.join(
-    af,
-    on=["siren", "date_deb_exercice", "date_fin_exercice"],
-    how="left"
+    af, on=["siren", "date_deb_exercice", "date_fin_exercice"], how="left"
 ).select(
     "siren",
     "date_deb_exercice",
@@ -97,60 +115,54 @@ df = indmap.join(
     "RTO_TVA_DECUC_TVA_COL",
     "D_CR_250_EXPL_SALAIRE",
     "D_CR_252_EXPL_CH_SOC",
-).withColumn(
-    "year_exercice", f.year("date_fin_exercice")
+    "MNT_AF_SIG_EBE_RET",
+    "MNT_AF_BFONC_BFR",
+    "RTO_AF_RATIO_RENT_MBE",
+    "RTO_AF_RENT_ECO",
 )
 
-# join RAR_TVA
+# Jointure RAR_TVA
 df = df.join(
-    rar_tva,
-    on=["siren", "date_deb_exercice", "date_fin_exercice"],
-    how="left"
+    rar_tva, on=["siren", "date_deb_exercice", "date_fin_exercice"], how="left"
 )
-
-#df = df.join(
-#    refent_entr,
-#    on=["siren", "date_deb_exercice", "date_fin_exercice"],
-#    how="left"
-#)
 
 # Calcul taux d'accroissement
 df = df.withColumn(
-    "per_rank", f.dense_rank().over(
-        Window.partitionBy("siren").orderBy("date_deb_exercice")
-    )
-).drop_duplicates(subset = ["siren", "per_rank"]) # 2 obs with the same "date_deb_exercice" --> only keep 1
+    "per_rank",
+    F.dense_rank().over(Window.partitionBy("siren").orderBy("date_deb_exercice")),
+).drop_duplicates(
+    subset=["siren", "per_rank"]
+)  # 2 obs with the same "date_deb_exercice" --> only keep 1
 
 df_ante = df.alias("df_ante")
 for col in df_ante.columns:
-    df_ante = df_ante.withColumnRenamed(
-        col,
-        f"{col}_ante"
-    )
+    df_ante = df_ante.withColumnRenamed(col, f"{col}_ante")
 
 tac_base = df.join(
     df_ante,
     on=[
         df_ante.siren_ante == df.siren,
-        df_ante.per_rank_ante+2 == df.per_rank,
+        df_ante.per_rank_ante + 2 == df.per_rank,
     ],
-    how="left"
+    how="left",
 )
 
 tac_columns = []
 key_columns = ["siren", "date_deb_exercice", "date_fin_exercice"]
-skip_columns = ["year_exercice", "per_rank"]
+skip_columns = ["per_rank"]
 
 for col in df.columns:
-    if col in (key_columns + skip_columns):
+    if col in key_columns + skip_columns:
         continue
     tac_base = tac_base.withColumn(
         f"tac_1y_{col}",
-        (tac_base[col]-tac_base[f"{col}_ante"])/(tac_base[f"{col}_ante"])
+        (tac_base[col] - tac_base[f"{col}_ante"]) / (tac_base[f"{col}_ante"]),
     )
     tac_columns.append(f"tac_1y_{col}")
 
-tac = tac_base.select(tac_columns+key_columns)
+tac = tac_base.select(tac_columns + key_columns)
+
+## Jointure taux d'accroissement
 
 df_v = df.join(
     tac,
@@ -158,37 +170,23 @@ df_v = df.join(
     how="left",
 )
 
-# indics_annuels = df_v.join(
-#     sf.withColumnRenamed("siren", "siren_sf"),
-#     [
-#         f.months_between(
-#             f.to_date(sf["periode"]),
-#             f.to_date(df_v["date_deb_exercice"]),
-#         ) >= 0,
-#         f.months_between(
-#             f.to_date(sf["periode"]),
-#             f.to_date(df_v["date_fin_exercice"]),
-#         ) <= 0,
-#         sf.siren == df_v.siren
-#     ],
-#     how="full"
-# )
+## Jointure SF
 
-df_v = df_v.withColumn("year", f.year(f.to_date(df_v["date_deb_exercice"])))
-sf = sf.withColumn("year_sf", f.year(sf["periode"]))
-sf = sf.withColumnRenamed("siren", "siren_sf")
+df_v = df_v.withColumn(
+    "year_dgfip", F.year(df_v["date_fin_exercice"])
+).withColumnRenamed("siren", "siren_dgfip")
+
+sf = sf.withColumn(
+    "year",
+    F.when(sf["exercice_diane"].isNotNull(), sf["exercice_diane"]).otherwise(
+        F.year(sf["periode"])
+    ),
+).withColumn("siren", F.substring(sf.siret, 1, 9))
 
 indics_annuels = sf.join(
-    df_v,
-    [
-        sf.year_sf == df_v.year,
-        sf.siren_sf == df_v.siren
-    ],
-    how = "left"
+    df_v, [sf.year == df_v.year_dgfip, sf.siren == df_v.siren_dgfip], how="full_outer"
 )
 
-# indics_annuels = indics_annuels.filter(indics_annuels.siren == indics_annuels.siren_sf).drop("siren_sf")
-
-indics_annuels = indics_annuels.drop("siren_sf")
-indics_annuels = indics_annuels.drop("year_sf")
-indics_annuels.write.format("orc").save("/projets/TSF/sources/base/joined_data_annuel.orc")
+indics_annuels.write.format("orc").save(
+    "/projets/TSF/sources/base/indicateurs_annuels.orc"
+)
