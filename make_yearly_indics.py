@@ -4,7 +4,8 @@ import pyspark.sql.functions as F
 from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 
-## Instanciating Spark session
+#  Instanciating Spark session
+
 spark = SparkSession.builder.getOrCreate()
 spark.conf.set("spark.shuffle.blockTransferService", "nio")
 spark.conf.set("spark.driver.maxResultSize", "1300M")
@@ -35,7 +36,7 @@ def null_values_stats(df, columns=None):
 # Loading datasets #
 ####################
 
-# SAMPLE_SIZE = 0.05  # set to None to get all dataset
+# SAMPLE_SIZE = 0.1  # set to None to get all dataset
 SAMPLE_SIZE = None
 
 ROOT_FOLDER = "/projets/TSF/sources/"
@@ -178,13 +179,18 @@ df_v = df_v.withColumn(
 
 sf = sf.withColumn(
     "year",
-    F.when(sf["exercice_diane"].isNotNull(), sf["exercice_diane"]).otherwise(
-        F.year(sf["periode"])
-    ),
+    F.when(sf["arrete_bilan_bdf"].isNotNull(), F.year(sf["arrete_bilan_bdf"]))
+    .when(
+        (sf["exercice_diane"].isNotNull()) & (sf["arrete_bilan_bdf"].isNull()),
+        sf["exercice_diane"],
+    )
+    .otherwise(F.year(sf["periode"])),
 ).withColumn("siren", F.substring(sf.siret, 1, 9))
 
 indics_annuels = sf.join(
-    df_v, [sf.year == df_v.year_dgfip, sf.siren == df_v.siren_dgfip], how="full_outer"
+    df_v,
+    on=[sf.year == df_v.year_dgfip, sf.siren == df_v.siren_dgfip],
+    how="full_outer",
 )
 
 indics_annuels.write.format("orc").save(
