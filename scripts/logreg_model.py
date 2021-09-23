@@ -451,13 +451,16 @@ prediction_data = prediction_data.withColumn(
 ).drop("probability")
 
 # Write outputs to csv
-base_output_path = (
-    "/projets/TSF/sources/logreg{}_train{}to{}_test{}_to{}_predict{}/".format(
-        regularization_coeff, *TEST_DATES, *PREDICTION_DATE
-    )
+base_output_path = "/projets/TSF/donnees/sorties_modeles/"
+output_folder = os.path.join(
+    base_output_path,
+    "logreg{}_train{}to{}_test{}_to{}_predict{}/".format(
+        regularization_coeff, *TRAIN_DATES, *TEST_DATES, PREDICTION_DATE
+    ),
 )
-test_output_path = os.path.join(base_output_path, "test_data/")
-prediction_output_path = os.path.join(base_output_path, "test_data/")
+test_output_path = os.path.join(output_folder, "test_data/")
+prediction_output_path = os.path.join(output_folder, "prediction_data/")
+
 logging("Writing test data to file {}".format(test_output_path))
 test_data.repartition(1).write.format("csv").save(test_output_path)
 
