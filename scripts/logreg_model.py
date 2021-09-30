@@ -12,6 +12,14 @@ from pyspark.sql.types import FloatType
 
 spark = SparkSession.builder.getOrCreate()
 
+### User-set parameters
+
+FILL_MISSING_VALUES = True
+OVERSAMPLING_RATIO = 0.2
+REGULARIZATION_COEFF = 0.05
+MAX_ITER = 50
+TOL = 1e-5
+
 #########
 # Utils #
 #########
@@ -19,70 +27,6 @@ spark = SparkSession.builder.getOrCreate()
 
 def logging(msg):
     print(f"SF_LOG {datetime.datetime.utcnow()} {msg}")
-
-
-def load_source(fpath, spl_size=None):
-    df = spark.read.orc(fpath)
-    if spl_size is not None:
-        df = df.sample(spl_size)
-    return df
-
-
-def count_missing_values(df):
-    """Counts number of nulls in each column, omitting columns of given type."""
-    return df.select([F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns])
-
-
-def count_nan_values(df, omit_type=("timestamp", "string", "date", "bool")):
-    """Counts number of nan values in float / double columns
-
-    Columns of given type are omitted.
-    """
-
-    return df.select(
-        [
-            F.count(F.when(F.isnull(c), c)).alias(c)
-            for (c, c_type) in df.dtypes
-            if c_type not in omit_type
-        ]
-    )
-
-
-def get_basic_statistics(df):
-    n_rows = df.count()
-    n_sirens_sf = df[["siren"]].distinct().count()
-    n_sirens_dgfip = df[["siren_dgfip"]].distinct().count()
-    n_columns = len(df.columns)
-
-    print(f"Nb lignes: {n_rows}")
-    print(f"Nb SIRENs sf: {n_sirens_sf}")
-    print(f"Nb SIRENs DGFiP: {n_sirens_dgfip}")
-    print(f"Nb columns: {n_columns}")
-    return (n_rows, n_sirens_sf, n_sirens_dgfip, n_columns)
-
-
-def get_full_statistics(df):
-    (n_rows, n_sirens, _, n_columns) = get_basic_statistics(df)
-    date_deb_exercice_span = df.select(
-        min("date_deb_exercice"),
-        max("date_deb_exercice"),
-    ).first()
-    date_fin_exercice_span = df.select(
-        min("date_fin_exercice"),
-        max("date_fin_exercice"),
-    ).first()
-
-    print(
-        f"Date de début d'exercice s'étendent de \
-        {date_deb_exercice_span[0].strftime('%d/%m/%Y')} à \
-        {date_deb_exercice_span[1].strftime('%d/%m/%Y')}"
-    )
-    print(
-        f"Date de fin d'exercice s'étendent de \
-        {date_fin_exercice_span[0].strftime('%d/%m/%Y')} à \
-        {date_fin_exercice_span[1].strftime('%d/%m/%Y')}"
-    )
-    return (n_rows, n_sirens, n_columns)
 
 
 def acoss_make_avg_delta_dette_par_effectif(data):
@@ -352,8 +296,6 @@ logging("Filtering out firms on 'effectif' and 'code_naf' variables.")
 ### Learning
 
 # Oversampling
-
-OVERSAMPLING_RATIO = 0.2
 logging(f"Creating oversampled training set ({OVERSAMPLING_RATIO})")
 
 will_fail_mask = indics_annuels["failure_within_18m"]
@@ -411,18 +353,15 @@ scaled_prediction = scale_df(
     assembled_prediction,
     obj_col="failure_within_18m",
     keep_cols=["siren", "periode"],
-)  #  "code_commune",
+)
 
 # Training
-regularization_coeff = 0.01
-max_iter = 10
-
 logging(
     f"Training logistic regression model with regularization \
-    {regularization_coeff} and {max_iter} iterations (maximum)."
+    {REGULARIZATION_COEFF} and {MAX_ITER} iterations (maximum)."
 )
 blor = LogisticRegression(
-    regParam=regularization_coeff, standardization=False, maxIter=max_iter
+    regParam=REGULARIZATION_COEFF, standardization=False, maxIter=MAX_ITER, tol=TOL
 )
 blorModel = blor.fit(scaled_train)
 logging(f"Model weights: {blorModel.coefficients}")
@@ -455,7 +394,7 @@ base_output_path = "/projets/TSF/donnees/sorties_modeles/"
 output_folder = os.path.join(
     base_output_path,
     "logreg{}_train{}to{}_test{}_to{}_predict{}/".format(
-        regularization_coeff, *TRAIN_DATES, *TEST_DATES, PREDICTION_DATE
+        REGULARIZATION_COEFF, *TRAIN_DATES, *TEST_DATES, PREDICTION_DATE
     ),
 )
 test_output_path = os.path.join(output_folder, "test_data/")
