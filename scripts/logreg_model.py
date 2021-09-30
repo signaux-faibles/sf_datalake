@@ -3,9 +3,7 @@ import os
 from functools import reduce
 
 from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import StandardScaler, VectorAssembler
-from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import FloatType
@@ -85,21 +83,24 @@ def scale_df(scalerModel, df, obj_col, keep_cols=[]):
     )
 
 
-## Variables d'apprentissage
+## Variables definition
 
-# Variables CL2B
+# CL2B recommended variables
 
 MRV_VARIABLES = {
-    "MNT_AF_CA",
-    "MNT_AF_SIG_EBE_RET",
     "MNT_AF_BFONC_BFR",
     "MNT_AF_BFONC_TRESORERIE",
     "RTO_AF_RATIO_RENT_MBE",
-    "RTO_AF_RENT_ECO",
     "MNT_AF_BFONC_FRNG",
+    "MNT_AF_CA",
+    "MNT_AF_SIG_EBE_RET",
+    "RTO_AF_RENT_ECO",
     "RTO_AF_SOLIDITE_FINANCIERE",
     "RTO_INVEST_CA",
 }
+
+TAC_VARIABLES = {f"tac_1y_{v}" for v in MRV_VARIABLES}
+MRV_VARIABLES.update(TAC_VARIABLES)
 
 SUM_VARIABLES = {
     "cotisation",
@@ -134,58 +135,44 @@ COMP_VARIABLES = {
 
 SF_VARIABLES = SUM_VARIABLES | AVG_VARIABLES | COMP_VARIABLES
 
-logging(f"Variables DGFiP : {MRV_VARIABLES}")
-logging(f"Variables SF : {SF_VARIABLES}")
-
-# Ces variables sont toujours requises
 BASE_VARIABLES = {
     "periode",
     "siren",
     "code_naf",
     "time_til_failure",
-}  # "code_commune", "year", "siret"
+}
 OBJ_VARIABLE = {"failure_within_18m"}
 FEATURES = SF_VARIABLES | MRV_VARIABLES
 
 TO_ONEHOT_ENCODE = set()
 TO_SCALE = list(FEATURES - TO_ONEHOT_ENCODE)
 
+logging(f"DGFiP Variables : {MRV_VARIABLES}")
+logging(f"SF Variables : {SF_VARIABLES}")
+
 ROOT_FOLDER = "/projets/TSF/sources/"
 DATASET_PATH = "base/indicateurs_annuels.orc"
 fullpath = os.path.join(ROOT_FOLDER, DATASET_PATH)
-logging(f"Reading data in {fullpath}")
 indics_annuels = spark.read.orc(fullpath)
-# indics_annuels = indics_annuels.sample(.05)
+logging(f"Reading data in {fullpath}")
 
-logging("Filling missing values with default values.")
-default_mrv_variables = []
-for c in indics_annuels.columns:
-    if c[:3] in ["MNT", "NBR", "IND"]:
-        default_mrv_variables.append(c)
+### Default values for missing data
 
-ratios_variables = [
-    "RTO_AF_RATIO_RENT_MBE",
-    "RTO_AF_RENT_ECO",
-    "RTO_AF_SOLIDITE_FINANCIERE",
-    "RTO_INVEST_CA",
-]
+non_ratio_variables = list(filter(lambda x: x[:3] != "RTO", MRV_VARIABLES))
+ratio_variables = list(filter(lambda x: x[:3] == "RTO", MRV_VARIABLES))
 
-MRV_DEFAULT_DATA_VALUES = {v: 0.0 for v in default_mrv_variables}
+MRV_DEFAULT_DATA_VALUES = {
+    v: 0.0 if v.find("tac") == -1 else 1.0 for v in non_ratio_variables
+}
 
 medians = reduce(
-    lambda x, y: x + y, indics_annuels.approxQuantile(ratios_variables, [0.5], 0.05)
+    lambda x, y: x + y, indics_annuels.approxQuantile(ratio_variables, [0.5], 0.05)
 )
 
-for var, med in zip(ratios_variables, medians):
+for var, med in zip(ratio_variables, medians):
     MRV_DEFAULT_DATA_VALUES[var] = med
 
 SF_DEFAULT_DATA_VALUES = {
-    # Not sure what this is used for ?
-    ### Outcomes
-    # "tag_debit": False,
-    # "tag_default": False,
-    # "tag_failure": False,
-    # "date_proc_collective": "2100-01-01",
     "time_til_failure": 9999,
     ### ACOSS
     "montant_part_ouvriere_past_12": 0.0,
@@ -204,32 +191,39 @@ SF_DEFAULT_DATA_VALUES = {
     "cotisation_moy12m": 0.0,
     "ratio_dette": 0.0,
     "ratio_dette_moy12m": 0.0,
-    ### activité partielle
+    ### Activité partielle
     "apart_heures_autorisees": 0.0,
     "apart_heures_consommees_cumulees": 0.0,
     "apart_heures_consommees": 0.0,
     "avg_delta_dette_par_effectif": 0.0,
-    ### effectif
+    ### Effectif
     "effectif": 0,
     "effectif_ent": 0,
 }
 
 DEFAULT_DATA_VALUES = dict(**MRV_DEFAULT_DATA_VALUES, **SF_DEFAULT_DATA_VALUES)
-logging(f"Defaults : {DEFAULT_DATA_VALUES}")
 
-indics_annuels = indics_annuels.fillna(
-    {k: v for (k, v) in DEFAULT_DATA_VALUES.items() if k in indics_annuels.columns}
-)
+if FILL_MISSING_VALUES:
+    logging("Filling missing values with default values.")
+    logging(f"Defaults : {DEFAULT_DATA_VALUES}")
+
+    indics_annuels = indics_annuels.fillna(
+        {k: v for (k, v) in DEFAULT_DATA_VALUES.items() if k in indics_annuels.columns}
+    )
+else:
+    indics_annuels.dropna(*FEATURES)
+
+
+### Aggregation at SIREN level.
 
 logging("Aggregating data at the SIREN level")
 
-# Variables signaux faibles
+# Signaux faibles variables
 
 indics_annuels_sf = indics_annuels.select(
     *(SUM_VARIABLES | AVG_VARIABLES | BASE_VARIABLES)
 )
 
-### SIRET --> SIREN
 # Sums
 gb_sum = indics_annuels_sf.groupBy("siren", "periode").sum(*SUM_VARIABLES)
 for col_name in SUM_VARIABLES:
@@ -240,12 +234,12 @@ gb_avg = indics_annuels_sf.groupBy("siren", "periode").avg(*AVG_VARIABLES)
 for col_name in AVG_VARIABLES:
     gb_avg = gb_avg.withColumnRenamed(f"avg({col_name})", col_name)
 
-### TODO : ratio_dette_moyenne12m devrait être calculée proprement
-### avec une fenêtre à partir du ratio_dette aggregé.
+### TODO : ratio_dette_moyenne12m should be computed from the
+### aggregated ratio_dette variable.
 # w = indics_annuels_sf.groupBy("siren", F.window(df.periode - 365
 # days, "365 days")).avg("ratio_dette")
 
-# Joining groupedby data
+# Joining grouped data
 indics_annuels_sf = (
     indics_annuels_sf.drop(*(SUM_VARIABLES | AVG_VARIABLES))
     .join(gb_sum, on=["siren", "periode"])
@@ -278,9 +272,12 @@ indics_annuels_dgfip = indics_annuels.select(
 # Joining data
 indics_annuels = indics_annuels_sf.join(indics_annuels_dgfip, on=["siren", "periode"])
 
-indics_annuels = indics_annuels.fillna(
-    {k: v for (k, v) in DEFAULT_DATA_VALUES.items() if k in indics_annuels.columns}
-)
+if FILL_MISSING_VALUES:
+    indics_annuels = indics_annuels.fillna(
+        {k: v for (k, v) in DEFAULT_DATA_VALUES.items() if k in indics_annuels.columns}
+    )
+else:
+    indics_annuels.dropna(*FEATURES)
 
 logging("Creating objective variable 'failure_within_18m'")
 indics_annuels = indics_annuels.withColumn(
@@ -327,7 +324,6 @@ train = (
     .filter(oversampled_subset["periode"] < TRAIN_DATES[1])
 )
 
-# test = indics_annuels.filter(indics_annuels["siren"].isin(SIREN_test["siren"])).filter(~has_failed_mask).filter(indics_annuels["periode"] < "2018-11-01").filter(indics_annuels["periode"] > "2018-06-01")
 logging(f"Creating test set over {TEST_DATES}.")
 test = (
     indics_annuels.filter(indics_annuels["siren"].isin(SIREN_test["siren"]))
