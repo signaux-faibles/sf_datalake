@@ -161,9 +161,7 @@ logging(f"Reading data in {fullpath}")
 non_ratio_variables = list(filter(lambda x: x[:3] != "RTO", MRV_VARIABLES))
 ratio_variables = list(filter(lambda x: x[:3] == "RTO", MRV_VARIABLES))
 
-MRV_DEFAULT_DATA_VALUES = {
-    v: 0.0 if v.find("tac") == -1 else 1.0 for v in non_ratio_variables
-}
+MRV_DEFAULT_DATA_VALUES = {v: 0.0 for v in non_ratio_variables}
 
 medians = reduce(
     lambda x, y: x + y, indics_annuels.approxQuantile(ratio_variables, [0.5], 0.05)
