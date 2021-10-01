@@ -209,8 +209,11 @@ if FILL_MISSING_VALUES:
         {k: v for (k, v) in DEFAULT_DATA_VALUES.items() if k in indics_annuels.columns}
     )
 else:
-    indics_annuels.dropna(*FEATURES)
-
+    indics_annuels = indics_annuels.fillna(
+        {
+            "time_til_failure": 9999,
+        }
+    )
 
 ### Aggregation at SIREN level.
 
@@ -275,7 +278,7 @@ if FILL_MISSING_VALUES:
         {k: v for (k, v) in DEFAULT_DATA_VALUES.items() if k in indics_annuels.columns}
     )
 else:
-    indics_annuels.dropna(*FEATURES)
+    indics_annuels = indics_annuels.dropna(subset=tuple(FEATURES))
 
 logging("Creating objective variable 'failure_within_18m'")
 indics_annuels = indics_annuels.withColumn(
