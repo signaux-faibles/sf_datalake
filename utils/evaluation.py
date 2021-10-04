@@ -8,7 +8,7 @@ import numpy as np
 import pyspark
 from sklearn.metrics import (average_precision_score, balanced_accuracy_score,
                              confusion_matrix, fbeta_score, precision_score,
-                             recall_score)
+                             recall_score, roc_auc_score)
 
 
 def make_thresholds_from_fbeta(
@@ -77,7 +77,8 @@ def scores(
     """
     y_pred = y_score >= thresh
 
-    aucpr = average_precision_score(y_true, y_score, average="weighted")
+    aucpr = average_precision_score(y_true, y_score)
+    roc = roc_auc_score(y_true, y_score)
     balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred)
     recall = recall_score(y_true, y_pred)
@@ -85,17 +86,18 @@ def scores(
     fbeta = fbeta_score(y_true, y_pred, beta=beta)
 
     return {
-        "weighted aucpr": aucpr,
-        "weighted accuracy": balanced_accuracy,
-        "confusion_matrix": {
-            "tn": tn,
-            "fp": fp,
-            "fn": fn,
-            "tp": tp,
+        "Confusion matrix": {
+            "TN": tn,
+            "FP": fp,
+            "FN": fn,
+            "TP": tp,
         },
-        f"F{beta}-score": fbeta,
-        "precision": precision,
-        "recall": recall,
+        f"F{beta}-score": np.round(fbeta, 2),
+        "Precision": np.round(precision, 2),
+        "Recall": np.round(recall, 2),
+        "Balanced accuracy": np.round(balanced_accuracy, 2),
+        "Area under Precision-Recall curve": np.round(aucpr, 2),
+        "Area under ROC curve": np.round(roc, 2),
     }
 
 
