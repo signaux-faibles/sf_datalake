@@ -77,26 +77,16 @@ def scores(
     """
     y_pred = y_score >= thresh
 
-    aucpr = average_precision_score(
-        y_true,
-        y_score,
-    )
+    aucpr = average_precision_score(y_true, y_score, average="weighted")
     balanced_accuracy = balanced_accuracy_score(y_true, y_pred)
-    (tn, fp, fn, tp) = confusion_matrix(
-        y_true,
-        y_pred,
-    ).ravel()
-    fbeta = fbeta_score(
-        y_true,
-        y_pred,
-        beta=beta,
-    )
     precision = precision_score(y_true, y_pred)
     recall = recall_score(y_true, y_pred)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    fbeta = fbeta_score(y_true, y_pred, beta=beta)
 
     return {
-        "aucpr": aucpr,
-        "balanced_accuracy": balanced_accuracy,
+        "weighted aucpr": aucpr,
+        "weighted accuracy": balanced_accuracy,
         "confusion_matrix": {
             "tn": tn,
             "fp": fp,

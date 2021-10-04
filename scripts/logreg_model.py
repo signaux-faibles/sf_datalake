@@ -415,7 +415,7 @@ test_output_path = os.path.join(output_folder, "test_data/")
 prediction_output_path = os.path.join(output_folder, "prediction_data/")
 
 logging("Writing test data to file {}".format(test_output_path))
-test_data.repartition(1).write.format("csv").save(test_output_path)
+test_data.repartition(1).write.csv(test_output_path, header=True)
 
 logging("Writing prediction data to file {}".format(prediction_output_path))
-prediction_data.repartition(1).write.format("csv").save(prediction_output_path)
+prediction_data.repartition(1).write.csv(prediction_output_path, header=True)
