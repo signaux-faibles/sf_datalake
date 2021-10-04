@@ -72,13 +72,27 @@ def fit_to_data(assembled_df, sampling_ratio=None):
     return scalerModel
 
 
-def scale_df(scalerModel, df, obj_col, keep_cols=[]):
+def scale_df(
+    scalerModel,
+    df,
+    features_cols: str = "scaledFeatures",
+    objective_col: str = "failure_within_18m",
+    keep_cols: list = None,
+):
     scaledData = scalerModel.transform(df)
+
+    if keep_cols is not None:
+        return scaledData.select(
+            keep_cols
+            + [
+                F.col(features_cols).alias("features"),
+                F.col(objective_col).cast("integer").alias("label"),
+            ]
+        )
     return scaledData.select(
-        keep_cols
-        + [
-            F.col("scaledFeatures").alias("features"),
-            F.col(obj_col).cast("integer").alias("label"),
+        [
+            F.col(features_cols).alias("features"),
+            F.col(objective_col).cast("integer").alias("label"),
         ]
     )
 
@@ -343,13 +357,16 @@ assembled_prediction = assemble_df(prediction, TO_SCALE)
 
 scaler = fit_to_data(assembled_train)
 
-scaled_train = scale_df(scaler, assembled_train, obj_col="failure_within_18m")
-scaled_test = scale_df(scaler, assembled_test, obj_col="failure_within_18m")
+scaled_train = scale_df(scaler, assembled_train)
+scaled_test = scale_df(
+    scaler,
+    assembled_test,
+    keep_cols=["siren", "time_til_failure"],
+)
 scaled_prediction = scale_df(
     scaler,
     assembled_prediction,
-    obj_col="failure_within_18m",
-    keep_cols=["siren", "periode"],
+    keep_cols=["siren"],
 )
 
 # Training
@@ -367,11 +384,11 @@ logging(f"Model intercept: {blorModel.intercept}")
 # Failing probability extraction
 positive_class_proba_extractor = F.udf(lambda v: float(v[1]), FloatType())
 
-# Test data for optimal threshold computaion
+# Test data for optimal threshold computation
 logging("Running model on test dataset.")
 
 test_data = blorModel.transform(scaled_test)
-test_data = test_data.select(["probability", "label"])
+test_data = test_data.select(["siren", "time_til_failure", "label", "probability"])
 test_data = test_data.withColumn(
     "positive_class_probability", positive_class_proba_extractor("probability")
 ).drop("probability")
