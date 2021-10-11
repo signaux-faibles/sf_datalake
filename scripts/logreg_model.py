@@ -2,19 +2,23 @@ import datetime
 import os
 from functools import reduce
 
+import numpy as np
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import StandardScaler, VectorAssembler
+from pyspark.ml.linalg import DenseMatrix
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import FloatType
 
 spark = SparkSession.builder.getOrCreate()
+sc = spark.sparkContext
 
 ### User-set parameters
 
 FILL_MISSING_VALUES = True
 OVERSAMPLING_RATIO = 0.2
 REGULARIZATION_COEFF = 0.05
+N_CONCERNING_MICRO = 3
 MAX_ITER = 50
 TOL = 1e-5
 
@@ -25,6 +29,10 @@ TOL = 1e-5
 
 def logging(msg):
     print(f"SF_LOG {datetime.datetime.utcnow()} {msg}")
+
+
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
 
 
 def acoss_make_avg_delta_dette_par_effectif(data):
@@ -403,6 +411,92 @@ prediction_data = prediction_data.withColumn(
     "positive_class_probability", positive_class_proba_extractor("probability")
 ).drop("probability")
 
+# Explain prediction
+FEATURE_GROUPS = {
+    "sante_financiere": [
+        "MNT_AF_BFONC_BFR",
+        "MNT_AF_BFONC_FRNG",
+        "MNT_AF_BFONC_TRESORERIE",
+        "MNT_AF_CA",
+        "MNT_AF_SIG_EBE_RET",
+        "RTO_AF_RATIO_RENT_MBE",
+        "RTO_AF_RENT_ECO",
+        "RTO_AF_SOLIDITE_FINANCIERE",
+        "RTO_INVEST_CA",
+    ],
+    "activite_partielle": [
+        "apart_heures_consommees",
+        "apart_heures_consommees_cumulees",
+    ],
+    "dette_urssaf": [
+        "avg_delta_dette_par_effectif",
+        "cotisation",
+        "cotisation_moy12m",
+        "effectif",
+        "montant_part_ouvriere",
+        "montant_part_ouvriere_past_1",
+        "montant_part_ouvriere_past_2",
+        "montant_part_ouvriere_past_3",
+        "montant_part_ouvriere_past_6",
+        "montant_part_ouvriere_past_12",
+        "montant_part_patronale",
+        "montant_part_patronale_past_1",
+        "montant_part_patronale_past_2",
+        "montant_part_patronale_past_3",
+        "montant_part_patronale_past_6",
+        "montant_part_patronale_past_12",
+        "ratio_dette",
+        "ratio_dette_moy12m",
+    ],
+}
+
+feature_index = {}
+for i, col_name in enumerate(TO_SCALE):
+    for group, feats in FEATURE_GROUPS.items():
+        if col_name in feats:
+            feature_index.setdefault(group, []).append((i, col_name))
+            break
+logging(f"Features indexes : {feature_index}")
+
+if {var for feat in feature_index.values() for (_, var) in feat} != {
+    x for feat in FEATURE_GROUPS.values() for x in feat
+}:
+    logging(
+        "WARNING : features from feature groups are not represented in `feature_index`"
+    )
+
+r = scaled_prediction.select("features").rdd.map(lambda x: x.features.toArray())
+mat = DenseMatrix(r.count(), len(TO_SCALE), r.flatMap(list).collect())
+X = mat.toArray()
+w = blorModel.coefficients.toArray()
+
+explanation_score_df = {}
+explanation = np.multiply(X, w)
+concerning_micro_indexes = np.argpartition(explanation, N_CONCERNING_MICRO, axis=1)[
+    :, :N_CONCERNING_MICRO
+]
+concerning_micro_values = concerning_micro_indexes[concerning_micro_indexes]
+split_cmi = np.vsplit(concerning_micro_indexes, concerning_micro_indexes.shape[0])
+split_cmv = np.vsplit(concerning_micro_values, concerning_micro_values.shape[0])
+concerning_micro_indexes_df = (
+    sc.parallelize(split_cmi)
+    .map(lambda ar_list: ar_list.tolist()[0])
+    .toDF(["1st", "2nd", "3rd"])
+)
+concerning_micro_values_df = (
+    sc.parallelize(split_cmi)
+    .map(lambda ar_list: ar_list.tolist()[0])
+    .toDF(["1st", "2nd", "3rd"])
+)
+
+for group in FEATURE_GROUPS:
+    group_cols = np.array([i for (i, _) in feature_index[group]])
+    explanation_components = explanation[:, group_cols]
+    explanation_score = sigmoid(explanation_components.sum(axis=1)).tolist()
+    explanation_score_df[group] = spark.createDataFrame(
+        explanation_score, FloatType()
+    ).withColumnRenamed("value", group)
+
 # Write outputs to csv
 base_output_path = "/projets/TSF/donnees/sorties_modeles/"
 output_folder = os.path.join(
@@ -411,11 +505,39 @@ output_folder = os.path.join(
         REGULARIZATION_COEFF, *TRAIN_DATES, *TEST_DATES, PREDICTION_DATE
     ),
 )
-test_output_path = os.path.join(output_folder, "test_data/")
-prediction_output_path = os.path.join(output_folder, "prediction_data/")
+test_output_path = os.path.join(output_folder, "test_data")
+prediction_output_path = os.path.join(output_folder, "prediction_data")
+explanation_output_path = os.path.join(output_folder, "explanation_data")
+concerning_indexes_output_path = os.path.join(
+    explanation_output_path, "concerning_indexes"
+)
+concerning_values_output_path = os.path.join(
+    explanation_output_path, "concerning_values"
+)
 
 logging("Writing test data to file {}".format(test_output_path))
 test_data.repartition(1).write.csv(test_output_path, header=True)
 
 logging("Writing prediction data to file {}".format(prediction_output_path))
 prediction_data.repartition(1).write.csv(prediction_output_path, header=True)
+
+logging(
+    "Writing concerning indexes data to file {}".format(concerning_indexes_output_path)
+)
+concerning_micro_indexes_df.repartition(1).write.csv(
+    os.path.join(concerning_indexes_output_path), header=True
+)
+logging(
+    "Writing concerning values data to file {}".format(concerning_values_output_path)
+)
+concerning_micro_values_df.repartition(1).write.csv(
+    os.path.join(concerning_values_output_path), header=True
+)
+
+logging(
+    "Writing explanation scores data to directory {}".format(explanation_output_path)
+)
+for group in FEATURE_GROUPS:
+    explanation_score_df[group].repartition(1).write.csv(
+        os.path.join(explanation_output_path, f"{group}"), header=True
+    )
