@@ -122,7 +122,7 @@ MRV_VARIABLES = {
 }
 
 TAC_VARIABLES = {f"tac_1y_{v}" for v in MRV_VARIABLES}
-MRV_VARIABLES.update(TAC_VARIABLES)
+# MRV_VARIABLES.update(TAC_VARIABLES)
 
 SUM_VARIABLES = {
     "cotisation",
@@ -472,10 +472,12 @@ w = blorModel.coefficients.toArray()
 
 explanation_score_df = {}
 explanation = np.multiply(X, w)
-concerning_micro_indexes = np.argpartition(explanation, N_CONCERNING_MICRO, axis=1)[
+concerning_micro_indexes = np.argpartition(-explanation, N_CONCERNING_MICRO, axis=1)[
     :, :N_CONCERNING_MICRO
 ]
-concerning_micro_values = concerning_micro_indexes[concerning_micro_indexes]
+concerning_micro_values = explanation[
+    np.arange(explanation.shape[0])[:, None], concerning_micro_indexes
+]
 split_cmi = np.vsplit(concerning_micro_indexes, concerning_micro_indexes.shape[0])
 split_cmv = np.vsplit(concerning_micro_values, concerning_micro_values.shape[0])
 concerning_micro_indexes_df = (
@@ -484,11 +486,10 @@ concerning_micro_indexes_df = (
     .toDF(["1st", "2nd", "3rd"])
 )
 concerning_micro_values_df = (
-    sc.parallelize(split_cmi)
+    sc.parallelize(split_cmv)
     .map(lambda ar_list: ar_list.tolist()[0])
     .toDF(["1st", "2nd", "3rd"])
 )
-
 for group in FEATURE_GROUPS:
     group_cols = np.array([i for (i, _) in feature_index[group]])
     explanation_components = explanation[:, group_cols]
@@ -498,22 +499,18 @@ for group in FEATURE_GROUPS:
     ).withColumnRenamed("value", group)
 
 # Write outputs to csv
-base_output_path = "/projets/TSF/donnees/sorties_modeles/"
+base_output_path = "/projets/TSF/donnees/sorties_modeles"
 output_folder = os.path.join(
     base_output_path,
-    "logreg{}_train{}to{}_test{}_to{}_predict{}/".format(
+    "logreg{}_train{}to{}_test{}_to{}_predict{}".format(
         REGULARIZATION_COEFF, *TRAIN_DATES, *TEST_DATES, PREDICTION_DATE
     ),
 )
 test_output_path = os.path.join(output_folder, "test_data")
 prediction_output_path = os.path.join(output_folder, "prediction_data")
 explanation_output_path = os.path.join(output_folder, "explanation_data")
-concerning_indexes_output_path = os.path.join(
-    explanation_output_path, "concerning_indexes"
-)
-concerning_values_output_path = os.path.join(
-    explanation_output_path, "concerning_values"
-)
+concerning_indexes_output_path = os.path.join(output_folder, "concerning_indexes")
+concerning_values_output_path = os.path.join(output_folder, "concerning_values")
 
 logging("Writing test data to file {}".format(test_output_path))
 test_data.repartition(1).write.csv(test_output_path, header=True)
@@ -525,13 +522,13 @@ logging(
     "Writing concerning indexes data to file {}".format(concerning_indexes_output_path)
 )
 concerning_micro_indexes_df.repartition(1).write.csv(
-    os.path.join(concerning_indexes_output_path), header=True
+    concerning_indexes_output_path, header=True
 )
 logging(
     "Writing concerning values data to file {}".format(concerning_values_output_path)
 )
 concerning_micro_values_df.repartition(1).write.csv(
-    os.path.join(concerning_values_output_path), header=True
+    concerning_values_output_path, header=True
 )
 
 logging(
