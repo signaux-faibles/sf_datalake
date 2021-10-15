@@ -1,11 +1,11 @@
 import datetime
+import json
 import os
 from functools import reduce
 
 import numpy as np
 from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.feature import StandardScaler, VectorAssembler
-from pyspark.ml.linalg import DenseMatrix
+from pyspark.ml.feature import ElementwiseProduct, StandardScaler, VectorAssembler
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import FloatType
@@ -22,9 +22,7 @@ N_CONCERNING_MICRO = 3
 MAX_ITER = 50
 TOL = 1e-5
 
-#########
-# Utils #
-#########
+### Utility functions
 
 
 def logging(msg):
@@ -105,10 +103,9 @@ def scale_df(
     )
 
 
-## Variables definition
+### Variables definition
 
 # CL2B recommended variables
-
 MRV_VARIABLES = {
     "MNT_AF_BFONC_BFR",
     "MNT_AF_BFONC_TRESORERIE",
@@ -242,7 +239,6 @@ else:
 logging("Aggregating data at the SIREN level")
 
 # Signaux faibles variables
-
 indics_annuels_sf = indics_annuels.select(
     *(SUM_VARIABLES | AVG_VARIABLES | BASE_VARIABLES)
 )
@@ -270,6 +266,7 @@ indics_annuels_sf = (
 )
 
 ### Feature engineering
+
 logging("Feature engineering")
 
 # delta_dette_par_effectif
@@ -386,8 +383,10 @@ blor = LogisticRegression(
     regParam=REGULARIZATION_COEFF, standardization=False, maxIter=MAX_ITER, tol=TOL
 )
 blorModel = blor.fit(scaled_train)
-logging(f"Model weights: {blorModel.coefficients}")
-logging(f"Model intercept: {blorModel.intercept}")
+w = blorModel.coefficients
+b = blorModel.intercept
+logging(f"Model weights: {w}")
+logging(f"Model intercept: {b}")
 
 # Failing probability extraction
 positive_class_proba_extractor = F.udf(lambda v: float(v[1]), FloatType())
@@ -412,6 +411,31 @@ prediction_data = prediction_data.withColumn(
 ).drop("probability")
 
 # Explain prediction
+MESO_URSSAF_GROUPS = {
+    "cotisation_urssaf": ["cotisation", "cotisation_moy12m"],
+    "part_ouvriere": [
+        "montant_part_ouvriere",
+        "montant_part_ouvriere_past_1",
+        "montant_part_ouvriere_past_2",
+        "montant_part_ouvriere_past_3",
+        "montant_part_ouvriere_past_6",
+        "montant_part_ouvriere_past_12",
+    ],
+    "part_patronale": [
+        "montant_part_patronale",
+        "montant_part_patronale_past_1",
+        "montant_part_patronale_past_2",
+        "montant_part_patronale_past_3",
+        "montant_part_patronale_past_6",
+        "montant_part_patronale_past_12",
+    ],
+    "dette": [
+        "ratio_dette",
+        "ratio_dette_moy12m",
+        "avg_delta_dette_par_effectif",
+    ],
+}
+
 FEATURE_GROUPS = {
     "sante_financiere": [
         "MNT_AF_BFONC_BFR",
@@ -429,49 +453,48 @@ FEATURE_GROUPS = {
         "apart_heures_consommees_cumulees",
     ],
     "dette_urssaf": [
-        "avg_delta_dette_par_effectif",
-        "cotisation",
-        "cotisation_moy12m",
-        "effectif",
-        "montant_part_ouvriere",
-        "montant_part_ouvriere_past_1",
-        "montant_part_ouvriere_past_2",
-        "montant_part_ouvriere_past_3",
-        "montant_part_ouvriere_past_6",
-        "montant_part_ouvriere_past_12",
-        "montant_part_patronale",
-        "montant_part_patronale_past_1",
-        "montant_part_patronale_past_2",
-        "montant_part_patronale_past_3",
-        "montant_part_patronale_past_6",
-        "montant_part_patronale_past_12",
-        "ratio_dette",
-        "ratio_dette_moy12m",
+        "cotisation_urssaf",
+        "part_ouvriere",
+        "part_patronale",
+        "dette",
     ],
+    # "misc": ["effectif"],
 }
 
-feature_index = {}
-for i, col_name in enumerate(TO_SCALE):
+# Get feature influence
+ep = ElementwiseProduct()
+ep.setScalingVec(w.toArray())
+ep.setInputCol("features")
+ep.setOutputCol("eprod")
+
+explanation_df = (
+    ep.transform(scaled_prediction)
+    .rdd.map(lambda df: [float(f) for f in df["eprod"]])
+    .toDF(TO_SCALE)
+)
+for group, features in MESO_URSSAF_GROUPS.items():
+    explanation_df = explanation_df.withColumn(
+        group, sum(explanation_df[col] for col in features)
+    ).drop(*features)
+
+# Index to features mappings
+group_index_feature = {}
+for i, col_name in enumerate(explanation_df.columns):
     for group, feats in FEATURE_GROUPS.items():
         if col_name in feats:
-            feature_index.setdefault(group, []).append((i, col_name))
+            group_index_feature.setdefault(group, []).append((i, col_name))
             break
-logging(f"Features indexes : {feature_index}")
+logging(f"Features indexes : {json.dumps(group_index_feature)}")
 
-if {var for feat in feature_index.values() for (_, var) in feat} != {
+if {var for feat in group_index_feature.values() for (_, var) in feat} != {
     x for feat in FEATURE_GROUPS.values() for x in feat
 }:
     logging(
         "WARNING : features from feature groups are not represented in `feature_index`"
     )
 
-r = scaled_prediction.select("features").rdd.map(lambda x: x.features.toArray())
-mat = DenseMatrix(r.count(), len(TO_SCALE), r.flatMap(list).collect())
-X = mat.toArray()
-w = blorModel.coefficients.toArray()
-
-explanation_score_df = {}
-explanation = np.multiply(X, w)
+# 'Micro' explanation
+explanation = np.array(explanation_df.collect())
 concerning_micro_indexes = np.argpartition(-explanation, N_CONCERNING_MICRO, axis=1)[
     :, :N_CONCERNING_MICRO
 ]
@@ -490,8 +513,11 @@ concerning_micro_values_df = (
     .map(lambda ar_list: ar_list.tolist()[0])
     .toDF(["1st", "2nd", "3rd"])
 )
+
+# 'Macro' scores per group
+explanation_score_df = {}
 for group in FEATURE_GROUPS:
-    group_cols = np.array([i for (i, _) in feature_index[group]])
+    group_cols = np.array([i for (i, _) in group_index_feature[group]])
     explanation_components = explanation[:, group_cols]
     explanation_score = sigmoid(explanation_components.sum(axis=1)).tolist()
     explanation_score_df[group] = spark.createDataFrame(
@@ -499,6 +525,7 @@ for group in FEATURE_GROUPS:
     ).withColumnRenamed("value", group)
 
 # Write outputs to csv
+
 base_output_path = "/projets/TSF/donnees/sorties_modeles"
 output_folder = os.path.join(
     base_output_path,
