@@ -1,14 +1,12 @@
 import datetime
-import json
 import os
 from functools import reduce
 
-import numpy as np
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import ElementwiseProduct, StandardScaler, VectorAssembler
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import FloatType
+from pyspark.sql.types import FloatType, StringType
 
 spark = SparkSession.builder.getOrCreate()
 sc = spark.sparkContext
@@ -27,10 +25,6 @@ TOL = 1e-5
 
 def logging(msg):
     print(f"SF_LOG {datetime.datetime.utcnow()} {msg}")
-
-
-def sigmoid(z):
-    return 1 / (1 + np.exp(-z))
 
 
 def acoss_make_avg_delta_dette_par_effectif(data):
@@ -397,18 +391,20 @@ logging("Running model on test dataset.")
 test_data = blorModel.transform(scaled_test)
 test_data = test_data.select(["siren", "time_til_failure", "label", "probability"])
 test_data = test_data.withColumn(
-    "positive_class_probability", positive_class_proba_extractor("probability")
-).drop("probability")
+    "probability", positive_class_proba_extractor("probability")
+)
 
 # Prediction
 logging("Running model on prediction dataset.")
-
-prediction_data = blorModel.transform(scaled_prediction).drop(
-    "rawPrediction", "label", "features"
+prediction_data = (
+    blorModel.transform(scaled_prediction)
+    .drop(
+        "prediction",
+        "rawPrediction",
+        "label",
+    )
+    .withColumn("probability", positive_class_proba_extractor("probability"))
 )
-prediction_data = prediction_data.withColumn(
-    "positive_class_probability", positive_class_proba_extractor("probability")
-).drop("probability")
 
 # Explain prediction
 MESO_URSSAF_GROUPS = {
@@ -458,74 +454,86 @@ FEATURE_GROUPS = {
         "part_patronale",
         "dette",
     ],
-    # "misc": ["effectif"],
+    "misc": ["effectif"],
 }
+meso_features = reduce(lambda x, y: x + y, FEATURE_GROUPS.values())
 
 # Get feature influence
 ep = ElementwiseProduct()
-ep.setScalingVec(w.toArray())
+ep.setScalingVec(w)
 ep.setInputCol("features")
 ep.setOutputCol("eprod")
 
 explanation_df = (
     ep.transform(scaled_prediction)
-    .rdd.map(lambda df: [float(f) for f in df["eprod"]])
-    .toDF(TO_SCALE)
+    .rdd.map(lambda r: [r["siren"]] + [float(f) for f in r["eprod"]])
+    .toDF(["siren"] + TO_SCALE)
 )
 for group, features in MESO_URSSAF_GROUPS.items():
     explanation_df = explanation_df.withColumn(
         group, sum(explanation_df[col] for col in features)
     ).drop(*features)
 
-# Index to features mappings
-group_index_feature = {}
-for i, col_name in enumerate(explanation_df.columns):
-    for group, feats in FEATURE_GROUPS.items():
-        if col_name in feats:
-            group_index_feature.setdefault(group, []).append((i, col_name))
-            break
-logging(f"Features indexes : {json.dumps(group_index_feature)}")
-
-if {var for feat in group_index_feature.values() for (_, var) in feat} != {
-    x for feat in FEATURE_GROUPS.values() for x in feat
-}:
-    logging(
-        "WARNING : features from feature groups are not represented in `feature_index`"
-    )
-
-# 'Micro' explanation
-explanation = np.array(explanation_df.collect())
-concerning_micro_indexes = np.argpartition(-explanation, N_CONCERNING_MICRO, axis=1)[
-    :, :N_CONCERNING_MICRO
-]
-concerning_micro_values = explanation[
-    np.arange(explanation.shape[0])[:, None], concerning_micro_indexes
-]
-split_cmi = np.vsplit(concerning_micro_indexes, concerning_micro_indexes.shape[0])
-split_cmv = np.vsplit(concerning_micro_values, concerning_micro_values.shape[0])
-concerning_micro_indexes_df = (
-    sc.parallelize(split_cmi)
-    .map(lambda ar_list: ar_list.tolist()[0])
-    .toDF(["1st", "2nd", "3rd"])
-)
-concerning_micro_values_df = (
-    sc.parallelize(split_cmv)
-    .map(lambda ar_list: ar_list.tolist()[0])
-    .toDF(["1st", "2nd", "3rd"])
-)
-
 # 'Macro' scores per group
-explanation_score_df = {}
-for group in FEATURE_GROUPS:
-    group_cols = np.array([i for (i, _) in group_index_feature[group]])
-    explanation_components = explanation[:, group_cols]
-    explanation_score = sigmoid(explanation_components.sum(axis=1)).tolist()
-    explanation_score_df[group] = spark.createDataFrame(
-        explanation_score, FloatType()
-    ).withColumnRenamed("value", group)
+for group, features in FEATURE_GROUPS.items():
+    explanation_df = explanation_df.withColumn(
+        "{}_macro_score".format(group),
+        1 / (1 + F.exp(-(sum(explanation_df[col] for col in features)))),
+    )
+macro_scores_columns = [
+    "sante_financiere_macro_score",
+    "dette_urssaf_macro_score",
+    "activite_partielle_macro_score",
+    "misc_macro_score",
+]
+
+# 'Micro' scores
+@F.udf(returnType=StringType())
+def get_max_value_colname(r, max_col):
+    for i, name in enumerate(meso_features):
+        if r[i] == max_col:
+            return name
+
+
+explanation_df = (
+    explanation_df.withColumn(
+        "1st_concerning_val",
+        F.sort_array(F.array([F.col(x) for x in meso_features]), asc=False)[0],
+    )
+    .withColumn(
+        "2nd_concerning_val",
+        F.sort_array(F.array([F.col(x) for x in meso_features]), asc=False)[1],
+    )
+    .withColumn(
+        "3rd_concerning_val",
+        F.sort_array(F.array([F.col(x) for x in meso_features]), asc=False)[2],
+    )
+)
+
+explanation_df = (
+    explanation_df.withColumn(
+        "1st_concerning_feat",
+        get_max_value_colname(F.array(meso_features), "1st_concerning_val"),
+    )
+    .withColumn(
+        "2nd_concerning_feat",
+        get_max_value_colname(F.array(meso_features), "2nd_concerning_val"),
+    )
+    .withColumn(
+        "3rd_concerning_feat",
+        get_max_value_colname(F.array(meso_features), "3rd_concerning_val"),
+    )
+)
+concerning_columns = [
+    "1st_concerning_val",
+    "2nd_concerning_val",
+    "3rd_concerning_val",
+    "1st_concerning_feat",
+    "2nd_concerning_feat",
+    "3rd_concerning_feat",
+]
 
 # Write outputs to csv
-
 base_output_path = "/projets/TSF/donnees/sorties_modeles"
 output_folder = os.path.join(
     base_output_path,
@@ -535,33 +543,27 @@ output_folder = os.path.join(
 )
 test_output_path = os.path.join(output_folder, "test_data")
 prediction_output_path = os.path.join(output_folder, "prediction_data")
+concerning_output_path = os.path.join(output_folder, "concerning_values")
 explanation_output_path = os.path.join(output_folder, "explanation_data")
-concerning_indexes_output_path = os.path.join(output_folder, "concerning_indexes")
-concerning_values_output_path = os.path.join(output_folder, "concerning_values")
 
 logging("Writing test data to file {}".format(test_output_path))
 test_data.repartition(1).write.csv(test_output_path, header=True)
 
 logging("Writing prediction data to file {}".format(prediction_output_path))
-prediction_data.repartition(1).write.csv(prediction_output_path, header=True)
+prediction_data.drop("features").repartition(1).write.csv(
+    prediction_output_path, header=True
+)
 
-logging(
-    "Writing concerning indexes data to file {}".format(concerning_indexes_output_path)
-)
-concerning_micro_indexes_df.repartition(1).write.csv(
-    concerning_indexes_output_path, header=True
-)
-logging(
-    "Writing concerning values data to file {}".format(concerning_values_output_path)
-)
-concerning_micro_values_df.repartition(1).write.csv(
-    concerning_values_output_path, header=True
+logging("Writing concerning features to file {}".format(concerning_output_path))
+explanation_df.select(["siren"] + concerning_columns).repartition(1).write.csv(
+    concerning_output_path, header=True
 )
 
 logging(
-    "Writing explanation scores data to directory {}".format(explanation_output_path)
-)
-for group in FEATURE_GROUPS:
-    explanation_score_df[group].repartition(1).write.csv(
-        os.path.join(explanation_output_path, f"{group}"), header=True
+    "Writing explanation macro scores data to directory {}".format(
+        explanation_output_path
     )
+)
+explanation_df.select(["siren"] + macro_scores_columns).repartition(1).write.csv(
+    os.path.join(explanation_output_path), header=True
+)
