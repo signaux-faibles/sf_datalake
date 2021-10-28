@@ -56,17 +56,19 @@ def make_thresholds_from_fbeta(
     return (t_F1, t_F2)
 
 
-def scores(
+def metrics(
     y_true: np.array,
     y_score: np.array,
     beta: float = 1,
     thresh: float = 0.5,
 ) -> dict:
-    """Computes multiple evaluation metrics of a model.
+    """Computes multiple evaluation metrics for a binary classification model.
 
     Args:
-        dataset: A SFDataset containing the evaluation data.
-        beta: Weighting of recall relative to precision for the evaluation.
+        y_true: An array containing the true values.
+        y_score: An array containing probabilities associated with each prediction.
+        beta: Optional. If provided, weighting of recall relative to precision for the
+          evaluation.
         thresh: Optional. If provided, the model will classify an entry X as positive
           if predict_proba(X)>=thresh. Otherwise, the model classifies X as positive if
           predict(X)=1, ie predict_proba(X)>=0.5
