@@ -6,9 +6,15 @@ from typing import Tuple
 
 import numpy as np
 import pyspark
-from sklearn.metrics import (average_precision_score, balanced_accuracy_score,
-                             confusion_matrix, fbeta_score, precision_score,
-                             recall_score, roc_auc_score)
+from sklearn.metrics import (
+    average_precision_score,
+    balanced_accuracy_score,
+    confusion_matrix,
+    fbeta_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 
 
 def make_thresholds_from_fbeta(

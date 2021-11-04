@@ -1,8 +1,10 @@
+"""Data processing before feeding into pyspark learning algorithms.
+"""
+
 from typing import Iterable
 
 import pyspark
 from pyspark.ml.feature import StandardScaler, VectorAssembler
-from pyspark.sql import functions as F
 
 
 def assemble_features(
@@ -30,7 +32,8 @@ def fit_scaler(
     input_colname: str,
     output_colname: str,
     sampling_ratio: float = None,
-):
+) -> pyspark.ml.Model:
+    """Creates and fits a scaler object to some pre-assembled data."""
     if scaler_type == "standard":
         scaler = StandardScaler(
             # withMean=True,
@@ -45,19 +48,20 @@ def fit_scaler(
         #     outputCol=output_colname,
         # )
     else:
-        raise NameError("Unkown scaler type {}".format(scaler_type))
+        raise NameError(f"Unkown scaler type {scaler_type}.")
     to_fit = df.sample(sampling_ratio) if sampling_ratio is not None else df
     scaler_model = scaler.fit(to_fit)
     return scaler_model
 
 
 def scale_df(
-    scaler_model: pyspark.ml.model,
+    scaler_model: pyspark.ml.Model,
     df: pyspark.sql.DataFrame,
     features_col: str,
     label_col: str,
     keep_cols: list = None,
-):
+) -> pyspark.sql.DataFrame:
+    """Scales data using a pre-fitted scaler."""
     scaled_data = scaler_model.transform(df)
 
     selected_cols = [features_col]
@@ -69,5 +73,4 @@ def scale_df(
         .withColumnRenamed("features", features_col)
         .withColumn("label", df[label_col].astype("integer"))
     )
-
     return selected_data

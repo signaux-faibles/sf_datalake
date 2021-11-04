@@ -1,3 +1,6 @@
+"""Feature engineering functions.
+"""
+
 import pyspark.ml
 import pyspark.sql
 
@@ -36,6 +39,7 @@ def avg_delta_debt_per_size(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFram
     return data.drop(*drop_columns)
 
 
+# Paydex
 def make_paydex_yoy(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     """Computes a new column for the dataset containing the year-over-year
 

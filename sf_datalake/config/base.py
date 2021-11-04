@@ -1,4 +1,9 @@
-import logging
+"""Base configuration for learning algorithms.
+
+TODO :
+    - Should be refined when multiple models will be available.
+    - Some hard-coded values should be available for user input.
+"""
 
 ### User-set parameters
 
@@ -13,7 +18,6 @@ TRAIN_DATES = ("2016-01-01", "2018-05-31")
 TEST_DATES = ("2018-06-01", "2018-11-01")
 PREDICTION_DATE = "2020-02-01"
 
-### Loaded variables and features
 ### Variables definition
 
 # CL2B recommended variables
@@ -60,8 +64,6 @@ AVG_VARIABLES = {
 COMP_VARIABLES = {
     "ratio_dette",
     "avg_delta_dette_par_effectif",
-    # "paydex_nb_jours",
-    # "paydex_nb_jours_past_12"
 }
 
 SF_VARIABLES = SUM_VARIABLES | AVG_VARIABLES | COMP_VARIABLES
@@ -72,15 +74,12 @@ BASE_VARIABLES = {
     "code_naf",
     "time_til_failure",
 }
-OBJ_VARIABLE = {"failure_within_18m"}
+TARGET_VARIABLE = {"failure_within_18m"}
 FEATURES = SF_VARIABLES | MRV_VARIABLES
 
-TO_STD_SCALE = list(FEATURES)
+STD_SCALE_FEATURES = list(FEATURES)
 
-logging.info(f"DGFiP Variables : {MRV_VARIABLES}")
-logging.info(f"SF Variables : {SF_VARIABLES}")
-
-SF_DEFAULT_DATA_VALUES = {
+SF_DEFAULT_VALUES = {
     "time_til_failure": 9999,
     ### ACOSS
     "montant_part_ouvriere_past_12": 0.0,

@@ -1,73 +1,46 @@
+"""Build yearly indicators data.
+
+This follows MRV's process, originally written in SAS.
+"""
+
 from os import path
 
 import pyspark.sql.functions as F
-from pyspark.sql import SparkSession
 from pyspark.sql.window import Window
 
-#  Instanciating Spark session
-
-spark = SparkSession.builder.getOrCreate()
-spark.conf.set("spark.shuffle.blockTransferService", "nio")
-spark.conf.set("spark.driver.maxResultSize", "1300M")
-
-#########
-# Utils #
-#########
-
-
-def load_source(src_name, spl_size=None):
-    df = spark.read.orc(SRC_PATHS[src_name])
-    if spl_size is not None:
-        df = df.sample(spl_size)
-    return df
-
-
-def null_values_stats(df, columns=None):
-    """Computes percentage of null values in given DataFrame columns."""
-    if columns is None:
-        columns = df.columns
-    df_size = df.count()
-    return df.select(
-        [(F.count(F.when(F.isnull(c), c)) / df_size).alias(c) for c in columns]
-    )
-
+from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
+from sf_datalake.utils import load_source
 
 ####################
 # Loading datasets #
 ####################
 
-# SAMPLE_SIZE = 0.1  # set to None to get all dataset
-SAMPLE_SIZE = None
-
-ROOT_FOLDER = "/projets/TSF/sources/"
-MRV_DTNUM_FOLDER = path.join(ROOT_FOLDER, "livraison_MRV-DTNUM_juin_2021")
-
-SRC_PATHS = {
-    "decla_indmap": path.join(MRV_DTNUM_FOLDER, "etl_decla-declarations_indmap.orc"),
-    "decla_af": path.join(MRV_DTNUM_FOLDER, "etl_decla-declarations_af.orc"),
-    "defaillances": path.join(MRV_DTNUM_FOLDER, "pub_medoc_oracle-t_defaillance.orc"),
-    "refent_etab": path.join(MRV_DTNUM_FOLDER, "pub_refent-t_ref_etablissements.orc"),
-    "refent_entr": path.join(MRV_DTNUM_FOLDER, "pub_refent-t_ref_entreprise.orc"),
-    "jugements": path.join(MRV_DTNUM_FOLDER, "etl_refent_oracle-t_jugement_histo.orc"),
-    "rar_tva": path.join(MRV_DTNUM_FOLDER, "rar.rar_tva_exercice.orc"),
-    "sf": path.join(ROOT_FOLDER, "data_sf_padded.orc"),
+filename = {
+    "decla_indmap": "etl_decla-declarations_indmap.orc",
+    "decla_af": "etl_decla-declarations_af.orc",
+    "defaillances": "pub_medoc_oracle-t_defaillance.orc",
+    "refent_etab": "pub_refent-t_ref_etablissements.orc",
+    "refent_entr": "pub_refent-t_ref_entreprise.orc",
+    "jugements": "etl_refent_oracle-t_jugement_histo.orc",
+    "rar_tva": "rar.rar_tva_exercice.orc",
+    "sf": "data_sf_padded.orc",
 }
 
-indmap = load_source("decla_indmap", SAMPLE_SIZE)
-af = load_source("decla_af", SAMPLE_SIZE)
-defa = load_source("defaillances", SAMPLE_SIZE)
-refent_entr = load_source("refent_entr", SAMPLE_SIZE)
-refent_etab = load_source("refent_etab", SAMPLE_SIZE)
-jugements = load_source("jugements", SAMPLE_SIZE)
-rar_tva = load_source("rar_tva", SAMPLE_SIZE)
+OUTPUT_PATH = path.join(DATA_ROOT_DIR, "/base/indicateurs_annuels.orc")
 
-sf = load_source("sf", SAMPLE_SIZE)
+indmap = load_source(path.join(VUES_DIR, filename["decla_indmap"]))
+af = load_source(path.join(VUES_DIR, filename["decla_af"]))
+defa = load_source(path.join(VUES_DIR, filename["defaillances"]))
+refent_entr = load_source(path.join(VUES_DIR, filename["refent_entr"]))
+refent_etab = load_source(path.join(VUES_DIR, filename["refent_etab"]))
+jugements = load_source(path.join(VUES_DIR, filename["jugements"]))
+rar_tva = load_source(path.join(VUES_DIR, filename["rar_tva"]))
+
+sf = load_source(path.join(DATA_ROOT_DIR, filename["sf"]))
 
 ####################
 # Merge datasets   #
 ####################
-
-# Building yearly indicators, following MRV's model (originally in SAS)
 
 df = indmap.join(
     af, on=["siren", "date_deb_exercice", "date_fin_exercice"], how="left"
@@ -163,7 +136,7 @@ for col in df.columns:
 
 tac = tac_base.select(tac_columns + key_columns)
 
-## Jointure taux d'accroissement
+##  'taux d'accroissement' DataFrame join
 
 df_v = df.join(
     tac,
@@ -171,7 +144,7 @@ df_v = df.join(
     how="left",
 )
 
-## Jointure SF
+## SF join
 
 df_v = df_v.withColumn(
     "year_dgfip", F.year(df_v["date_fin_exercice"])
@@ -193,6 +166,4 @@ indics_annuels = sf.join(
     how="full_outer",
 )
 
-indics_annuels.write.format("orc").save(
-    "/projets/TSF/sources/base/indicateurs_annuels.orc"
-)
+indics_annuels.write.format("orc").save(OUTPUT_PATH)

@@ -1,44 +1,41 @@
+"""Logistic regression model for company failure prediction.
+"""
+
 import logging
 import os
 from functools import reduce
 
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import ElementwiseProduct
-from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import FloatType, StringType
-from sf_datalake.configuration import config
-from sf_datalake.utils import feature_engineering, preprocessing
 
-spark = SparkSession.builder.getOrCreate()
-sc = spark.sparkContext
+from sf_datalake.config import base as model_config
+from sf_datalake.preprocessing import DATASET_PATH, OUTPUT_ROOT_DIR, feature_engineering
+from sf_datalake.processing import transform
+from sf_datalake.utils import load_source
 
-ROOT_FOLDER = "/projets/TSF/sources/"
-DATASET_PATH = "base/indicateurs_annuels.orc"
-fullpath = os.path.join(ROOT_FOLDER, DATASET_PATH)
-indics_annuels = spark.read.orc(fullpath)
-logging.info(f"Reading data in {fullpath}")
+logging.info("Reading data in %s", DATASET_PATH)
+indics_annuels = load_source(DATASET_PATH)
 
 ### Default values for missing data
 
-non_ratio_variables = list(filter(lambda x: x[:3] != "RTO", config.MRV_VARIABLES))
-ratio_variables = list(filter(lambda x: x[:3] == "RTO", config.MRV_VARIABLES))
+non_ratio_variables = list(filter(lambda x: x[:3] != "RTO", model_config.MRV_VARIABLES))
+ratio_variables = list(filter(lambda x: x[:3] == "RTO", model_config.MRV_VARIABLES))
 
-mrv_default_data_values = {v: 0.0 for v in non_ratio_variables}
-
-medians = reduce(
+mrv_default_values = {v: 0.0 for v in non_ratio_variables}
+data_medians = reduce(
     lambda x, y: x + y, indics_annuels.approxQuantile(ratio_variables, [0.5], 0.05)
 )
+for var, med in zip(ratio_variables, data_medians):
+    mrv_default_values[var] = med
 
-for var, med in zip(ratio_variables, medians):
-    mrv_default_data_values[var] = med
 
+default_data_values = dict(**mrv_default_values, **model_config.SF_DEFAULT_VALUES)
 
-default_data_values = dict(**mrv_default_data_values, **config.SF_DEFAULT_DATA_VALUES)
-
-if config.FILL_MISSING_VALUES:
+if model_config.FILL_MISSING_VALUES:
     logging.info("Filling missing values with default values.")
-    logging.info(f"Defaults : {default_data_values}")
+    logging.info("Defaults : %s", default_data_values)
 
     indics_annuels = indics_annuels.fillna(
         {k: v for (k, v) in default_data_values.items() if k in indics_annuels.columns}
@@ -56,17 +53,21 @@ logging.info("Aggregating data at the SIREN level")
 
 # Signaux faibles variables
 indics_annuels_sf = indics_annuels.select(
-    *(config.SUM_VARIABLES | config.AVG_VARIABLES | config.BASE_VARIABLES)
+    *(
+        model_config.SUM_VARIABLES
+        | model_config.AVG_VARIABLES
+        | model_config.BASE_VARIABLES
+    )
 )
 
 # Sums
-gb_sum = indics_annuels_sf.groupBy("siren", "periode").sum(*config.SUM_VARIABLES)
-for col_name in config.SUM_VARIABLES:
+gb_sum = indics_annuels_sf.groupBy("siren", "periode").sum(*model_config.SUM_VARIABLES)
+for col_name in model_config.SUM_VARIABLES:
     gb_sum = gb_sum.withColumnRenamed(f"sum({col_name})", col_name)
 
 # Averages
-gb_avg = indics_annuels_sf.groupBy("siren", "periode").avg(*config.AVG_VARIABLES)
-for col_name in config.AVG_VARIABLES:
+gb_avg = indics_annuels_sf.groupBy("siren", "periode").avg(*model_config.AVG_VARIABLES)
+for col_name in model_config.AVG_VARIABLES:
     gb_avg = gb_avg.withColumnRenamed(f"avg({col_name})", col_name)
 
 ### TODO : ratio_dette_moyenne12m should be computed from the
@@ -76,7 +77,7 @@ for col_name in config.AVG_VARIABLES:
 
 # Joining grouped data
 indics_annuels_sf = (
-    indics_annuels_sf.drop(*(config.SUM_VARIABLES | config.AVG_VARIABLES))
+    indics_annuels_sf.drop(*(model_config.SUM_VARIABLES | model_config.AVG_VARIABLES))
     .join(gb_sum, on=["siren", "periode"])
     .join(gb_avg, on=["siren", "periode"])
 )
@@ -99,14 +100,14 @@ indics_annuels_sf = indics_annuels_sf.dropDuplicates(["siren", "periode"])
 
 ## Paydex
 indics_annuels_paydex = indics_annuels.select(
-    *(config.PAYDEX_VARIABLES | {"siren", "periode"})
+    *(model_config.PAYDEX_VARIABLES | {"siren", "periode"})
 ).dropDuplicates(["siren", "periode"])
 indics_annuels_paydex = feature_engineering.make_paydex_bins(indics_annuels_paydex)
 indics_annuels_paydex = feature_engineering.make_paydex_yoy(indics_annuels_paydex)
 
 # DGFIP Variables
 indics_annuels_dgfip = indics_annuels.select(
-    *(config.MRV_VARIABLES | {"siren", "periode"})
+    *(model_config.MRV_VARIABLES | {"siren", "periode"})
 ).dropDuplicates(["siren", "periode"])
 
 # Joining data
@@ -114,39 +115,42 @@ indics_annuels = indics_annuels_sf.join(
     indics_annuels_dgfip, on=["siren", "periode"]
 ).join
 
-if config.FILL_MISSING_VALUES:
+if model_config.FILL_MISSING_VALUES:
     indics_annuels = indics_annuels.fillna(
-        {
-            k: v
-            for (k, v) in config.DEFAULT_DATA_VALUES.items()
-            if k in indics_annuels.columns
-        }
+        {k: v for (k, v) in default_data_values.items() if k in indics_annuels.columns}
     )
 else:
-    indics_annuels = indics_annuels.dropna(subset=tuple(config.FEATURES))
+    indics_annuels = indics_annuels.dropna(subset=tuple(model_config.FEATURES))
 
 logging.info("Creating objective variable 'failure_within_18m'")
 indics_annuels = indics_annuels.withColumn(
     "failure_within_18m", indics_annuels["time_til_failure"] <= 18
 )
 
+logging.info("Filtering out firms on 'effectif' and 'code_naf' variables.")
 indics_annuels = indics_annuels.select(
-    *(config.BASE_VARIABLES | config.FEATURES | config.OBJ_VARIABLE)
+    *(
+        model_config.BASE_VARIABLES
+        | model_config.FEATURES
+        | model_config.TARGET_VARIABLE
+    )
 ).filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
 
-logging.info("Filtering out firms on 'effectif' and 'code_naf' variables.")
 
 ### Learning
 
 # Oversampling
-logging.info(f"Creating oversampled training set ({config.OVERSAMPLING_RATIO})")
+logging.info(
+    "Creating oversampled training set with positive examples ratio %.1f",
+    model_config.OVERSAMPLING_RATIO,
+)
 
 will_fail_mask = indics_annuels["failure_within_18m"]
 
 n_samples = indics_annuels.count()
 n_failing = indics_annuels.filter(will_fail_mask).count()
-subset_size = int(n_failing / config.OVERSAMPLING_RATIO)
-n_not_failing = int((1.0 - config.OVERSAMPLING_RATIO) * subset_size)
+subset_size = int(n_failing / model_config.OVERSAMPLING_RATIO)
+n_not_failing = int((1.0 - model_config.OVERSAMPLING_RATIO) * subset_size)
 
 failing_subset = indics_annuels.filter(will_fail_mask)
 not_failing_subset = indics_annuels.filter(~will_fail_mask).sample(
@@ -155,76 +159,85 @@ not_failing_subset = indics_annuels.filter(~will_fail_mask).sample(
 oversampled_subset = failing_subset.union(not_failing_subset)
 
 # Define dates
-
 SIREN_train, SIREN_test = (
     indics_annuels.select("siren").distinct().randomSplit([0.8, 0.2])
 )
 
-logging.info(f"Creating train set over {config.TRAIN_DATES}.")
+logging.info("Creating train between %s and %s.", *model_config.TRAIN_DATES)
 train = (
     oversampled_subset.filter(oversampled_subset["siren"].isin(SIREN_train["siren"]))
-    .filter(oversampled_subset["periode"] > config.TRAIN_DATES[0])
-    .filter(oversampled_subset["periode"] < config.TRAIN_DATES[1])
+    .filter(oversampled_subset["periode"] > model_config.TRAIN_DATES[0])
+    .filter(oversampled_subset["periode"] < model_config.TRAIN_DATES[1])
 )
 
-logging.info(f"Creating test set over {config.TEST_DATES}.")
+logging.info("Creating test set between %s and %s.", *model_config.TEST_DATES)
 test = (
     indics_annuels.filter(indics_annuels["siren"].isin(SIREN_test["siren"]))
-    .filter(indics_annuels["periode"] > config.TEST_DATES[0])
-    .filter(indics_annuels["periode"] < config.TEST_DATES[1])
+    .filter(indics_annuels["periode"] > model_config.TEST_DATES[0])
+    .filter(indics_annuels["periode"] < model_config.TEST_DATES[1])
 )
 
-logging.info(f"Creating a prediction subset on {config.PREDICTION_DATE}.")
+logging.info("Creating a prediction set on %s.", model_config.PREDICTION_DATE)
 prediction = indics_annuels.filter(
-    F.to_date(indics_annuels["periode"]) == config.PREDICTION_DATE
+    F.to_date(indics_annuels["periode"]) == model_config.PREDICTION_DATE
 )
 
-assembled_std_train = preprocessing.assemble_features(
-    train, config.STD_SCALE_FEATURES, "assembled_std_features"
+assembled_std_train = transform.assemble_features(
+    train, model_config.STD_SCALE_FEATURES, "assembled_std_features"
 )
-assembled_std_test = preprocessing.assemble_features(
-    test, config.STD_SCALE_FEATURES, "assembled_std_features"
+assembled_std_test = transform.assemble_features(
+    test, model_config.STD_SCALE_FEATURES, "assembled_std_features"
 )
-assembled_std_prediction = preprocessing.assemble_features(
-    prediction, config.STD_SCALE_FEATURES, "assembled_std_features"
-)
-assembled_onehot_train = preprocessing.assemble_features(train, config.ONEHOT_FEATURES)
-assembled_onehot_test = preprocessing.assemble_features(test, config.ONEHOT_FEATURES)
-assembled_onehot_prediction = preprocessing.assemble_features(
-    prediction, config.ONEHOT_FEATURES
+assembled_std_prediction = transform.assemble_features(
+    prediction, model_config.STD_SCALE_FEATURES, "assembled_std_features"
 )
 
-standard_scaler_model = preprocessing.fit_scaler(
+standard_scaler_model = transform.fit_scaler(
     assembled_std_train,
     scaler_type="standard",
     input_colname="assembled_std_features",
     output_colname="std_scaled_features",
 )
 
-scaled_train = preprocessing.scale_df(assembled_std_train)
-scaled_test = preprocessing.scale_df(
+scaled_train = transform.scale_df(
+    scaler_model=standard_scaler_model,
+    df=assembled_std_train,
+    features_col="std_scaled_features",
+    label_col="label",
+)
+scaled_test = transform.scale_df(
+    scaler_model=standard_scaler_model,
+    df=assembled_std_test,
+    features_col="std_scaled_features",
+    label_col="label",
     keep_cols=["siren", "time_til_failure"],
 )
-scaled_prediction = preprocessing.scale_df(
+scaled_prediction = transform.scale_df(
+    scaler_model=standard_scaler_model,
+    df=assembled_std_prediction,
+    features_col="std_scaled_features",
+    label_col="label",
     keep_cols=["siren"],
 )
 
 # Training
 logging.info(
-    f"Training logistic regression model with regularization \
-    {config.REGULARIZATION_COEFF} and {config.MAX_ITER} iterations (maximum)."
+    "Training logistic regression model with regularization \
+     %.3f and %d iterations (maximum).",
+    model_config.REGULARIZATION_COEFF,
+    model_config.MAX_ITER,
 )
 blor = LogisticRegression(
-    regParam=config.REGULARIZATION_COEFF,
+    regParam=model_config.REGULARIZATION_COEFF,
     standardization=False,
-    maxIter=config.MAX_ITER,
-    tol=config.TOL,
+    maxIter=model_config.MAX_ITER,
+    tol=model_config.TOL,
 )
 blorModel = blor.fit(scaled_train)
 w = blorModel.coefficients
 b = blorModel.intercept
-logging.info(f"Model weights: {w}")
-logging.info(f"Model intercept: {b}")
+logging.info("Model weights: %.3f", w)
+logging.info("Model intercept: %.3f", b)
 
 # Test data for optimal threshold computation
 logging.info("Running model on test dataset.")
@@ -251,7 +264,7 @@ prediction_data = (
 
 # Explain prediction
 meso_features = [
-    feature for features in config.FEATURE_GROUPS.values() for feature in features
+    feature for features in model_config.FEATURE_GROUPS.values() for feature in features
 ]
 
 # Get feature influence
@@ -263,17 +276,17 @@ ep.setOutputCol("eprod")
 explanation_df = (
     ep.transform(scaled_prediction)
     .rdd.map(lambda r: [r["siren"]] + [float(f) for f in r["eprod"]])
-    .toDF(["siren"] + config.TO_SCALE)
+    .toDF(["siren"] + model_config.FEATURES)
 )
-for group, features in config.MESO_URSSAF_GROUPS.items():
+for group, features in model_config.MESO_URSSAF_GROUPS.items():
     explanation_df = explanation_df.withColumn(
         group, sum(explanation_df[col] for col in features)
     ).drop(*features)
 
 # 'Macro' scores per group
-for group, features in config.FEATURE_GROUPS.items():
+for group, features in model_config.FEATURE_GROUPS.items():
     explanation_df = explanation_df.withColumn(
-        "{}_macro_score".format(group),
+        f"{group}_macro_score",
         1 / (1 + F.exp(-(sum(explanation_df[col] for col in features)))),
     )
 macro_scores_columns = [
@@ -285,9 +298,10 @@ macro_scores_columns = [
 
 # 'Micro' scores
 @F.udf(returnType=StringType())
-def get_max_value_colname(r, max_col):
+def get_max_value_colname(row, max_col):
+    """Extract the column name where the nth highest value is found."""
     for i, name in enumerate(meso_features):
-        if r[i] == max_col:
+        if row[i] == max_col:
             return name
     raise NameError(f"Could not find columns associated to {max_col}")
 
@@ -331,38 +345,34 @@ concerning_columns = [
 ]
 
 # Write outputs to csv
-base_output_path = "/projets/TSF/donnees/sorties_modeles"
+base_output_path = os.path.join(OUTPUT_ROOT_DIR, "sorties_modeles")
 output_folder = os.path.join(
     base_output_path,
-    "logreg{}_train{}to{}_test{}_to{}_predict{}".format(
-        config.REGULARIZATION_COEFF,
-        *config.TRAIN_DATES,
-        *config.TEST_DATES,
-        config.PREDICTION_DATE,
-    ),
+    f"logreg{model_config.REGULARIZATION_COEFF}_\
+    train{model_config.TRAIN_DATES[0]}\to{model_config.TRAIN_DATES[1]}_\
+    test{model_config.TEST_DATES[0]}to{model_config.TEST_DATES[1]}_\
+    predict{model_config.PREDICTION_DATE}",
 )
 test_output_path = os.path.join(output_folder, "test_data")
 prediction_output_path = os.path.join(output_folder, "prediction_data")
 concerning_output_path = os.path.join(output_folder, "concerning_values")
 explanation_output_path = os.path.join(output_folder, "explanation_data")
 
-logging.info("Writing test data to file {}".format(test_output_path))
+logging.info("Writing test data to file %s", test_output_path)
 test_data.repartition(1).write.csv(test_output_path, header=True)
 
-logging.info("Writing prediction data to file {}".format(prediction_output_path))
+logging.info("Writing prediction data to file %s", prediction_output_path)
 prediction_data.drop("features").repartition(1).write.csv(
     prediction_output_path, header=True
 )
 
-logging.info("Writing concerning features to file {}".format(concerning_output_path))
+logging.info("Writing concerning features to file %s", concerning_output_path)
 explanation_df.select(["siren"] + concerning_columns).repartition(1).write.csv(
     concerning_output_path, header=True
 )
 
 logging.info(
-    "Writing explanation macro scores data to directory {}".format(
-        explanation_output_path
-    )
+    "Writing explanation macro scores data to directory %s", explanation_output_path
 )
 explanation_df.select(["siren"] + macro_scores_columns).repartition(1).write.csv(
     os.path.join(explanation_output_path), header=True

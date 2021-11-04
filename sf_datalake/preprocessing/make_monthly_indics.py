@@ -1,59 +1,53 @@
-# Building montly indicators, following MRV's model (originally in SAS: `21_indicateurs.sas`)
+"""Build monthly TVA data.
+
+This follows MRV's process, originally written in SAS: `21_indicateurs.sas`
+"""
+
+from os import path
 
 import pyspark.sql.functions as F
-from pyspark.sql import SparkSession
 from pyspark.sql.types import StringType
 from pyspark.sql.window import Window
 
-## Instanciating Spark session
-spark = SparkSession.builder.getOrCreate()
-spark.conf.set("spark.shuffle.blockTransferService", "nio")
-spark.conf.set("spark.driver.maxResultSize", "1300M")
-
-#########
-# Utils #
-#########
-
-
-def load_source(src_name, spl_size=None):
-    df = spark.read.orc(f"{vues_rootfolder}/{src[src_name]}")
-    if spl_size is not None:
-        df = df.sample(n=spl_size)
-    return df
-
+from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
+from sf_datalake.utils import load_source
 
 ####################
 # Loading datasets #
 ####################
 
-vues_rootfolder = "/projets/TSF/sources/livraison_MRV-DTNUM_juin_2021"
+OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 
-src = {
+filename = {
     "t_art": "pub_risq_oracle.t_art.orc",
     "t_mvt": "pub_risq_oracle.t_mvt.orc",
     "t_mvr": "pub_risq_oracle.t_mvr.orc",
     "t_dar": "pub_risq_oracle.t_dar.orc",
     "t_dos": "pub_risq_oracle.t_dos.orc",
     "t_ech": "pub_risq_oracle.t_ech.orc",
-    "af": "etl_decla-declarations_af.orc",
-    "t_ref_etablissements": "pub_refent-t_ref_etablissements.orc",  # pas la bonne table a priori
+    "af": "etl_decla-declarations_af.orc",  # pas la bonne table a priori
+    "t_ref_etablissements": "pub_refent-t_ref_etablissements.orc",
     "t_ref_entreprise": "pub_refent-t_ref_entreprise.orc",
     "t_ref_code_nace": "pub_refer-t_ref_code_nace_complet.orc",
     "liasse_tva_ca3": "etl_tva.liasse_tva_ca3_view.orc",
     "t_etablissement_annee": "etl_refent-T_ETABLISSEMENT_ANNEE.orc",
 }
 
-t_art = load_source("t_art")
-t_mvt = load_source("t_mvt")
-t_dar = load_source("t_dar")
-t_dos = load_source("t_dos")
-t_mvr = load_source("t_mvr")
-t_ech = load_source("t_ech")
-t_ref_etablissements = load_source("t_ref_etablissements")
-t_ref_entreprise = load_source("t_ref_entreprise")
-t_ref_code_nace = load_source("t_ref_code_nace")
-liasse_tva_ca3 = load_source("liasse_tva_ca3")
-t_etablissement_annee = load_source("t_etablissement_annee")
+t_art = load_source(path.join(VUES_DIR, filename["t_art"]))
+t_mvt = load_source(path.join(VUES_DIR, filename["t_mvt"]))
+t_dar = load_source(path.join(VUES_DIR, filename["t_dar"]))
+t_dos = load_source(path.join(VUES_DIR, filename["t_dos"]))
+t_mvr = load_source(path.join(VUES_DIR, filename["t_mvr"]))
+t_ech = load_source(path.join(VUES_DIR, filename["t_ech"]))
+t_ref_etablissements = load_source(
+    path.join(VUES_DIR, filename["t_ref_etablissements"])
+)
+t_ref_entreprise = load_source(path.join(VUES_DIR, filename["t_ref_entreprise"]))
+t_ref_code_nace = load_source(path.join(VUES_DIR, filename["t_ref_code_nace"]))
+liasse_tva_ca3 = load_source(path.join(VUES_DIR, filename["liasse_tva_ca3"]))
+t_etablissement_annee = load_source(
+    path.join(VUES_DIR, filename["t_etablissement_annee"])
+)
 
 #######
 # RAR #
@@ -97,9 +91,9 @@ mvt_montant_creance = t_mvt.join(
     mvt_montant_creance, on=["frp", "art_cleart"], how="left"
 )
 
-# Paiements
-# Cum sum https://stackoverflow.com/questions/45946349/python-spark-cumulative-sum-by-group-using-dataframe
-# Eventuellement faire un join car on perd des colonnes en faisant l'aggrégation. A voir.
+### Paiements
+# Eventuellement faire un join car on perd des colonnes en faisant
+# l'aggrégation. À voir.
 mvt_paiement = t_mvt.filter("mvt_nacrd == 0 OR mvt_nacrd == 1")
 mvt_paiement = mvt_paiement.withColumn(
     "mvt_djc_int", F.unix_timestamp(F.col("mvt_djc"))
@@ -190,7 +184,8 @@ x_creances = x_creances.withColumn(
     "IND_HCF", F.when(F.col("ART_DATEDCF").isNotNull(), 0).otherwise(1)
 )
 
-# Je filtre pas sur les années (L254-L285 de 21_indicateurs.sas). On le fait a la modélisation ?
+# Je filtre pas sur les années (L254-L285 de 21_indicateurs.sas). On le fait à la
+# modélisation ?
 
 # TODO vérifier comment ces opérations se comportent vis à vis des nulls
 rar_mois_article = x_creances.withColumn(
@@ -210,12 +205,15 @@ rar_mois_article = rar_mois_article.withColumn(
     "MNT_RAR_HCF", F.col("MNT_RAR") * F.col("IND_HCF")
 )
 
-# Il manque des opérations qui n'ont plus de sens, il me semble, car on ne séléctionne plus les dates (L288-L306 de 21_indicateurs.sas)
+# Il manque des opérations qui n'ont plus de sens, il me semble, car on ne séléctionne
+# plus les dates (L288-L306 de 21_indicateurs.sas)
 
 # Write file
 rar_mois_article.write.format("orc").save("/projets/TSF/sources/base/rar.orc")
 
-# Les entreprises peuvent déclarer la TVA mensuellement, trimestriellement ou annuellement.
+# Les entreprises peuvent déclarer la TVA mensuellement, trimestriellement ou
+# annuellement.
+#
 # On crée une variable pour distinguer les cas
 ca3 = liasse_tva_ca3.withColumn(
     "duree_periode",
@@ -371,7 +369,8 @@ x_tva = x_tva.withColumn(
 x_tva = x_tva.withColumn(
     "D_TVA_DED_i0059_AUTR", F.col("D3310_21") + F.col("D3517S_25_i")
 )  # D3310_2C
-# TODO if (D3310_22A=. AND D3517S_25A_TX_DED=.) then D_TVA_DED_TX_COEF_DED = 100; else D_TVA_DED_TX_COEF_DED = SUM(D3310_22A,D3517S_25A_TX_DED) ;
+# TODO if (D3310_22A=. AND D3517S_25A_TX_DED=.) then D_TVA_DED_TX_COEF_DED = 100; else
+# D_TVA_DED_TX_COEF_DED = SUM(D3310_22A,D3517S_25A_TX_DED) ;
 x_tva = x_tva.withColumn(
     "D_TVA_DED_i0705_TOTAL", F.col("D3310_23") + F.col("D3517S_26_i")
 )
@@ -390,4 +389,4 @@ x_tva = x_tva.withColumn(
 x_tva = x_tva.withColumn("M_TVA_NET_DUE", F.col("D3310_28") + F.col("D3517S_28_i"))
 
 # Write file
-x_tva.write.format("orc").save("/projets/TSF/sources/base/tva.orc")
+x_tva.write.format("orc").save(OUTPUT_FILE)
