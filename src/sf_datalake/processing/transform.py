@@ -15,9 +15,9 @@ def assemble_features(
     """Assembles features columns into a DenseVector object.
 
     Args:
-        - df: The DataFrame containing features data.
-        - features_col: The features columns names.
-        - output_col: The name of the assembled features.
+        df: The DataFrame containing features data.
+        features_col: The features columns names.
+        output_col: The name of the assembled features.
 
     Returns:
         A DataFrame with a new column of assembled features.
@@ -33,7 +33,18 @@ def fit_scaler(
     output_colname: str,
     sampling_ratio: float = None,
 ) -> pyspark.ml.Model:
-    """Creates and fits a scaler object to some pre-assembled data."""
+    """Creates and fits a scaler object to some pre-assembled data.
+
+    Args:
+        df:
+        scaler_type:
+        input_colname:
+        output_colname:
+        sampling_ratio:
+
+    Returns:
+        A scaler object fitted using the input DataFrame.
+    """
     if scaler_type == "standard":
         scaler = StandardScaler(
             # withMean=True,
@@ -61,7 +72,18 @@ def scale_df(
     label_col: str,
     keep_cols: list = None,
 ) -> pyspark.sql.DataFrame:
-    """Scales data using a pre-fitted scaler."""
+    """Scales data using a pre-fitted scaler.
+
+    Args:
+        scaler_model:
+        df:
+        features_col:
+        label_col:
+        keep_cols:
+
+    Returns:
+        The scaled DataFrame.
+    """
     scaled_data = scaler_model.transform(df)
 
     selected_cols = [features_col]
