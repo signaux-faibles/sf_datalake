@@ -3,8 +3,8 @@
 
 from typing import Iterable
 
-import pyspark
-from pyspark.ml.feature import StandardScaler, VectorAssembler
+import pyspark  # pylint: disable=E0401
+from pyspark.ml.feature import StandardScaler, VectorAssembler  # pylint: disable=E0401
 
 
 def assemble_features(

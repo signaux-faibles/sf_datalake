@@ -5,10 +5,10 @@ import logging
 import os
 from functools import reduce
 
-from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.feature import ElementwiseProduct
-from pyspark.sql import functions as F
-from pyspark.sql.types import FloatType, StringType
+from pyspark.ml.classification import LogisticRegression  # pylint: disable=E0401
+from pyspark.ml.feature import ElementwiseProduct  # pylint: disable=E0401
+from pyspark.sql import functions as F  # pylint: disable=E0401
+from pyspark.sql.types import FloatType, StringType  # pylint: disable=E0401
 
 from sf_datalake.config import base as model_config
 from sf_datalake.preprocessing import DATASET_PATH, OUTPUT_ROOT_DIR, feature_engineering

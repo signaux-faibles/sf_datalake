@@ -3,9 +3,9 @@
 """
 from os import path
 
-from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.types import StringType
+from pyspark.sql import DataFrame, SparkSession  # pylint: disable=E0401
+from pyspark.sql import functions as F  # pylint: disable=E0401
+from pyspark.sql.types import StringType  # pylint: disable=E0401
 
 
 def instantiate_spark_session():

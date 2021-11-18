@@ -5,9 +5,9 @@ This follows MRV's process, originally written in SAS: `21_indicateurs.sas`
 
 from os import path
 
-import pyspark.sql.functions as F
-from pyspark.sql.types import StringType
-from pyspark.sql.window import Window
+import pyspark.sql.functions as F  # pylint: disable=E0401
+from pyspark.sql.types import StringType  # pylint: disable=E0401
+from pyspark.sql.window import Window  # pylint: disable=E0401
 
 from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
 from sf_datalake.utils import load_source

@@ -1,8 +1,8 @@
 """Feature engineering functions.
 """
 
-import pyspark.ml
-import pyspark.sql
+import pyspark.ml  # pylint: disable=E0401
+import pyspark.sql  # pylint: disable=E0401
 
 
 # Debt

@@ -5,7 +5,7 @@
 from typing import Tuple
 
 import numpy as np
-import pyspark
+import pyspark  # pylint: disable=E0401
 from sklearn.metrics import (
     average_precision_score,
     balanced_accuracy_score,
