@@ -194,20 +194,20 @@ scaled_train = transform.scale_df(
     scaler_model=standard_scaler_model,
     df=assembled_std_train,
     features_col="std_scaled_features",
-    label_col="label",
+    label_col="failure_within_18m",
 )
 scaled_test = transform.scale_df(
     scaler_model=standard_scaler_model,
     df=assembled_std_test,
     features_col="std_scaled_features",
-    label_col="label",
+    label_col="failure_within_18m",
     keep_cols=["siren", "time_til_failure"],
 )
 scaled_prediction = transform.scale_df(
     scaler_model=standard_scaler_model,
     df=assembled_std_prediction,
     features_col="std_scaled_features",
-    label_col="label",
+    label_col="failure_within_18m",
     keep_cols=["siren"],
 )
 
@@ -267,7 +267,7 @@ ep.setOutputCol("eprod")
 explanation_df = (
     ep.transform(scaled_prediction)
     .rdd.map(lambda r: [r["siren"]] + [float(f) for f in r["eprod"]])
-    .toDF(["siren"] + model_config.FEATURES)
+    .toDF(["siren"] + model_config.STD_SCALE_FEATURES)
 )
 for group, features in model_config.MESO_URSSAF_GROUPS.items():
     explanation_df = explanation_df.withColumn(

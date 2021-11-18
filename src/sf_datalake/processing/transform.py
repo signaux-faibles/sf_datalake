@@ -21,6 +21,7 @@ def assemble_features(
 
     Returns:
         A DataFrame with a new column of assembled features.
+
     """
     assembler = VectorAssembler(inputCols=features_col, outputCol=output_col)
     return assembler.transform(df)
@@ -36,14 +37,16 @@ def fit_scaler(
     """Creates and fits a scaler object to some pre-assembled data.
 
     Args:
-        df:
-        scaler_type:
-        input_colname:
-        output_colname:
-        sampling_ratio:
+        df: The DataFrame to fit on.
+        scaler_type: The desired scaler type. Currently only supports `standard`.
+        input_colname: The name of the input 'dense' features column.
+        output_colname: The name of the output 'dense' features column after scaling.
+        sampling_ratio: If desired, only a proportion (float smaller than 1) of the
+          dataset can be used for fitting in order to increase speed.
 
     Returns:
         A scaler object fitted using the input DataFrame.
+
     """
     if scaler_type == "standard":
         scaler = StandardScaler(
@@ -75,24 +78,27 @@ def scale_df(
     """Scales data using a pre-fitted scaler.
 
     Args:
-        scaler_model:
-        df:
-        features_col:
-        label_col:
-        keep_cols:
+        scaler_model: A fitted pyspark scaler model object.
+        df: The spark dataframe to fit.
+        features_col: The name of the feature columns, aggregated as DenseVector
+          objects.
+        label_col: The name of the column containing the target variable.
+          It should be a column of booleans.
+        keep_cols: If some columns, other than those inside features and label,
+          are to be preserved after scaling, they should be mentioned here as a list.
 
     Returns:
         The scaled DataFrame.
+
     """
     scaled_data = scaler_model.transform(df)
 
-    selected_cols = [features_col]
+    selected_cols = [features_col, label_col]
     if keep_cols is not None:
         selected_cols += keep_cols
-
     selected_data = (
         scaled_data.select(selected_cols)
-        .withColumnRenamed("features", features_col)
+        .withColumnRenamed(features_col, "features")
         .withColumn("label", df[label_col].astype("integer"))
     )
     return selected_data
