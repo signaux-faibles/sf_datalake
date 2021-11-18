@@ -156,5 +156,4 @@ FEATURE_GROUPS = {
         "dette",
     ],
     "misc": ["effectif"],
-    "retards_paiement": ["paydex_group", "paydex_yoy"],
 }

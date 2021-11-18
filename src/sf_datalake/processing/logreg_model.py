@@ -98,22 +98,13 @@ indics_annuels_sf = indics_annuels_sf.withColumn(
 
 indics_annuels_sf = indics_annuels_sf.dropDuplicates(["siren", "periode"])
 
-## Paydex
-indics_annuels_paydex = indics_annuels.select(
-    *(model_config.PAYDEX_VARIABLES | {"siren", "periode"})
-).dropDuplicates(["siren", "periode"])
-indics_annuels_paydex = feature_engineering.make_paydex_bins(indics_annuels_paydex)
-indics_annuels_paydex = feature_engineering.make_paydex_yoy(indics_annuels_paydex)
-
 # DGFIP Variables
 indics_annuels_dgfip = indics_annuels.select(
     *(model_config.MRV_VARIABLES | {"siren", "periode"})
 ).dropDuplicates(["siren", "periode"])
 
 # Joining data
-indics_annuels = indics_annuels_sf.join(
-    indics_annuels_dgfip, on=["siren", "periode"]
-).join
+indics_annuels = indics_annuels_sf.join(indics_annuels_dgfip, on=["siren", "periode"])
 
 if model_config.FILL_MISSING_VALUES:
     indics_annuels = indics_annuels.fillna(
