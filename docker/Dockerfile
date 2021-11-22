@@ -1,7 +1,7 @@
 FROM python:3.6.8
 ADD sf_datalake.tar.gz /pytmp/sf_datalake
-ARG https_proxy=http://proxy.infra.dgfip:3128
-ARG http_proxy=http://proxy.infra.dgfip:3128
+ARG https_proxy=http://proxy.infra.dgfip:8080
+ARG http_proxy=http://proxy.infra.dgfip:8080
 SHELL ["/bin/bash", "-c"]
 RUN echo "Acquire::http::Proxy \"$http_proxy\";" > /etc/apt/apt.conf.d/proxy && \
     apt-get update && \
