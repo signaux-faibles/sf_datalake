@@ -1,4 +1,7 @@
 FROM python:3.6.8
+ENV http_proxy http://proxy.infra.dgfip:8080
+ENV https_proxy http://proxy.infra.dgfip:8080
+
 ADD sf_datalake.tar.gz /pytmp/sf_datalake
 ARG https_proxy=http://proxy.infra.dgfip:8080
 ARG http_proxy=http://proxy.infra.dgfip:8080
