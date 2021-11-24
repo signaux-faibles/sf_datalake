@@ -39,8 +39,8 @@ def fit_scaler(
     Args:
         df: The DataFrame to fit on.
         scaler_type: The desired scaler type. Currently only supports `standard`.
-        input_colname: The name of the input 'dense' features column.
-        output_colname: The name of the output 'dense' features column after scaling.
+        input_colname: The name of the input assembled features column (see assemble_features()).
+        output_colname: The name of the output assembled features column after scaling.
         sampling_ratio: If desired, only a proportion (float smaller than 1) of the
           dataset can be used for fitting in order to increase speed.
 
@@ -78,10 +78,9 @@ def scale_df(
     """Scales data using a pre-fitted scaler.
 
     Args:
-        scaler_model: A fitted pyspark scaler model object.
+        scaler_model: A fitted pyspark scaler model object (see fit_scaler()).
         df: The spark dataframe to fit.
-        features_col: The name of the feature columns, aggregated as DenseVector
-          objects.
+        features_col: The name of the features column (see assemble_features()).
         label_col: The name of the column containing the target variable.
           It should be a column of booleans.
         keep_cols: If some columns, other than those inside features and label,

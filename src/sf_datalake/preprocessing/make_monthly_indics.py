@@ -6,84 +6,69 @@ This follows MRV's process, originally written in SAS: `21_indicateurs.sas`
 from os import path
 
 import pyspark.sql.functions as F  # pylint: disable=E0401
-from pyspark.sql.types import StringType  # pylint: disable=E0401
-from pyspark.sql.window import Window  # pylint: disable=E0401
 
 from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
-from sf_datalake.utils import load_source
+from sf_datalake.preprocessing.feature_engineering import parse_date, process_paiement
+from sf_datalake.utils import load_multiple_sources
+
+OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 
 ####################
 # Loading datasets #
 ####################
 
-OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
+info = [
+    ("t_art", "pub_risq_oracle.t_art.orc", VUES_DIR),
+    ("t_mvt", "pub_risq_oracle.t_mvt.orc", VUES_DIR),
+    ("t_mvr", "pub_risq_oracle.t_mvr.orc", VUES_DIR),  # TODO not used
+    ("t_dar", "pub_risq_oracle.t_dar.orc", VUES_DIR),  # TODO not used
+    ("t_dos", "pub_risq_oracle.t_dos.orc", VUES_DIR),  # TODO not used
+    ("t_ech", "pub_risq_oracle.t_ech.orc", VUES_DIR),  # TODO not used
+    (
+        "af",
+        "etl_decla-declarations_af.orc",
+        VUES_DIR,
+    ),  # TODO pas la bonne table a priori
+    (
+        "t_ref_etablissements",
+        "pub_refent-t_ref_etablissements.orc",
+        VUES_DIR,
+    ),  # TODO not used
+    ("t_ref_entreprise", "pub_refent-t_ref_entreprise.orc", VUES_DIR),  # TODO not used
+    (
+        "t_ref_code_nace",
+        "pub_refer-t_ref_code_nace_complet.orc",
+        VUES_DIR,
+    ),  # TODO not used
+    ("liasse_tva_ca3", "etl_tva.liasse_tva_ca3_view.orc", VUES_DIR),
+    ("t_etablissement_annee", "etl_refent-T_ETABLISSEMENT_ANNEE.orc", VUES_DIR),
+]
 
-filename = {
-    "t_art": "pub_risq_oracle.t_art.orc",
-    "t_mvt": "pub_risq_oracle.t_mvt.orc",
-    "t_mvr": "pub_risq_oracle.t_mvr.orc",
-    "t_dar": "pub_risq_oracle.t_dar.orc",
-    "t_dos": "pub_risq_oracle.t_dos.orc",
-    "t_ech": "pub_risq_oracle.t_ech.orc",
-    "af": "etl_decla-declarations_af.orc",  # pas la bonne table a priori
-    "t_ref_etablissements": "pub_refent-t_ref_etablissements.orc",
-    "t_ref_entreprise": "pub_refent-t_ref_entreprise.orc",
-    "t_ref_code_nace": "pub_refer-t_ref_code_nace_complet.orc",
-    "liasse_tva_ca3": "etl_tva.liasse_tva_ca3_view.orc",
-    "t_etablissement_annee": "etl_refent-T_ETABLISSEMENT_ANNEE.orc",
-}
-
-t_art = load_source(path.join(VUES_DIR, filename["t_art"]))
-t_mvt = load_source(path.join(VUES_DIR, filename["t_mvt"]))
-t_dar = load_source(path.join(VUES_DIR, filename["t_dar"]))
-t_dos = load_source(path.join(VUES_DIR, filename["t_dos"]))
-t_mvr = load_source(path.join(VUES_DIR, filename["t_mvr"]))
-t_ech = load_source(path.join(VUES_DIR, filename["t_ech"]))
-t_ref_etablissements = load_source(
-    path.join(VUES_DIR, filename["t_ref_etablissements"])
-)
-t_ref_entreprise = load_source(path.join(VUES_DIR, filename["t_ref_entreprise"]))
-t_ref_code_nace = load_source(path.join(VUES_DIR, filename["t_ref_code_nace"]))
-liasse_tva_ca3 = load_source(path.join(VUES_DIR, filename["liasse_tva_ca3"]))
-t_etablissement_annee = load_source(
-    path.join(VUES_DIR, filename["t_etablissement_annee"])
-)
+datasets = load_multiple_sources(info)
 
 #######
 # RAR #
 #######
 
 # Convert to dates
-t_art = t_art.withColumn(
-    "art_disc", F.to_date(F.col("art_disc").cast(StringType()), "yyyyMMdd")
-)
-t_art = t_art.withColumn(
-    "art_didr", F.to_date(F.col("art_didr").cast(StringType()), "yyyyMMdd")
-)
-t_art = t_art.withColumn(
-    "art_datedcf", F.to_date(F.col("art_datedcf").cast(StringType()), "yyyyMMdd")
-)
-t_art = t_art.withColumn(
-    "art_dori", F.to_date(F.col("art_dori").cast(StringType()), "yyyyMMdd")
+
+t_art = parse_date(
+    datasets["t_art"], ["art_disc", "art_didr", "art_datedcf", "art_dori"]
 )
 t_art = t_art.orderBy(["frp", "art_cleart"])  # useless on spark a priori ?
 
-t_mvt = t_mvt.withColumn(
-    "mvt_djc", F.to_date(F.col("mvt_djc").cast(StringType()), "yyyyMMdd")
-)
-t_mvt = t_mvt.withColumn(
-    "mvt_deff", F.to_date(F.col("mvt_deff").cast(StringType()), "yyyyMMdd")
-)
+t_mvt = parse_date(datasets["t_mvt"], ["mvt_djc", "mvt_deff"])
 t_mvt = t_mvt.orderBy(["frp", "art_cleart"])  # useless on spark a priori ?
 
-corresp_siren_frp2 = t_etablissement_annee.withColumn(
+corresp_siren_frp2 = datasets["t_etablissement_annee"].withColumn(
     "frp",
-    F.concat(t_etablissement_annee.FRP_SERVICE, t_etablissement_annee.FRP_DOSSIER),
+    F.concat(
+        datasets["t_etablissement_annee"].FRP_SERVICE,
+        datasets["t_etablissement_annee"].FRP_DOSSIER,
+    ),
 )
 
-mvt_montant_creance = t_mvt.orderBy(["frp", "art_cleart"]).groupBy(
-    ["frp", "art_cleart"]
-)
+mvt_montant_creance = t_mvt.groupBy(["frp", "art_cleart"])
 mvt_montant_creance = mvt_montant_creance.sum("mvt_mdb").withColumnRenamed(
     "sum(mvt_mdb)", "mnt_creance"
 )
@@ -95,62 +80,11 @@ mvt_montant_creance = t_mvt.join(
 # Eventuellement faire un join car on perd des colonnes en faisant
 # l'aggrégation. À voir.
 mvt_paiement = t_mvt.filter("mvt_nacrd == 0 OR mvt_nacrd == 1")
-mvt_paiement = mvt_paiement.withColumn(
-    "mvt_djc_int", F.unix_timestamp(F.col("mvt_djc"))
-)
-mvt_paiement = mvt_paiement.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
-    ["frp", "art_cleart", "mvt_deff"]
-)
-mvt_paiement = mvt_paiement.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
-mvt_paiement = mvt_paiement.select(
-    ["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"]
-)
-mvt_paiement = mvt_paiement.withColumnRenamed("min(mvt_djc_int)", "min_mvt_djc_int")
-mvt_paiement = mvt_paiement.withColumnRenamed("sum(mvt_mcrd)", "sum_mvt_mcrd")
-mvt_paiement = mvt_paiement.dropDuplicates()
-
-windowval = (
-    Window.partitionBy("art_cleart")
-    .orderBy(["frp", "min_mvt_djc_int"])
-    .rangeBetween(Window.unboundedPreceding, 0)
-)
-mvt_paiement = mvt_paiement.filter("sum_mvt_mcrd != 0").withColumn(
-    "mnt_paiement_cum", F.sum("sum_mvt_mcrd").over(windowval)
-)
-mvt_paiement = mvt_paiement.withColumn(
-    "nb_paiement", F.count("sum_mvt_mcrd").over(windowval)
-)
-mvt_paiement = mvt_paiement.dropDuplicates()
+mvt_paiement = process_paiement(mvt_paiement)
 
 # Paiements autres
 mvt_paiement_autre = t_mvt.filter("mvt_nacrd != 0 AND mvt_nacrd != 1")
-mvt_paiement_autre = mvt_paiement_autre.withColumn(
-    "mvt_djc_int", F.unix_timestamp(F.col("mvt_djc"))
-)
-mvt_paiement_autre = mvt_paiement_autre.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
-    ["frp", "art_cleart", "mvt_deff"]
-)
-mvt_paiement_autre = mvt_paiement_autre.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
-mvt_paiement_autre = mvt_paiement_autre.withColumnRenamed(
-    "min(mvt_djc_int)", "min_mvt_djc_int"
-)
-mvt_paiement_autre = mvt_paiement_autre.withColumnRenamed(
-    "sum(mvt_mcrd)", "sum_mvt_mcrd"
-)
-mvt_paiement_autre = mvt_paiement_autre.dropDuplicates()
-
-windowval = (
-    Window.partitionBy("art_cleart")
-    .orderBy(["frp", "min_mvt_djc_int"])
-    .rangeBetween(Window.unboundedPreceding, 0)
-)
-mvt_paiement_autre = mvt_paiement_autre.filter("sum_mvt_mcrd != 0").withColumn(
-    "mnt_paiement_cum_autre", F.sum("sum_mvt_mcrd").over(windowval)
-)
-mvt_paiement_autre = mvt_paiement_autre.withColumn(
-    "nb_paiement_autre", F.count("sum_mvt_mcrd").over(windowval)
-)
-mvt_paiement_autre = mvt_paiement_autre.dropDuplicates()
+mvt_paiement_autre = process_paiement(mvt_paiement_autre)
 
 # Join all tables
 creances = t_art.join(mvt_montant_creance, on=["frp", "art_cleart"], how="left")
@@ -215,11 +149,12 @@ rar_mois_article.write.format("orc").save("/projets/TSF/sources/base/rar.orc")
 # annuellement.
 #
 # On crée une variable pour distinguer les cas
-ca3 = liasse_tva_ca3.withColumn(
+ca3 = datasets["liasse_tva_ca3"].withColumn(
     "duree_periode",
     F.round(
         F.months_between(
-            liasse_tva_ca3.dte_fin_periode, liasse_tva_ca3.dte_debut_periode
+            datasets["liasse_tva_ca3"].dte_fin_periode,
+            datasets["liasse_tva_ca3"].dte_debut_periode,
         )
     ).cast("integer"),
 )

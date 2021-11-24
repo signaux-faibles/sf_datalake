@@ -34,7 +34,7 @@ def make_thresholds_from_fbeta(
     Args:
         y_score: The computed probability of a failure state within the next
           18 months.
-        y_true: The predicted outcome. 0 means "no failure within the next 18
+        y_true: The truth outcome. 0 means "no failure within the next 18
           months", while 1 means "failure within…".
         beta_F1: The :math:`\\beta` value for the first threshold.
         beta_F1: The :math:`\\beta` value for the second threshold.
@@ -119,8 +119,8 @@ def print_spark_df_scores(results: pyspark.sql.DataFrame):
     total_1_test = results.filter((results.label == 1)).count()
     total_1_predict = results.filter((results.prediction == 1)).count()
 
-    print("All correct predections count: ", correct_count)
-    print("Total count: ", total_count)
-    print("Accuracy %: ", (correct_count / total_count) * 100)
-    print("Recall %: ", (correct_1_count / total_1_test) * 100)
-    print("Precision %: ", (correct_1_count / total_1_predict) * 100)
+    print(f"All correct predections count: {correct_count}")
+    print(f"Total count: {total_count}")
+    print(f"Accuracy %: {(correct_count / total_count) * 100}")
+    print(f"Recall %: {(correct_1_count / total_1_test) * 100}")
+    print(f"Precision %: {(correct_1_count / total_1_predict) * 100}")
