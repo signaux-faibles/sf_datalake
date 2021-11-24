@@ -1,19 +1,32 @@
 """Logistic regression model for company failure prediction.
 """
 
+import datetime
 import logging
 import os
+import sys
 from functools import reduce
 
 from pyspark.ml.classification import LogisticRegression  # pylint: disable=E0401
 from pyspark.ml.feature import ElementwiseProduct  # pylint: disable=E0401
+from pyspark.sql import SparkSession  # pylint: disable=E0401
 from pyspark.sql import functions as F  # pylint: disable=E0401
 from pyspark.sql.types import FloatType, StringType  # pylint: disable=E0401
 
+# isort: off
+sys.path.append(os.path.join(os.getcwd(), "/venv/lib/python3.6/"))
+sys.path.append(os.path.join(os.getcwd(), "/venv/lib/python3.6/site-packages/"))
+# isort: on
+
+# pylint: disable=C0413
 from sf_datalake.config import base as model_config
 from sf_datalake.preprocessing import DATASET_PATH, OUTPUT_ROOT_DIR, feature_engineering
 from sf_datalake.processing import transform
 from sf_datalake.utils import load_source
+
+### Launch spark session, load data
+
+spark = SparkSession.builder.getOrCreate()
 
 logging.info("Reading data in %s", DATASET_PATH)
 indics_annuels = load_source(DATASET_PATH)
@@ -337,13 +350,7 @@ concerning_columns = [
 
 # Write outputs to csv
 base_output_path = os.path.join(OUTPUT_ROOT_DIR, "sorties_modeles")
-output_folder = os.path.join(
-    base_output_path,
-    f"logreg{model_config.REGULARIZATION_COEFF}_\
-    train{model_config.TRAIN_DATES[0]}\to{model_config.TRAIN_DATES[1]}_\
-    test{model_config.TEST_DATES[0]}to{model_config.TEST_DATES[1]}_\
-    predict{model_config.PREDICTION_DATE}",
-)
+output_folder = os.path.join(base_output_path, datetime.date.today().isoformat())
 test_output_path = os.path.join(output_folder, "test_data")
 prediction_output_path = os.path.join(output_folder, "prediction_data")
 concerning_output_path = os.path.join(output_folder, "concerning_values")
