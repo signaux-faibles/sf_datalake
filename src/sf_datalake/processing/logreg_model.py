@@ -14,8 +14,8 @@ from pyspark.sql import functions as F  # pylint: disable=E0401
 from pyspark.sql.types import FloatType, StringType  # pylint: disable=E0401
 
 # isort: off
-sys.path.append(os.path.join(os.getcwd(), "/venv/lib/python3.6/"))
-sys.path.append(os.path.join(os.getcwd(), "/venv/lib/python3.6/site-packages/"))
+sys.path.append(os.path.join(os.getcwd(), "venv/lib/python3.6/"))
+sys.path.append(os.path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint: disable=C0413
