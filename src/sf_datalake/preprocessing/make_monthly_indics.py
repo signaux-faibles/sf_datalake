@@ -1,95 +1,74 @@
-# Building montly indicators, following MRV's model (originally in SAS: `21_indicateurs.sas`)
+"""Build monthly TVA data.
 
-import pyspark.sql.functions as F
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StringType
-from pyspark.sql.window import Window
+This follows MRV's process, originally written in SAS: `21_indicateurs.sas`
+"""
 
-## Instanciating Spark session
-spark = SparkSession.builder.getOrCreate()
-spark.conf.set("spark.shuffle.blockTransferService", "nio")
-spark.conf.set("spark.driver.maxResultSize", "1300M")
+from os import path
 
-#########
-# Utils #
-#########
+import pyspark.sql.functions as F  # pylint: disable=E0401
 
+from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
+from sf_datalake.preprocessing.feature_engineering import parse_date, process_payment
+from sf_datalake.utils import load_data
 
-def load_source(src_name, spl_size=None):
-    df = spark.read.orc(f"{vues_rootfolder}/{src[src_name]}")
-    if spl_size is not None:
-        df = df.sample(n=spl_size)
-    return df
-
+OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 
 ####################
 # Loading datasets #
 ####################
 
-vues_rootfolder = "/projets/TSF/sources/livraison_MRV-DTNUM_juin_2021"
+data_paths = [
+    ("t_art", "pub_risq_oracle.t_art.orc", VUES_DIR),
+    ("t_mvt", "pub_risq_oracle.t_mvt.orc", VUES_DIR),
+    ("t_mvr", "pub_risq_oracle.t_mvr.orc", VUES_DIR),  # TODO not used
+    ("t_dar", "pub_risq_oracle.t_dar.orc", VUES_DIR),  # TODO not used
+    ("t_dos", "pub_risq_oracle.t_dos.orc", VUES_DIR),  # TODO not used
+    ("t_ech", "pub_risq_oracle.t_ech.orc", VUES_DIR),  # TODO not used
+    (
+        "af",
+        "etl_decla-declarations_af.orc",
+        VUES_DIR,
+    ),  # TODO pas la bonne table a priori
+    (
+        "t_ref_etablissements",
+        "pub_refent-t_ref_etablissements.orc",
+        VUES_DIR,
+    ),  # TODO not used
+    ("t_ref_entreprise", "pub_refent-t_ref_entreprise.orc", VUES_DIR),  # TODO not used
+    (
+        "t_ref_code_nace",
+        "pub_refer-t_ref_code_nace_complet.orc",
+        VUES_DIR,
+    ),  # TODO not used
+    ("liasse_tva_ca3", "etl_tva.liasse_tva_ca3_view.orc", VUES_DIR),
+    ("t_etablissement_annee", "etl_refent-T_ETABLISSEMENT_ANNEE.orc", VUES_DIR),
+]
 
-src = {
-    "t_art": "pub_risq_oracle.t_art.orc",
-    "t_mvt": "pub_risq_oracle.t_mvt.orc",
-    "t_mvr": "pub_risq_oracle.t_mvr.orc",
-    "t_dar": "pub_risq_oracle.t_dar.orc",
-    "t_dos": "pub_risq_oracle.t_dos.orc",
-    "t_ech": "pub_risq_oracle.t_ech.orc",
-    "af": "etl_decla-declarations_af.orc",
-    "t_ref_etablissements": "pub_refent-t_ref_etablissements.orc",  # pas la bonne table a priori
-    "t_ref_entreprise": "pub_refent-t_ref_entreprise.orc",
-    "t_ref_code_nace": "pub_refer-t_ref_code_nace_complet.orc",
-    "liasse_tva_ca3": "etl_tva.liasse_tva_ca3_view.orc",
-    "t_etablissement_annee": "etl_refent-T_ETABLISSEMENT_ANNEE.orc",
-}
-
-t_art = load_source("t_art")
-t_mvt = load_source("t_mvt")
-t_dar = load_source("t_dar")
-t_dos = load_source("t_dos")
-t_mvr = load_source("t_mvr")
-t_ech = load_source("t_ech")
-t_ref_etablissements = load_source("t_ref_etablissements")
-t_ref_entreprise = load_source("t_ref_entreprise")
-t_ref_code_nace = load_source("t_ref_code_nace")
-liasse_tva_ca3 = load_source("liasse_tva_ca3")
-t_etablissement_annee = load_source("t_etablissement_annee")
+datasets = load_data(data_paths)
 
 #######
 # RAR #
 #######
 
 # Convert to dates
-t_art = t_art.withColumn(
-    "art_disc", F.to_date(F.col("art_disc").cast(StringType()), "yyyyMMdd")
-)
-t_art = t_art.withColumn(
-    "art_didr", F.to_date(F.col("art_didr").cast(StringType()), "yyyyMMdd")
-)
-t_art = t_art.withColumn(
-    "art_datedcf", F.to_date(F.col("art_datedcf").cast(StringType()), "yyyyMMdd")
-)
-t_art = t_art.withColumn(
-    "art_dori", F.to_date(F.col("art_dori").cast(StringType()), "yyyyMMdd")
+
+t_art = parse_date(
+    datasets["t_art"], ["art_disc", "art_didr", "art_datedcf", "art_dori"]
 )
 t_art = t_art.orderBy(["frp", "art_cleart"])  # useless on spark a priori ?
 
-t_mvt = t_mvt.withColumn(
-    "mvt_djc", F.to_date(F.col("mvt_djc").cast(StringType()), "yyyyMMdd")
-)
-t_mvt = t_mvt.withColumn(
-    "mvt_deff", F.to_date(F.col("mvt_deff").cast(StringType()), "yyyyMMdd")
-)
+t_mvt = parse_date(datasets["t_mvt"], ["mvt_djc", "mvt_deff"])
 t_mvt = t_mvt.orderBy(["frp", "art_cleart"])  # useless on spark a priori ?
 
-corresp_siren_frp2 = t_etablissement_annee.withColumn(
+corresp_siren_frp2 = datasets["t_etablissement_annee"].withColumn(
     "frp",
-    F.concat(t_etablissement_annee.FRP_SERVICE, t_etablissement_annee.FRP_DOSSIER),
+    F.concat(
+        datasets["t_etablissement_annee"].FRP_SERVICE,
+        datasets["t_etablissement_annee"].FRP_DOSSIER,
+    ),
 )
 
-mvt_montant_creance = t_mvt.orderBy(["frp", "art_cleart"]).groupBy(
-    ["frp", "art_cleart"]
-)
+mvt_montant_creance = t_mvt.groupBy(["frp", "art_cleart"])
 mvt_montant_creance = mvt_montant_creance.sum("mvt_mdb").withColumnRenamed(
     "sum(mvt_mdb)", "mnt_creance"
 )
@@ -97,66 +76,15 @@ mvt_montant_creance = t_mvt.join(
     mvt_montant_creance, on=["frp", "art_cleart"], how="left"
 )
 
-# Paiements
-# Cum sum https://stackoverflow.com/questions/45946349/python-spark-cumulative-sum-by-group-using-dataframe
-# Eventuellement faire un join car on perd des colonnes en faisant l'aggrégation. A voir.
+### Paiements
+# Eventuellement faire un join car on perd des colonnes en faisant
+# l'aggrégation. À voir.
 mvt_paiement = t_mvt.filter("mvt_nacrd == 0 OR mvt_nacrd == 1")
-mvt_paiement = mvt_paiement.withColumn(
-    "mvt_djc_int", F.unix_timestamp(F.col("mvt_djc"))
-)
-mvt_paiement = mvt_paiement.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
-    ["frp", "art_cleart", "mvt_deff"]
-)
-mvt_paiement = mvt_paiement.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
-mvt_paiement = mvt_paiement.select(
-    ["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"]
-)
-mvt_paiement = mvt_paiement.withColumnRenamed("min(mvt_djc_int)", "min_mvt_djc_int")
-mvt_paiement = mvt_paiement.withColumnRenamed("sum(mvt_mcrd)", "sum_mvt_mcrd")
-mvt_paiement = mvt_paiement.dropDuplicates()
-
-windowval = (
-    Window.partitionBy("art_cleart")
-    .orderBy(["frp", "min_mvt_djc_int"])
-    .rangeBetween(Window.unboundedPreceding, 0)
-)
-mvt_paiement = mvt_paiement.filter("sum_mvt_mcrd != 0").withColumn(
-    "mnt_paiement_cum", F.sum("sum_mvt_mcrd").over(windowval)
-)
-mvt_paiement = mvt_paiement.withColumn(
-    "nb_paiement", F.count("sum_mvt_mcrd").over(windowval)
-)
-mvt_paiement = mvt_paiement.dropDuplicates()
+mvt_paiement = process_payment(mvt_paiement)
 
 # Paiements autres
 mvt_paiement_autre = t_mvt.filter("mvt_nacrd != 0 AND mvt_nacrd != 1")
-mvt_paiement_autre = mvt_paiement_autre.withColumn(
-    "mvt_djc_int", F.unix_timestamp(F.col("mvt_djc"))
-)
-mvt_paiement_autre = mvt_paiement_autre.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
-    ["frp", "art_cleart", "mvt_deff"]
-)
-mvt_paiement_autre = mvt_paiement_autre.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
-mvt_paiement_autre = mvt_paiement_autre.withColumnRenamed(
-    "min(mvt_djc_int)", "min_mvt_djc_int"
-)
-mvt_paiement_autre = mvt_paiement_autre.withColumnRenamed(
-    "sum(mvt_mcrd)", "sum_mvt_mcrd"
-)
-mvt_paiement_autre = mvt_paiement_autre.dropDuplicates()
-
-windowval = (
-    Window.partitionBy("art_cleart")
-    .orderBy(["frp", "min_mvt_djc_int"])
-    .rangeBetween(Window.unboundedPreceding, 0)
-)
-mvt_paiement_autre = mvt_paiement_autre.filter("sum_mvt_mcrd != 0").withColumn(
-    "mnt_paiement_cum_autre", F.sum("sum_mvt_mcrd").over(windowval)
-)
-mvt_paiement_autre = mvt_paiement_autre.withColumn(
-    "nb_paiement_autre", F.count("sum_mvt_mcrd").over(windowval)
-)
-mvt_paiement_autre = mvt_paiement_autre.dropDuplicates()
+mvt_paiement_autre = process_payment(mvt_paiement_autre)
 
 # Join all tables
 creances = t_art.join(mvt_montant_creance, on=["frp", "art_cleart"], how="left")
@@ -190,7 +118,8 @@ x_creances = x_creances.withColumn(
     "IND_HCF", F.when(F.col("ART_DATEDCF").isNotNull(), 0).otherwise(1)
 )
 
-# Je filtre pas sur les années (L254-L285 de 21_indicateurs.sas). On le fait a la modélisation ?
+# Je filtre pas sur les années (L254-L285 de 21_indicateurs.sas). On le fait à la
+# modélisation ?
 
 # TODO vérifier comment ces opérations se comportent vis à vis des nulls
 rar_mois_article = x_creances.withColumn(
@@ -210,18 +139,22 @@ rar_mois_article = rar_mois_article.withColumn(
     "MNT_RAR_HCF", F.col("MNT_RAR") * F.col("IND_HCF")
 )
 
-# Il manque des opérations qui n'ont plus de sens, il me semble, car on ne séléctionne plus les dates (L288-L306 de 21_indicateurs.sas)
+# Il manque des opérations qui n'ont plus de sens, il me semble, car on ne séléctionne
+# plus les dates (L288-L306 de 21_indicateurs.sas)
 
 # Write file
 rar_mois_article.write.format("orc").save("/projets/TSF/sources/base/rar.orc")
 
-# Les entreprises peuvent déclarer la TVA mensuellement, trimestriellement ou annuellement.
+# Les entreprises peuvent déclarer la TVA mensuellement, trimestriellement ou
+# annuellement.
+#
 # On crée une variable pour distinguer les cas
-ca3 = liasse_tva_ca3.withColumn(
+ca3 = datasets["liasse_tva_ca3"].withColumn(
     "duree_periode",
     F.round(
         F.months_between(
-            liasse_tva_ca3.dte_fin_periode, liasse_tva_ca3.dte_debut_periode
+            datasets["liasse_tva_ca3"].dte_fin_periode,
+            datasets["liasse_tva_ca3"].dte_debut_periode,
         )
     ).cast("integer"),
 )
@@ -371,7 +304,8 @@ x_tva = x_tva.withColumn(
 x_tva = x_tva.withColumn(
     "D_TVA_DED_i0059_AUTR", F.col("D3310_21") + F.col("D3517S_25_i")
 )  # D3310_2C
-# TODO if (D3310_22A=. AND D3517S_25A_TX_DED=.) then D_TVA_DED_TX_COEF_DED = 100; else D_TVA_DED_TX_COEF_DED = SUM(D3310_22A,D3517S_25A_TX_DED) ;
+# TODO if (D3310_22A=. AND D3517S_25A_TX_DED=.) then D_TVA_DED_TX_COEF_DED = 100; else
+# D_TVA_DED_TX_COEF_DED = SUM(D3310_22A,D3517S_25A_TX_DED) ;
 x_tva = x_tva.withColumn(
     "D_TVA_DED_i0705_TOTAL", F.col("D3310_23") + F.col("D3517S_26_i")
 )
@@ -390,4 +324,4 @@ x_tva = x_tva.withColumn(
 x_tva = x_tva.withColumn("M_TVA_NET_DUE", F.col("D3310_28") + F.col("D3517S_28_i"))
 
 # Write file
-x_tva.write.format("orc").save("/projets/TSF/sources/base/tva.orc")
+x_tva.write.format("orc").save(OUTPUT_FILE)

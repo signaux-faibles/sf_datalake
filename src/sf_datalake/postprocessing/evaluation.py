@@ -5,10 +5,16 @@
 from typing import Tuple
 
 import numpy as np
-import pyspark
-from sklearn.metrics import (average_precision_score, balanced_accuracy_score,
-                             confusion_matrix, fbeta_score, precision_score,
-                             recall_score, roc_auc_score)
+import pyspark  # pylint: disable=E0401
+from sklearn.metrics import (
+    average_precision_score,
+    balanced_accuracy_score,
+    confusion_matrix,
+    fbeta_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 
 
 def make_thresholds_from_fbeta(
@@ -28,7 +34,7 @@ def make_thresholds_from_fbeta(
     Args:
         y_score: The computed probability of a failure state within the next
           18 months.
-        y_true: The predicted outcome. 0 means "no failure within the next 18
+        y_true: The true outcome. 0 means "no failure within the next 18
           months", while 1 means "failure within…".
         beta_F1: The :math:`\\beta` value for the first threshold.
         beta_F1: The :math:`\\beta` value for the second threshold.
@@ -56,17 +62,19 @@ def make_thresholds_from_fbeta(
     return (t_F1, t_F2)
 
 
-def scores(
+def metrics(
     y_true: np.array,
     y_score: np.array,
     beta: float = 1,
     thresh: float = 0.5,
 ) -> dict:
-    """Computes multiple evaluation metrics of a model.
+    """Computes multiple evaluation metrics for a binary classification model.
 
     Args:
-        dataset: A SFDataset containing the evaluation data.
-        beta: Weighting of recall relative to precision for the evaluation.
+        y_true: An array containing the true values.
+        y_score: An array containing probabilities associated with each prediction.
+        beta: Optional. If provided, weighting of recall relative to precision for the
+          evaluation.
         thresh: Optional. If provided, the model will classify an entry X as positive
           if predict_proba(X)>=thresh. Otherwise, the model classifies X as positive if
           predict(X)=1, ie predict_proba(X)>=0.5
@@ -111,8 +119,8 @@ def print_spark_df_scores(results: pyspark.sql.DataFrame):
     total_1_test = results.filter((results.label == 1)).count()
     total_1_predict = results.filter((results.prediction == 1)).count()
 
-    print("All correct predections count: ", correct_count)
-    print("Total count: ", total_count)
-    print("Accuracy %: ", (correct_count / total_count) * 100)
-    print("Recall %: ", (correct_1_count / total_1_test) * 100)
-    print("Precision %: ", (correct_1_count / total_1_predict) * 100)
+    print(f"All correct predections count: {correct_count}")
+    print(f"Total count: {total_count}")
+    print(f"Accuracy %: {(correct_count / total_count) * 100}")
+    print(f"Recall %: {(correct_1_count / total_1_test) * 100}")
+    print(f"Precision %: {(correct_1_count / total_1_predict) * 100}")

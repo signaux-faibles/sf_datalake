@@ -1,7 +1,10 @@
+"""Utility functions for data exploration using spark DataFrame objects.
+"""
+
 from typing import Iterable
 
-import pyspark
-import pyspark.sql.functions as F
+import pyspark  # pylint: disable=E0401
+import pyspark.sql.functions as F  # pylint: disable=E0401
 
 
 def count_missing_values(df: pyspark.sql.DataFrame):
@@ -33,16 +36,8 @@ def count_nan_values(
     )
 
 
-def get_basic_statistics(df: pyspark.sql.DataFrame):
-    n_rows = df.count()
-    n_sirens_sf = df[["siren"]].distinct().count()
-    n_sirens_dgfip = df[["siren_dgfip"]].distinct().count()
-    n_columns = len(df.columns)
-
-    return (n_rows, n_sirens_sf, n_sirens_dgfip, n_columns)
-
-
 def print_time_span(df: pyspark.sql.DataFrame):
+    """Prints global time spans of companies accouting years."""
     date_deb_exercice_span = df.select(
         min("date_deb_exercice"),
         max("date_deb_exercice"),
@@ -53,12 +48,12 @@ def print_time_span(df: pyspark.sql.DataFrame):
     ).first()
 
     print(
-        f"Date de début d'exercice s'étendent de \
+        f"Les dates de début d'exercice s'étendent de \
         {date_deb_exercice_span[0].strftime('%d/%m/%Y')} à \
         {date_deb_exercice_span[1].strftime('%d/%m/%Y')}"
     )
     print(
-        f"Date de fin d'exercice s'étendent de \
+        f"Les dates de fin d'exercice s'étendent de \
         {date_fin_exercice_span[0].strftime('%d/%m/%Y')} à \
         {date_fin_exercice_span[1].strftime('%d/%m/%Y')}"
     )
