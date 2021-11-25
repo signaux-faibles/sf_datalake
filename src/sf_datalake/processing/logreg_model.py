@@ -3,9 +3,10 @@
 
 import datetime
 import logging
+import os
 import sys
 from functools import reduce
-from os import getcwd, path
+from os import path
 
 from pyspark.ml.classification import LogisticRegression  # pylint: disable=E0401
 from pyspark.ml.feature import ElementwiseProduct  # pylint: disable=E0401
@@ -14,8 +15,8 @@ from pyspark.sql import functions as F  # pylint: disable=E0401
 from pyspark.sql.types import FloatType, StringType  # pylint: disable=E0401
 
 # isort: off
-sys.path.append(path.join(getcwd(), "venv/lib/python3.6/"))
-sys.path.append(path.join(getcwd(), "venv/lib/python3.6/site-packages/"))
+sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
+sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint: disable=C0413

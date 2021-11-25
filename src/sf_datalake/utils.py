@@ -18,7 +18,7 @@ def instantiate_spark_session():
 
 
 def load_data(data_paths: List[Tuple[str, str, str]], spl_size: int = None) -> dict:
-    """Loads multiple orc-stores datasets at once and store them in a dict.
+    """Loads one or more orc-stored datasets and returns them in a dict.
 
     Args:
         data_paths: A List[Tuple[str, str, str]] structured as follows:
@@ -26,7 +26,7 @@ def load_data(data_paths: List[Tuple[str, str, str]], spl_size: int = None) -> d
         spl_size: size of the sample for each dataset.
 
     Returns:
-        A dictionary of DataFrame.
+        A dictionary of DataFrame objects.
 
     """
     datasets = {}

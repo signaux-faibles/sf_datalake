@@ -12,13 +12,14 @@ from pyspark.sql.window import Window  # pylint: disable=E0401
 
 # Debt
 def avg_delta_debt_per_size(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Compute the average change in social debt / nb of employees.
+    """Computes the average change in social debt / nb of employees.
 
     Args:
       - data : A DataFrame containing debt and company size ("effectif") data.
 
     Returns:
         A DataFrame with an extra `avg_delta_dette_par_effectif` column.
+
     """
     # TODO check if montant_part_ouvriere, montant_part_patronale,
     # montant_part_ouvriere_past_3, montant_part_patronale_past_3 exists?
@@ -69,13 +70,14 @@ def make_paydex_bins(
     output_col: str = "paydex_bins",
     num_buckets: int = 6,
 ) -> pyspark.sql.DataFrame:
-    """Cut paydex number of days data into quantile bins.
+    """Cuts paydex number of days data into quantile bins.
 
     Args:
         data: A pyspark.sql.DataFrame object.
         input_col: The name of the input column containing number of late days.
         output_col: The name of the output binned data column.
         num_buckets: Number of bins.
+
     Returns:
         The DataFrame with a new "paydex_group" column.
 
@@ -93,11 +95,12 @@ def parse_date(df: pyspark.sql.DataFrame, colnames: List[str]) -> pyspark.sql.Da
     """Parse multiple columns of a pyspark.sql.DataFrame as date.
 
     Args:
-        df (pyspark.sql.DataFrame)
-        colnames (List[str]): Names of the columns
+        df: A DataFrame with dates represented as "yyyyMMdd" strings or integers.
+        colnames (List[str]): Names of the columns to parse.
 
     Returns:
-        pyspark.sql.DataFrame
+        A new DataFrame with date columns as pyspark date types.
+
     """
 
     for name in colnames:
@@ -106,32 +109,36 @@ def parse_date(df: pyspark.sql.DataFrame, colnames: List[str]) -> pyspark.sql.Da
 
 
 def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Compute the featuring on 'paiement' data by adding new colunms.
+    """Compute the number of payments.
 
     Args:
-        df (pyspark.sql.DataFrame)
+        df: A DataFrame containing payment data.
 
     Returns:
-        pyspark.sql.DataFrame
+        A DataFrame with a new "nb_paiement" column.
+
     """
     df = df.withColumn("mvt_djc_int", F.unix_timestamp(F.col("mvt_djc")))
     df = df.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
         ["frp", "art_cleart", "mvt_deff"]
     )
-    df = df.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
-    df = df.select(["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"])
-    df = df.withColumnRenamed("min(mvt_djc_int)", "min_mvt_djc_int")
-    df = df.withColumnRenamed("sum(mvt_mcrd)", "sum_mvt_mcrd")
-    df = df.dropDuplicates()
+    df = (
+        df.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
+        .select(["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"])
+        .withColumnRenamed("min(mvt_djc_int)", "min_mvt_djc_int")
+        .withColumnRenamed("sum(mvt_mcrd)", "sum_mvt_mcrd")
+        .dropDuplicates()
+    )
 
     windowval = (
         Window.partitionBy("art_cleart")
         .orderBy(["frp", "min_mvt_djc_int"])
         .rangeBetween(Window.unboundedPreceding, 0)
     )
-    df = df.filter("sum_mvt_mcrd != 0").withColumn(
-        "mnt_paiement_cum", F.sum("sum_mvt_mcrd").over(windowval)
+    df = (
+        df.filter("sum_mvt_mcrd != 0")
+        .withColumn("mnt_paiement_cum", F.sum("sum_mvt_mcrd").over(windowval))
+        .withColumn("nb_paiement", F.count("sum_mvt_mcrd").over(windowval))
+        .dropDuplicates()
     )
-    df = df.withColumn("nb_paiement", F.count("sum_mvt_mcrd").over(windowval))
-    df = df.dropDuplicates()
     return df
