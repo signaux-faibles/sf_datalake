@@ -4,7 +4,7 @@
 from os import path
 from typing import List, Tuple
 
-from pyspark.sql import DataFrame, SparkSession  # pylint: disable=E0401
+from pyspark.sql import SparkSession  # pylint: disable=E0401
 from pyspark.sql import functions as F  # pylint: disable=E0401
 from pyspark.sql.types import StringType  # pylint: disable=E0401
 
@@ -17,28 +17,27 @@ def instantiate_spark_session():
     return spark
 
 
-def load_source(src_path: str, spl_size: int = None) -> DataFrame:
-    """Loads some orc-stored data."""
-    spark = instantiate_spark_session()
-    df = spark.read.orc(src_path)
-    if spl_size is not None:
-        df = df.sample(spl_size)
-    return df
-
-
-def load_multiple_sources(info: List[Tuple[str, str, str]]) -> dict:
-    """Loads multiple orc-stores data at once and store them in a dict. For
-    more details, see load_source()
+def load_data(data_paths: List[Tuple[str, str, str]], spl_size: int = None) -> dict:
+    """Loads multiple orc-stores datasets at once and store them in a dict.
 
     Args:
-        info: A List[Tuple[str, str, str]] structured as follows:
+        data_paths: A List[Tuple[str, str, str]] structured as follows:
           (variable_name, file_name, directory_path).
+        spl_size: size of the sample for each dataset.
 
     Returns:
         A dictionary of DataFrame.
 
     """
-    return {name: load_source(path.join(p, file)) for (name, file, p) in info}
+    datasets = {}
+
+    spark = instantiate_spark_session()
+    for (name, file, p) in data_paths:
+        df = spark.read.orc(path.join(p, file))
+        if spl_size is not None:
+            df = df.sample(spl_size)
+        datasets[name] = df
+    return datasets
 
 
 def csv_to_orc(input_filename: str, output_filename: str):

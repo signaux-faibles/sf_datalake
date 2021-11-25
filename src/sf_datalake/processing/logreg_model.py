@@ -3,9 +3,9 @@
 
 import datetime
 import logging
-import os
 import sys
 from functools import reduce
+from os import getcwd, path
 
 from pyspark.ml.classification import LogisticRegression  # pylint: disable=E0401
 from pyspark.ml.feature import ElementwiseProduct  # pylint: disable=E0401
@@ -14,22 +14,31 @@ from pyspark.sql import functions as F  # pylint: disable=E0401
 from pyspark.sql.types import FloatType, StringType  # pylint: disable=E0401
 
 # isort: off
-sys.path.append(os.path.join(os.getcwd(), "venv/lib/python3.6/"))
-sys.path.append(os.path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
+sys.path.append(path.join(getcwd(), "venv/lib/python3.6/"))
+sys.path.append(path.join(getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint: disable=C0413
 from sf_datalake.config import base as model_config
-from sf_datalake.preprocessing import DATASET_PATH, OUTPUT_ROOT_DIR, feature_engineering
+from sf_datalake.preprocessing import (
+    DATA_ROOT_DIR,
+    OUTPUT_ROOT_DIR,
+    feature_engineering,
+)
 from sf_datalake.processing import transform
-from sf_datalake.utils import load_source
+from sf_datalake.utils import load_data
 
 ### Launch spark session, load data
 
 spark = SparkSession.builder.getOrCreate()
 
-logging.info("Reading data in %s", DATASET_PATH)
-indics_annuels = load_source(DATASET_PATH)
+logging.info(
+    "Reading data in %s", path.join(DATA_ROOT_DIR, "base/indicateurs_annuels.orc")
+)
+
+indics_annuels = load_data(
+    [("indics_annuels", "base/indicateurs_annuels.orc", DATA_ROOT_DIR)]
+)["indics_annuels"]
 
 ### Default values for missing data
 
@@ -349,12 +358,12 @@ concerning_columns = [
 ]
 
 # Write outputs to csv
-base_output_path = os.path.join(OUTPUT_ROOT_DIR, "sorties_modeles")
-output_folder = os.path.join(base_output_path, datetime.date.today().isoformat())
-test_output_path = os.path.join(output_folder, "test_data")
-prediction_output_path = os.path.join(output_folder, "prediction_data")
-concerning_output_path = os.path.join(output_folder, "concerning_values")
-explanation_output_path = os.path.join(output_folder, "explanation_data")
+base_output_path = path.join(OUTPUT_ROOT_DIR, "sorties_modeles")
+output_folder = path.join(base_output_path, datetime.date.today().isoformat())
+test_output_path = path.join(output_folder, "test_data")
+prediction_output_path = path.join(output_folder, "prediction_data")
+concerning_output_path = path.join(output_folder, "concerning_values")
+explanation_output_path = path.join(output_folder, "explanation_data")
 
 logging.info("Writing test data to file %s", test_output_path)
 test_data.repartition(1).write.csv(test_output_path, header=True)
@@ -373,5 +382,5 @@ logging.info(
     "Writing explanation macro scores data to directory %s", explanation_output_path
 )
 explanation_df.select(["siren"] + macro_scores_columns).repartition(1).write.csv(
-    os.path.join(explanation_output_path), header=True
+    path.join(explanation_output_path), header=True
 )

@@ -8,8 +8,8 @@ from os import path
 import pyspark.sql.functions as F  # pylint: disable=E0401
 
 from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
-from sf_datalake.preprocessing.feature_engineering import parse_date, process_paiement
-from sf_datalake.utils import load_multiple_sources
+from sf_datalake.preprocessing.feature_engineering import parse_date, process_payment
+from sf_datalake.utils import load_data
 
 OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 
@@ -17,7 +17,7 @@ OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 # Loading datasets #
 ####################
 
-info = [
+data_paths = [
     ("t_art", "pub_risq_oracle.t_art.orc", VUES_DIR),
     ("t_mvt", "pub_risq_oracle.t_mvt.orc", VUES_DIR),
     ("t_mvr", "pub_risq_oracle.t_mvr.orc", VUES_DIR),  # TODO not used
@@ -44,7 +44,7 @@ info = [
     ("t_etablissement_annee", "etl_refent-T_ETABLISSEMENT_ANNEE.orc", VUES_DIR),
 ]
 
-datasets = load_multiple_sources(info)
+datasets = load_data(data_paths)
 
 #######
 # RAR #
@@ -80,11 +80,11 @@ mvt_montant_creance = t_mvt.join(
 # Eventuellement faire un join car on perd des colonnes en faisant
 # l'aggrégation. À voir.
 mvt_paiement = t_mvt.filter("mvt_nacrd == 0 OR mvt_nacrd == 1")
-mvt_paiement = process_paiement(mvt_paiement)
+mvt_paiement = process_payment(mvt_paiement)
 
 # Paiements autres
 mvt_paiement_autre = t_mvt.filter("mvt_nacrd != 0 AND mvt_nacrd != 1")
-mvt_paiement_autre = process_paiement(mvt_paiement_autre)
+mvt_paiement_autre = process_payment(mvt_paiement_autre)
 
 # Join all tables
 creances = t_art.join(mvt_montant_creance, on=["frp", "art_cleart"], how="left")

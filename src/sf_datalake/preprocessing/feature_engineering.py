@@ -90,7 +90,7 @@ def make_paydex_bins(
 
 
 def parse_date(df: pyspark.sql.DataFrame, colnames: List[str]) -> pyspark.sql.DataFrame:
-    """Parse multiple columns of a pyspark.sql.DataFrame as date. Parsing is done inplace.
+    """Parse multiple columns of a pyspark.sql.DataFrame as date.
 
     Args:
         df (pyspark.sql.DataFrame)
@@ -105,7 +105,7 @@ def parse_date(df: pyspark.sql.DataFrame, colnames: List[str]) -> pyspark.sql.Da
     return df
 
 
-def process_paiement(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     """Compute the featuring on 'paiement' data by adding new colunms.
 
     Args:

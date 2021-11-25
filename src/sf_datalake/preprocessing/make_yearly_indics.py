@@ -9,7 +9,7 @@ import pyspark.sql.functions as F  # pylint: disable=E0401
 from pyspark.sql.window import Window  # pylint: disable=E0401
 
 from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
-from sf_datalake.utils import load_multiple_sources
+from sf_datalake.utils import load_data
 
 OUTPUT_PATH = path.join(DATA_ROOT_DIR, "/base/indicateurs_annuels.orc")
 
@@ -17,7 +17,7 @@ OUTPUT_PATH = path.join(DATA_ROOT_DIR, "/base/indicateurs_annuels.orc")
 # Loading datasets #
 ####################
 
-info = [
+data_paths = [
     ("indmap", "etl_decla-declarations_indmap.orc", VUES_DIR),
     ("af", "etl_decla-declarations_af.orc", VUES_DIR),
     ("defa", "pub_medoc_oracle-t_defaillance.orc", VUES_DIR),
@@ -28,7 +28,7 @@ info = [
     ("sf", "data_sf_padded.orc", DATA_ROOT_DIR),
 ]
 
-datasets = load_multiple_sources(info)
+datasets = load_data(data_paths)
 
 ####################
 # Merge datasets   #

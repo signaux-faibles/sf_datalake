@@ -34,7 +34,7 @@ def make_thresholds_from_fbeta(
     Args:
         y_score: The computed probability of a failure state within the next
           18 months.
-        y_true: The truth outcome. 0 means "no failure within the next 18
+        y_true: The true outcome. 0 means "no failure within the next 18
           months", while 1 means "failure within…".
         beta_F1: The :math:`\\beta` value for the first threshold.
         beta_F1: The :math:`\\beta` value for the second threshold.

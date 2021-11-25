@@ -6,7 +6,6 @@ from os import path
 OUTPUT_ROOT_DIR = "/projets/TSF/donnees"
 DATA_ROOT_DIR = "/projets/TSF/sources"
 VUES_DIR = path.join(DATA_ROOT_DIR, "livraison_MRV-DTNUM_juin_2021")
-DATASET_PATH = path.join(DATA_ROOT_DIR, "base/indicateurs_annuels.orc")
 
 ETL_FILES = [
     "etl_associe-ref_groupe_france",
