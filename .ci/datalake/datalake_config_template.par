@@ -1,0 +1,31 @@
+[General]
+trace=0
+dumptrace=0
+aide=0
+reptrdplg=${CACHE}/trace/
+
+[DemarrageTacheSpark]
+data={  "file": "$LAKE_HOME/main.py",  "executorMemory":"2g",  "executorCores": 2, "numExecutors": 2, "driverMemory": "5g", "driverCores": 2, "queue":"TSF", "archives": ["$LAKE_TARGET#venv"]}
+logout=${CACHE}/log/demarrageTacheSpark_
+
+[EnvoyerFichier]
+# nothing to override, but must be declared
+
+[EtatTacheSpark]
+logout=${CACHE}/log/etatTacheSpark_
+
+[ListContenuRepertoire]
+# nothing to override, but must be declared
+
+[LogsTacheSpark]
+logout=${CACHE}/log/logsTacheSpark_
+
+[SuiviTacheSpark]
+logout=${CACHE}/log/SuiviTacheSpark_
+
+[SuppressionFichier]
+# nothing to override, but must be declared
+
+[YarnLogsTacheSpark]
+# CAUTION this variable is used in in gitlab-ci.yml
+logout=${CACHE}/log/yarnLogsTacheSpark_
