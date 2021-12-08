@@ -4,6 +4,9 @@ dumptrace=0
 aide=0
 reptrdplg=${CACHE}/trace/
 
+[ArretTacheSpark]
+logout=${CACHE}/log/arretTacheSpark_
+
 [DemarrageTacheSpark]
 data={  "file": "$LAKE_HOME/main.py",  "executorMemory":"2g",  "executorCores": 2, "numExecutors": 2, "driverMemory": "5g", "driverCores": 2, "queue":"TSF", "archives": ["$LAKE_TARGET#venv"]}
 logout=${CACHE}/log/demarrageTacheSpark_
