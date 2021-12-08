@@ -141,6 +141,7 @@
         while true; do
           TACHE_SPARK=$(./api_maacdo.pl -a EtatTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
           STATUS=$(echo ${TACHE_SPARK} | awk '{print $NF}' | tr -dc '[:alnum:]\r\n' | tr '[:lower:]' '[:upper:]')
+          echo "${STATUS}" > ${CACHE}/status_${ID_LIVY}
           echo "Status of task ${ID_LIVY} is '${STATUS}'"
           [[ ${STATUS} == 'DEAD' ]] && exit 111
           [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]] || break
@@ -159,6 +160,25 @@
         done
     rules:
       - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+
+  stop_spark_task:
+    stage: deploy
+    extends: .lake
+    needs: ["start_spark_task"]
+    script:
+      - export ID_LIVY=$(cat ${CACHE}/idLivy)
+      - export STATUS=$(cat ${CACHE}/status_${ID_LIVY})
+      - echo "Task ${ID_LIVY} has status ${STATUS}"
+      - |
+        if [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]]
+        then
+          ./api_maacdo.pl -a ArretTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par
+        else
+          echo "Nothing to do"
+        fi
+    rules:
+      - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+        when: manual
 
   pages:
     stage: deploy
