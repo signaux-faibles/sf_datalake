@@ -17,16 +17,16 @@ OUTPUT_PATH = path.join(DATA_ROOT_DIR, "/base/indicateurs_annuels.orc")
 # Loading datasets #
 ####################
 
-data_paths = [
-    ("indmap", "etl_decla-declarations_indmap.orc", VUES_DIR),
-    ("af", "etl_decla-declarations_af.orc", VUES_DIR),
-    ("defa", "pub_medoc_oracle-t_defaillance.orc", VUES_DIR),
-    ("refent_etab", "pub_refent-t_ref_etablissements.orc", VUES_DIR),  # TODO not used
-    ("refent_entr", "pub_refent-t_ref_entreprise.orc", VUES_DIR),  # TODO not used
-    ("jugements", "etl_refent_oracle-t_jugement_histo.orc", VUES_DIR),  # TODO not used
-    ("rar_tva", "rar.rar_tva_exercice.orc", VUES_DIR),
-    ("sf", "data_sf_padded.orc", DATA_ROOT_DIR),
-]
+data_paths = {
+    "indmap": path.join(VUES_DIR, "etl_decla-declarations_indmap.orc"),
+    "af": path.join(VUES_DIR, "etl_decla-declarations_af.orc"),
+    "defa": path.join(VUES_DIR, "pub_medoc_oracle-t_defaillance.orc"),
+    "refent_etab": path.join(VUES_DIR, "pub_refent-t_ref_etablissements.orc"),
+    "refent_entr": path.join(VUES_DIR, "pub_refent-t_ref_entreprise.orc"),
+    "jugements": path.join(VUES_DIR, "etl_refent_oracle-t_jugement_histo.orc"),
+    "rar_tva": path.join(VUES_DIR, "rar.rar_tva_exercice.orc"),
+    "sf": path.join(DATA_ROOT_DIR, "data_sf_padded.orc"),
+}
 
 datasets = load_data(data_paths)
 

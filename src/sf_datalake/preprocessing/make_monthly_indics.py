@@ -17,32 +17,32 @@ OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 # Loading datasets #
 ####################
 
-data_paths = [
-    ("t_art", "pub_risq_oracle.t_art.orc", VUES_DIR),
-    ("t_mvt", "pub_risq_oracle.t_mvt.orc", VUES_DIR),
-    ("t_mvr", "pub_risq_oracle.t_mvr.orc", VUES_DIR),  # TODO not used
-    ("t_dar", "pub_risq_oracle.t_dar.orc", VUES_DIR),  # TODO not used
-    ("t_dos", "pub_risq_oracle.t_dos.orc", VUES_DIR),  # TODO not used
-    ("t_ech", "pub_risq_oracle.t_ech.orc", VUES_DIR),  # TODO not used
-    (
-        "af",
-        "etl_decla-declarations_af.orc",
-        VUES_DIR,
-    ),  # TODO pas la bonne table a priori
-    (
-        "t_ref_etablissements",
-        "pub_refent-t_ref_etablissements.orc",
-        VUES_DIR,
-    ),  # TODO not used
-    ("t_ref_entreprise", "pub_refent-t_ref_entreprise.orc", VUES_DIR),  # TODO not used
-    (
-        "t_ref_code_nace",
-        "pub_refer-t_ref_code_nace_complet.orc",
-        VUES_DIR,
-    ),  # TODO not used
-    ("liasse_tva_ca3", "etl_tva.liasse_tva_ca3_view.orc", VUES_DIR),
-    ("t_etablissement_annee", "etl_refent-T_ETABLISSEMENT_ANNEE.orc", VUES_DIR),
-]
+data_paths = {
+    "t_art": path.join(VUES_DIR, "pub_risq_oracle.t_art.orc"),
+    "t_mvt": path.join(VUES_DIR, "pub_risq_oracle.t_mvt.orc"),
+    "t_mvr": path.join(VUES_DIR, "pub_risq_oracle.t_mvr.orc"),  # TODO: not used
+    "t_dar": path.join(VUES_DIR, "pub_risq_oracle.t_dar.orc"),  # TODO: not used
+    "t_dos": path.join(VUES_DIR, "pub_risq_oracle.t_dos.orc"),  # TODO: not used
+    "t_ech": path.join(VUES_DIR, "pub_risq_oracle.t_ech.orc"),  # TODO: not used
+    "af": path.join(
+        VUES_DIR, "etl_decla-declarations_af.orc"
+    ),  # TODO: not the right vue table ?
+    "t_ref_etablissements": path.join(
+        VUES_DIR, "pub_refent-t_ref_etablissements.orc"
+    ),  # TODO: not used
+    "t_ref_entreprise": path.join(
+        VUES_DIR, "pub_refent-t_ref_entreprise.orc"
+    ),  # TODO: not used
+    "t_ref_code_nace": path.join(
+        VUES_DIR, "pub_refer-t_ref_code_nace_complet.orc"
+    ),  # TODO: not used
+    "liasse_tva_ca3": path.join(
+        VUES_DIR, "etl_tva.liasse_tva_ca3_view.orc"
+    ),  # TODO: not used
+    "t_etablissement_annee": path.join(
+        VUES_DIR, "etl_refent-T_ETABLISSEMENT_ANNEE.orc"
+    ),  # TODO: not used
+}
 
 datasets = load_data(data_paths)
 

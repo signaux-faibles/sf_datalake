@@ -2,11 +2,11 @@
 
 """
 from os import path
-from typing import List, Tuple
+from typing import Dict
 
+import pyspark.sql  # pylint: disable=E0401
 from pyspark.sql import SparkSession  # pylint: disable=E0401
 from pyspark.sql import functions as F  # pylint: disable=E0401
-from pyspark.sql.types import StringType  # pylint: disable=E0401
 
 
 def instantiate_spark_session():
@@ -17,13 +17,17 @@ def instantiate_spark_session():
     return spark
 
 
-def load_data(data_paths: List[Tuple[str, str, str]], spl_size: int = None) -> dict:
+def load_data(
+    data_paths: Dict[str, str], spl_size: float = None
+) -> Dict[str, pyspark.sql.DataFrame]:
     """Loads one or more orc-stored datasets and returns them in a dict.
 
     Args:
-        data_paths: A List[Tuple[str, str, str]] structured as follows:
-          (variable_name, file_name, directory_path).
-        spl_size: size of the sample for each dataset.
+        data_paths: A dict[str, str] structured as follows: {dataframe_name: file_path}
+          `dataframe_name` will be the key to use to get access to a given DataFrame in
+          the returned dict.
+        spl_size: If stated, the size of the return sampled datasets, as a fraction of
+          the full datasets respective sizes.
 
     Returns:
         A dictionary of DataFrame objects.
@@ -32,8 +36,8 @@ def load_data(data_paths: List[Tuple[str, str, str]], spl_size: int = None) -> d
     datasets = {}
 
     spark = instantiate_spark_session()
-    for (name, file, p) in data_paths:
-        df = spark.read.orc(path.join(p, file))
+    for (name, file_path) in data_paths:
+        df = spark.read.orc(file_path)
         if spl_size is not None:
             df = df.sample(spl_size)
         datasets[name] = df
@@ -41,7 +45,13 @@ def load_data(data_paths: List[Tuple[str, str, str]], spl_size: int = None) -> d
 
 
 def csv_to_orc(input_filename: str, output_filename: str):
-    """Writes a file stored as csv in orc format."""
+    """Writes a file stored as csv in orc format.
+
+    Args:
+        input_filename: Path to a csv file.
+        output_filename: Path to write the output orc file to.
+
+    """
     spark = instantiate_spark_session()
     df = spark.read.options(inferSchema="True", header="True", delimiter="|").csv(
         path.join(input_filename)
@@ -49,10 +59,17 @@ def csv_to_orc(input_filename: str, output_filename: str):
     df.write.format("orc").save(output_filename)
 
 
-def stringify_and_pad_siren(input_path: str, output_path: str):
-    """Reads an orc file and normalizes its "siren" entries."""
-    spark = instantiate_spark_session()
-    df = spark.read.orc(input_path)
-    df = df.withColumn("siren", F.col("siren").cast(StringType()))
+def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+    """Normalizes the input DataFrame "siren" entries.
+
+    Args:
+        df: A DataFrame with a "siren" column, whose type can be cast to string.
+
+    Returns:
+        A DataFrame with zeros-left-padded SIREN data, as string type.
+
+    """
+    assert "siren" in df.columns, "Input DataFrame doesn't have a 'siren' column."
+    df = df.withColumn("siren", df["siren"].cast("string"))
     df = df.withColumn("siren", F.lpad(df["siren"], 9, "0"))
-    df.write.format("orc").save(output_path)
+    return df

@@ -38,7 +38,7 @@ logging.info(
 )
 
 indics_annuels = load_data(
-    [("indics_annuels", "base/indicateurs_annuels.orc", DATA_ROOT_DIR)]
+    {"indics_annuels", path.join(DATA_ROOT_DIR, "base/indicateurs_annuels.orc")}
 )["indics_annuels"]
 
 ### Default values for missing data
