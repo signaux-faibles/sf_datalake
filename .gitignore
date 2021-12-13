@@ -139,3 +139,4 @@ cython_debug/
 
 *.tar.gz
 .git-credentials
+.rsq_venv/

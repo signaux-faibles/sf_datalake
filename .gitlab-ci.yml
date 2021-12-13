@@ -38,7 +38,7 @@
     tags:
       - datalake
     before_script:
-      - cd ${API_HOME}
+      - cd ${CACHE}/bin
 
   ##########################
   #  PIPELINE STARTS HERE  #
@@ -47,14 +47,18 @@
   prepare_pipeline_env:
     stage: .pre
     extends: .lake
+    before_script:
+      - echo "Nothing to do, but must exist"
     script:
       - echo "Prepare cache & conf in ${CACHE}."
       - mkdir -p ${CACHE}
       - mkdir -p ${CACHE}/trace
       - mkdir -p ${CACHE}/log
       - mkdir -p ${CACHE}/bin
-      - echo "Prepare maacdo configuration file."
+      - mkdir -p ${CACHE}/model
+      - echo "prepare API"
       - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
+      - git clone https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
       - cat ${CACHE}/ci_job.par
       - echo "Clean older cached data."
       - find ${CACHE_ROOT} -type d -mtime +1 -exec rm -rf {} \; || echo "Please, fix this syntax."
@@ -101,7 +105,8 @@
     extends: .lake
     script:
       - echo "Clean entry point and models on the lake HDFS."
-      - ./rmRecursifHdfs.sh sorties_modeles
+      - ./rmRecursifHdfs.sh test
+      - ls -al ${CACHE}
       - ./api_maacdo.pl
           -a SuppressionFichier
           -i ${LAKE_ENTRYPOINT}

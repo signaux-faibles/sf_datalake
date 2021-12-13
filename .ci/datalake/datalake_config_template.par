@@ -1,4 +1,6 @@
 [General]
+utilconx=${API_MAACDO_USR}
+mdpconx=${API_MAACDO_PWD}
 trace=0
 dumptrace=0
 aide=0
