@@ -36,7 +36,7 @@ def load_data(
     datasets = {}
 
     spark = instantiate_spark_session()
-    for (name, file_path) in data_paths:
+    for name, file_path in data_paths.items():
         df = spark.read.orc(file_path)
         if spl_size is not None:
             df = df.sample(spl_size)
