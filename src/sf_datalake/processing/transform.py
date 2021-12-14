@@ -1,7 +1,7 @@
 """Data processing before feeding into pyspark learning algorithms.
 """
 
-from typing import Iterable
+from typing import Iterable, Optional
 
 import pyspark  # pylint: disable=E0401
 from pyspark.ml.feature import StandardScaler, VectorAssembler  # pylint: disable=E0401
@@ -9,7 +9,7 @@ from pyspark.ml.feature import StandardScaler, VectorAssembler  # pylint: disabl
 
 def assemble_features(
     df: pyspark.sql.DataFrame,
-    features_col: Iterable,
+    features_col: Iterable[str],
     output_col: str = "assembled_features",
 ):
     """Assembles features columns into a DenseVector object.
@@ -32,7 +32,7 @@ def fit_scaler(
     scaler_type: str,
     input_colname: str,
     output_colname: str,
-    sampling_ratio: float = None,
+    sampling_ratio: Optional[float] = None,
 ) -> pyspark.ml.Model:
     """Creates and fits a scaler object to some pre-assembled data.
 
@@ -73,7 +73,7 @@ def scale_df(
     df: pyspark.sql.DataFrame,
     features_col: str,
     label_col: str,
-    keep_cols: list = None,
+    keep_cols: Optional[Iterable[str]] = None,
 ) -> pyspark.sql.DataFrame:
     """Scales data using a pre-fitted scaler.
 

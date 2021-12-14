@@ -1,7 +1,7 @@
 """Feature engineering functions.
 """
 
-from typing import List
+from typing import Iterable
 
 import pyspark.ml  # pylint: disable=E0401
 import pyspark.sql  # pylint: disable=E0401
@@ -10,12 +10,11 @@ from pyspark.sql.types import StringType  # pylint: disable=E0401
 from pyspark.sql.window import Window  # pylint: disable=E0401
 
 
-# Debt
 def avg_delta_debt_per_size(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     """Computes the average change in social debt / nb of employees.
 
     Args:
-      - data : A DataFrame containing debt and company size ("effectif") data.
+        data: A DataFrame containing debt and company size ("effectif") data.
 
     Returns:
         A DataFrame with an extra `avg_delta_dette_par_effectif` column.
@@ -46,7 +45,6 @@ def avg_delta_debt_per_size(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFram
     return data.drop(*drop_columns)
 
 
-# Paydex
 def make_paydex_yoy(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     """Computes a new column for the dataset containing the year-over-year
 
@@ -91,7 +89,9 @@ def make_paydex_bins(
     return qds.fit(data).transform(data)
 
 
-def parse_date(df: pyspark.sql.DataFrame, colnames: List[str]) -> pyspark.sql.DataFrame:
+def parse_date(
+    df: pyspark.sql.DataFrame, colnames: Iterable[str]
+) -> pyspark.sql.DataFrame:
     """Parse multiple columns of a pyspark.sql.DataFrame as date.
 
     Args:
@@ -102,7 +102,6 @@ def parse_date(df: pyspark.sql.DataFrame, colnames: List[str]) -> pyspark.sql.Da
         A new DataFrame with date columns as pyspark date types.
 
     """
-
     for name in colnames:
         df = df.withColumn(name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd"))
     return df
@@ -112,7 +111,8 @@ def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     """Compute the number of payments.
 
     Args:
-        df: A DataFrame containing payment data.
+        df: A DataFrame containing payment data. Specifically, it should have the
+          following columns : "mvt_djc", "mvt_deff", "mvt_mcrd", "frp", "art_cleart".
 
     Returns:
         A DataFrame with a new "nb_paiement" column.
