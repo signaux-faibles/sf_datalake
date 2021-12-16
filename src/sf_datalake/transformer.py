@@ -203,3 +203,9 @@ class BaseTransformer(Transformer):
             keep_cols=["siren"],
         )
         return scaled_train, scaled_test, scaled_prediction
+
+
+def factory_transformer(config: Config) -> Transformer:
+    """Factory for transformers."""
+    transformers = {"BaseTransformer": BaseTransformer}
+    return transformers[config.get_config()["TRANSFORMER"]]

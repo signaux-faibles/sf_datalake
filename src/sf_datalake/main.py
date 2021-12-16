@@ -13,29 +13,25 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 from sf_datalake.config import Config
 from sf_datalake.io import instantiate_spark_session, load_data, write_output_model
-from sf_datalake.model import LogisticRegressionModel
-from sf_datalake.preprocessor import BasePreprocessor
-from sf_datalake.sampler import BaseSampler
-from sf_datalake.transformer import BaseTransformer
+from sf_datalake.model import factory_model
+from sf_datalake.preprocessor import factory_preprocessor
+from sf_datalake.sampler import factory_sampler
+from sf_datalake.transformer import factory_transformer
 
-# Build Pipeline objects
-config = Config(
-    "src/sf_datalake/configs/config_base.json"
-).get_config()  # [TODO] - Need to adjust the path here
+# Get Pipeline objects
+config = Config("configs/config_base.json")  # [TODO] - Need to adjust the path here
+preprocessor = factory_preprocessor(config)
+sampler = factory_sampler(config)
+transformer = factory_transformer(config)
+model = factory_model(config)
 
-# [TODO] Below should be put in the config file
-preprocessor = BasePreprocessor(config)
-sampler = BaseSampler(config)
-transformer = BaseTransformer(config)
-model = LogisticRegressionModel(config)
-
-# Start the Pipeline
+# Run the Pipeline
 spark = instantiate_spark_session()
 
 indics_annuels = load_data(
     {
         "indics_annuels": path.join(
-            config["DATA_ROOT_DIR"], "base/indicateurs_annuels.orc"
+            config.get_config()["DATA_ROOT_DIR"], "base/indicateurs_annuels.orc"
         )
     }
 )["indics_annuels"]
@@ -54,7 +50,7 @@ prediction_data = model.predict(scaled_prediction)
 macro_scores_df, micro_scores_df = model.explain(scaled_prediction)
 
 write_output_model(
-    config["OUTPUT_ROOT_DIR"],
+    config.get_config()["OUTPUT_ROOT_DIR"],
     test_data,
     prediction_data,
     macro_scores_df,

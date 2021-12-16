@@ -282,3 +282,9 @@ class BasePreprocessor(Preprocessor):
         ).filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
 
         return df
+
+
+def factory_preprocessor(config: Config) -> Preprocessor:
+    """Factory for preprocessors."""
+    preprocessors = {"BasePreprocessor": BasePreprocessor}
+    return preprocessors[config.get_config()["PREPROCESSOR"]]

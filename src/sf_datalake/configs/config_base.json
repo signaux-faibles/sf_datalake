@@ -1,4 +1,9 @@
 {
+	"PREPROCESSOR": "BasePreprocessor",
+	"SAMPLER": "BaseSampler",
+	"TRANSFORMER": "BaseTransformer",
+	"MODEL": "LogisticRegressionModel",
+
 	"FILL_MISSING_VALUES": 1,
 	"OVERSAMPLING_RATIO": 0.2,
 	"REGULARIZATION_COEFF": 0.05,

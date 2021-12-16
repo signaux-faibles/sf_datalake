@@ -73,3 +73,9 @@ class BaseSampler(Sampler):  # pylint: disable=R0903
             F.to_date(df["periode"]) == self.config["PREDICTION_DATE"]
         )
         return train, test, prediction
+
+
+def factory_sampler(config: Config) -> Sampler:
+    """Factory for samplers."""
+    samplers = {"BaseSampler": BaseSampler}
+    return samplers[config.get_config()["SAMPLER"]]

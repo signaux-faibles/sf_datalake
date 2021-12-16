@@ -205,3 +205,9 @@ class LogisticRegressionModel(Model):
         micro_scores_df = explanation_df.select(["siren"] + micro_scores_columns)
         macro_scores_df = explanation_df.select(["siren"] + macro_scores_columns)
         return macro_scores_df, micro_scores_df
+
+
+def factory_model(config: Config) -> Model:
+    """Factory for models."""
+    models = {"LogisticRegressionModel": LogisticRegressionModel}
+    return models[config.get_config()["MODEL"]]
