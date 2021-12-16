@@ -10,7 +10,6 @@ from os import path
 
 from pyspark.ml.classification import LogisticRegression  # pylint: disable=E0401
 from pyspark.ml.feature import ElementwiseProduct  # pylint: disable=E0401
-from pyspark.sql import SparkSession  # pylint: disable=E0401
 from pyspark.sql import functions as F  # pylint: disable=E0401
 from pyspark.sql.types import FloatType, StringType  # pylint: disable=E0401
 
@@ -27,18 +26,18 @@ from sf_datalake.preprocessing import (
     feature_engineering,
 )
 from sf_datalake.processing import transform
-from sf_datalake.utils import load_data
+from sf_datalake.utils import instantiate_spark_session, load_data
 
 ### Launch spark session, load data
 
-spark = SparkSession.builder.getOrCreate()
+spark = instantiate_spark_session()
 
 logging.info(
     "Reading data in %s", path.join(DATA_ROOT_DIR, "base/indicateurs_annuels.orc")
 )
 
 indics_annuels = load_data(
-    {"indics_annuels", path.join(DATA_ROOT_DIR, "base/indicateurs_annuels.orc")}
+    {"indics_annuels": path.join(DATA_ROOT_DIR, "base/indicateurs_annuels.orc")}
 )["indics_annuels"]
 
 ### Default values for missing data
@@ -367,21 +366,19 @@ concerning_output_path = path.join(output_folder, "concerning_values")
 explanation_output_path = path.join(output_folder, "explanation_data")
 
 logging.info("Writing test data to file %s", test_output_path)
-test_data.repartition(1).write.csv(test_output_path, header=True)
+test_data.write.csv(test_output_path, header=True)
 
 logging.info("Writing prediction data to file %s", prediction_output_path)
-prediction_data.drop("features").repartition(1).write.csv(
-    prediction_output_path, header=True
-)
+prediction_data.drop("features").write.csv(prediction_output_path, header=True)
 
 logging.info("Writing concerning features to file %s", concerning_output_path)
-explanation_df.select(["siren"] + concerning_columns).repartition(1).write.csv(
+explanation_df.select(["siren"] + concerning_columns).write.csv(
     concerning_output_path, header=True
 )
 
 logging.info(
     "Writing explanation macro scores data to directory %s", explanation_output_path
 )
-explanation_df.select(["siren"] + macro_scores_columns).repartition(1).write.csv(
+explanation_df.select(["siren"] + macro_scores_columns).write.csv(
     path.join(explanation_output_path), header=True
 )
