@@ -202,10 +202,6 @@ class LogisticRegressionModel(Model):
             "3rd_concerning_feat",
         ]
 
-        micro_scores_df = explanation_df.select(
-            ["siren"] + micro_scores_columns
-        ).repartition(1)
-        macro_scores_df = explanation_df.select(
-            ["siren"] + macro_scores_columns
-        ).repartition(1)
+        micro_scores_df = explanation_df.select(["siren"] + micro_scores_columns)
+        macro_scores_df = explanation_df.select(["siren"] + macro_scores_columns)
         return macro_scores_df, micro_scores_df
