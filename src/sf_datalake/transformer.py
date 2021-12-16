@@ -5,7 +5,7 @@ A transformer handles data treatments to apply on multiple variables
 such as scaling before feeding data to a model.
 """
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Optional
+from typing import Iterable, Optional, Tuple
 
 import pyspark  # pylint: disable=E0401
 import pyspark.sql  # pylint: disable=E0401

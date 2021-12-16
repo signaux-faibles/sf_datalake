@@ -33,7 +33,11 @@ model = LogisticRegressionModel(config)
 spark = instantiate_spark_session()
 
 indics_annuels = load_data(
-    {"indics_annuels": path.join(DATA_ROOT_DIR, "base/indicateurs_annuels.orc")}
+    {
+        "indics_annuels": path.join(
+            config["DATA_ROOT_DIR"], "base/indicateurs_annuels.orc"
+        )
+    }
 )["indics_annuels"]
 
 indics_annuels = preprocessor.run(indics_annuels)

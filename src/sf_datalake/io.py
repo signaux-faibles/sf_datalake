@@ -96,9 +96,7 @@ def write_output_model(
     test_data.write.csv(test_output_path, header=True)
 
     logging.info("Writing prediction data to file %s", prediction_output_path)
-    prediction_data.drop("features").write.csv(
-        prediction_output_path, header=True
-    )
+    prediction_data.drop("features").write.csv(prediction_output_path, header=True)
 
     logging.info("Writing concerning features to file %s", concerning_output_path)
     micro_scores_df.write.csv(concerning_output_path, header=True)

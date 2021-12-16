@@ -49,7 +49,10 @@ class Preprocessor(ABC):  # pylint: disable=C0115
 
         data = data.withColumn(
             "dette_par_effectif_past_3",
-            (data["montant_part_ouvriere_past_3"] + data["montant_part_patronale_past_3"])
+            (
+                data["montant_part_ouvriere_past_3"]
+                + data["montant_part_patronale_past_3"]
+            )
             / data["effectif"],
         )
         # TODO replace([np.nan, np.inf, -np.inf], 0)
@@ -61,7 +64,6 @@ class Preprocessor(ABC):  # pylint: disable=C0115
 
         drop_columns = ["dette_par_effectif", "dette_par_effectif_past_3"]
         return data.drop(*drop_columns)
-
 
     @staticmethod
     def make_paydex_yoy(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -122,9 +124,10 @@ class Preprocessor(ABC):  # pylint: disable=C0115
 
         """
         for name in colnames:
-            df = df.withColumn(name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd"))
+            df = df.withColumn(
+                name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd")
+            )
         return df
-
 
     @staticmethod
     def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
