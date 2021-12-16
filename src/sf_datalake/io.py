@@ -1,6 +1,8 @@
 """Utility functions for data handling.
 
 """
+import datetime
+import logging
 from os import path
 from typing import Dict
 
@@ -73,3 +75,35 @@ def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     df = df.withColumn("siren", df["siren"].cast("string"))
     df = df.withColumn("siren", F.lpad(df["siren"], 9, "0"))
     return df
+
+
+def write_output_model(
+    OUTPUT_ROOT_DIR: str,
+    test_data: pyspark.sql.DataFrame,
+    prediction_data: pyspark.sql.DataFrame,
+    macro_scores_df: pyspark.sql.DataFrame,
+    micro_scores_df: pyspark.sql.DataFrame,
+):
+    """Write the results of the modelization in multiple .csv."""
+    base_output_path = path.join(OUTPUT_ROOT_DIR, "sorties_modeles")
+    output_folder = path.join(base_output_path, datetime.date.today().isoformat())
+    test_output_path = path.join(output_folder, "test_data")
+    prediction_output_path = path.join(output_folder, "prediction_data")
+    concerning_output_path = path.join(output_folder, "concerning_values")
+    explanation_output_path = path.join(output_folder, "explanation_data")
+
+    logging.info("Writing test data to file %s", test_output_path)
+    test_data.write.csv(test_output_path, header=True)
+
+    logging.info("Writing prediction data to file %s", prediction_output_path)
+    prediction_data.drop("features").write.csv(
+        prediction_output_path, header=True
+    )
+
+    logging.info("Writing concerning features to file %s", concerning_output_path)
+    micro_scores_df.write.csv(concerning_output_path, header=True)
+
+    logging.info(
+        "Writing explanation macro scores data to directory %s", explanation_output_path
+    )
+    macro_scores_df.write.csv(path.join(explanation_output_path), header=True)
