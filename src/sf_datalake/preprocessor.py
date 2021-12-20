@@ -1,12 +1,9 @@
 """Preprocessor class.
 
-Preprocessor is an abstract class to build different preprocessors.
-A preprocessor handles all basic data treatments before feeding data
-to a model.
+Preprocessor is an abstract class to define different preprocessors.
 """
 
-import logging
-from abc import ABC, abstractmethod
+import abc
 from functools import reduce
 from typing import Iterable
 
@@ -16,14 +13,22 @@ import pyspark.sql.functions as F  # pylint: disable=E0401
 from pyspark.sql.types import StringType  # pylint: disable=E0401
 from pyspark.sql.window import Window  # pylint: disable=E0401
 
-from sf_datalake.config import Config
 
+class Preprocessor(abc.ABC):
+    """Abstract class as an interface for subclasses that represent
+    different preprocessors. A preprocessor handles all basic data
+    treatments before feeding data to a model. It also contains static
+    methods useful for subclasses."""
 
-class Preprocessor(ABC):  # pylint: disable=C0115
-    def __init__(self, config: Config):
-        self.config = config.get_config()
+    def __init__(self, config: dict):
+        """The class constructor.
 
-    @abstractmethod
+        Args:
+            config: the config parameters (see config.get_config())
+        """
+        self.config = config
+
+    @abc.abstractmethod
     def run(self, df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Compute the treatments."""
 
@@ -167,7 +172,15 @@ class Preprocessor(ABC):  # pylint: disable=C0115
 
 
 class BasePreprocessor(Preprocessor):
-    """The basic preprocessor"""
+    """The basic preprocessor proceeds to the following steps:
+    - Fill missing values by the median or a specific value (see config['SF_DEFAULT_VALUES'])
+    - Aggregate at a SIREN level by sum or average
+    - Data featuring:
+            o creating ratio of the average debt
+            o creating the objective variable 'failure_within_18m'
+    - Filtering out firms on 'effectif' and 'code_naf' variables such that:
+      effectif >= 10 AND code_naf NOT IN ('O', 'P')
+    """
 
     def run(self, df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         ### Default values for missing data
@@ -190,29 +203,27 @@ class BasePreprocessor(Preprocessor):
         )
 
         if self.config["FILL_MISSING_VALUES"]:
-            logging.info("Filling missing values with default values.")
-            logging.info("Defaults : %s", default_data_values)
-
             df = df.fillna(
                 {k: v for (k, v) in default_data_values.items() if k in df.columns}
             )
         else:
             df = df.fillna(
                 {
-                    "time_til_failure": 9999,
+                    "time_til_failure": self.config["SF_DEFAULT_VALUES"][
+                        "time_til_failure"
+                    ],
                 }
             )
 
         ### Aggregation at SIREN level.
-
-        logging.info("Aggregating data at the SIREN level")
-
         # Signaux faibles variables
         df_sf = df.select(
             *(
-                self.config["SUM_VARIABLES"]
-                | self.config["AVG_VARIABLES"]
-                | self.config["BASE_VARIABLES"]
+                set(
+                    self.config["SUM_VARIABLES"]
+                    + self.config["AVG_VARIABLES"]
+                    + self.config["BASE_VARIABLES"]
+                )
             )
         )
 
@@ -233,15 +244,14 @@ class BasePreprocessor(Preprocessor):
 
         # Joining grouped data
         df_sf = (
-            df_sf.drop(*(self.config["SUM_VARIABLES"] | self.config["AVG_VARIABLES"]))
+            df_sf.drop(
+                *(set(self.config["SUM_VARIABLES"] + self.config["AVG_VARIABLES"]))
+            )
             .join(gb_sum, on=["siren", "periode"])
             .join(gb_avg, on=["siren", "periode"])
         )
 
         ### Feature engineering
-
-        logging.info("Feature engineering")
-
         # delta_dette_par_effectif
         df_sf = Preprocessor.avg_delta_debt_per_size(df_sf)
 
@@ -256,7 +266,7 @@ class BasePreprocessor(Preprocessor):
 
         # DGFIP Variables
         df_dgfip = df.select(
-            *(self.config["MRV_VARIABLES"] | {"siren", "periode"})
+            *(set(self.config["MRV_VARIABLES"]) | {"siren", "periode"})
         ).dropDuplicates(["siren", "periode"])
 
         # Joining data
@@ -269,22 +279,18 @@ class BasePreprocessor(Preprocessor):
         else:
             df = df.dropna(subset=tuple(self.config["FEATURES"]))
 
-        logging.info("Creating objective variable 'failure_within_18m'")
+        # Creating objective variable 'failure_within_18m'
         df = df.withColumn("failure_within_18m", df["time_til_failure"] <= 18)
 
-        logging.info("Filtering out firms on 'effectif' and 'code_naf' variables.")
+        # Filtering out firms on 'effectif' and 'code_naf' variables.
         df = df.select(
             *(
-                self.config["BASE_VARIABLES"]
-                | self.config["FEATURES"]
-                | self.config["TARGET_VARIABLE"]
+                set(
+                    self.config["BASE_VARIABLES"]
+                    + self.config["FEATURES"]
+                    + self.config["TARGET_VARIABLE"]
+                )
             )
         ).filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
 
         return df
-
-
-def factory_preprocessor(config: Config) -> Preprocessor:
-    """Factory for preprocessors."""
-    preprocessors = {"BasePreprocessor": BasePreprocessor}
-    return preprocessors[config.get_config()["PREPROCESSOR"]]

@@ -1,36 +1,26 @@
-"""Config class.
-
-Load the config from a config.json file.
+"""Get the config from a config.json file.
 """
 
 import json
 
 
-class Config:  # pylint: disable=R0903
+def get_config(config_path: str) -> dict:
+    """Get the config from a config.json file.
+
+    Args:
+        config_path: path of the config .json file
+
+    Returns:
+        dict: the config parameters
     """
-    Class to load and store the config parameters.
-    """
 
-    def __init__(self, config_path: str):
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
 
-        data["TAC_VARIABLES"] = {f"tac_1y_{v}" for v in data["MRV_VARIABLES"]}
-        data["SF_VARIABLES"] = (
-            set(data["SUM_VARIABLES"])
-            | set(data["AVG_VARIABLES"])
-            | set(data["COMP_VARIABLES"])
-        )
-        data["SF_VARIABLES"] = list(data["SF_VARIABLES"])
-        data["FEATURES"] = set(data["SF_VARIABLES"]) | set(data["MRV_VARIABLES"])
-        data["FEATURES"] = list(data["FEATURES"])
-        data["STD_SCALE_FEATURES"] = data["FEATURES"]
-        self.data = data
-
-    def get_config(self):
-        """Return the config parameters as a dict
-
-        Returns:
-            dict: the config parameters
-        """
-        return self.data
+    config["TAC_VARIABLES"] = {f"tac_1y_{v}" for v in config["MRV_VARIABLES"]}
+    config["SF_VARIABLES"] = list(
+        config["SUM_VARIABLES"] + config["AVG_VARIABLES"] + config["COMP_VARIABLES"]
+    )
+    config["FEATURES"] = list(set(config["SF_VARIABLES"] + config["MRV_VARIABLES"]))
+    config["STD_SCALE_FEATURES"] = config["FEATURES"]
+    return config

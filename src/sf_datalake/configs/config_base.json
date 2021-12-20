@@ -1,8 +1,14 @@
 {
 	"PREPROCESSOR": "BasePreprocessor",
 	"SAMPLER": "BaseSampler",
-	"TRANSFORMER": "BaseTransformer",
+	"TRANSFORMER": "StandardTransformer",
 	"MODEL": "LogisticRegressionModel",
+	"MACRO_SCORES_COLUMNS": [
+		"sante_financiere_macro_score",
+		"dette_urssaf_macro_score",
+		"activite_partielle_macro_score",
+		"misc_macro_score"
+	],
 
 	"FILL_MISSING_VALUES": 1,
 	"OVERSAMPLING_RATIO": 0.2,
