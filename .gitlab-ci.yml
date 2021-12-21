@@ -30,6 +30,7 @@
     image: python:3.6.8
     before_script:
       - python -V  # Print out python version for debugging
+      - pip install -U pip
       - pip install virtualenv
       - virtualenv venv
       - source venv/bin/activate
@@ -64,9 +65,10 @@
       - find ${CACHE_ROOT} -type d -mtime +1 -exec rm -rf {} \; || echo "Please, fix this syntax."
 
   pylint:
-    stage: build
+    stage: test
     extends: .python
     script:
+    - pip install pylint
     - pylint --rcfile=.pylintrc src/sf_datalake/
     rules:
       - changes:
