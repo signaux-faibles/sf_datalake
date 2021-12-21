@@ -6,8 +6,8 @@ import logging
 from os import path
 from typing import Dict
 
-import pyspark.sql
-from pyspark.sql import functions as F
+import pyspark.sql  # pylint: disable=E0401
+from pyspark.sql import functions as F  # pylint: disable=E0401
 
 from sf_datalake.utils import instantiate_spark_session
 

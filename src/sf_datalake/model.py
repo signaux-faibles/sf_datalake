@@ -5,10 +5,10 @@ Model is an abstract class to define different models.
 
 from typing import Tuple
 
-import pyspark.ml
-import pyspark.ml.classification
-import pyspark.sql.functions as F
-from pyspark.sql.types import FloatType, StringType
+import pyspark.ml  # pylint: disable=E0401
+import pyspark.ml.classification  # pylint: disable=E0401
+import pyspark.sql.functions as F  # pylint: disable=E0401
+from pyspark.sql.types import FloatType, StringType  # pylint: disable=E0401
 
 
 def generate_stage(config: dict) -> pyspark.ml.Model:

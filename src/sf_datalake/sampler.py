@@ -3,8 +3,8 @@
 """
 from typing import Tuple
 
-import pyspark.sql
-from pyspark.sql import functions as F
+import pyspark.sql  # pylint: disable=E0401
+from pyspark.sql import functions as F  # pylint: disable=E0401
 
 
 def sample_df(

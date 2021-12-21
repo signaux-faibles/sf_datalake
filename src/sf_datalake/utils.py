@@ -1,7 +1,7 @@
 """Utility functions.
 
 """
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession  # pylint: disable=E0401
 
 
 def instantiate_spark_session():
