@@ -20,9 +20,9 @@ import sf_datalake.transformer
 from sf_datalake.config import get_config
 from sf_datalake.io import load_data, write_output_model
 from sf_datalake.sampler import sample_df
+from sf_datalake.transformer import FormatProbability
 from sf_datalake.utils import instantiate_spark_session
 
-# TODO CHECK THE LINE BELOW
 config = get_config("configs/config_base.json")  # [TODO] - Need to adjust the path here
 preprocessor = getattr(sf_datalake.preprocessor, config["PREPROCESSOR"])(config)
 spark = instantiate_spark_session()
@@ -59,15 +59,16 @@ data_train, data_test, data_prediction = sample_df(indics_annuels, config)
 logging.info(
     "Training %s \
     %.3f and %d iterations (maximum).",
-    config["MODEL"],
-    config["REGULARIZATION_COEFF"],
-    config["MAX_ITER"],
+    config["MODEL"]["MODEL_NAME"],
+    config["MODEL"]["REGULARIZATION_COEFF"],
+    config["MODEL"]["MAX_ITER"],
 )  # [TODO] Create an attribute as an array in the config file that
 # list all the parameters related to the model. Then adjust the logging to be more generic
 
 stages = []
 stages += sf_datalake.transformer.generate_stages(config)
 stages += [sf_datalake.model.generate_stage(config)]
+stages += [FormatProbability()]
 
 pipeline = Pipeline(stages=stages)
 pipeline_model = pipeline.fit(data_train)

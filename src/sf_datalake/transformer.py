@@ -5,10 +5,13 @@ Transformer is an abstract class to define different transformers.
 from typing import List
 
 import pyspark.ml  # pylint: disable=E0401
+import pyspark.sql.functions as F  # pylint: disable=E0401
+from pyspark.ml import Transformer
 from pyspark.ml.feature import StandardScaler, VectorAssembler  # pylint: disable=E0401
+from pyspark.sql.types import FloatType  # pylint: disable=E0401
 
 
-def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
+def generate_stages(config: dict) -> List[Transformer]:
     """Generate all stages related to Transformers. Ready to be
     included in a pyspark.ml.Pipeline.
 
@@ -21,15 +24,15 @@ def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
     stages = []
     transformed_features = []
     for (features, transformer_name) in config["TRANSFORMERS"]:
-        output_col = f"features_to_transform_{transformer_name}"
+        outputCol = f"features_to_transform_{transformer_name}"
         vector_assembler = VectorAssembler(
             inputCols=features,
-            outputCol=output_col,  # TODO is it necessary or overwritting
+            outputCol=outputCol,  # TODO is it necessary or overwritting
             # the same name during stages works?
         )
         transformer = get_transformer_from_str(transformer_name)
         stages += [vector_assembler, transformer]
-        transformed_features += [output_col]
+        transformed_features += [outputCol]
 
     vector_assembler = VectorAssembler(
         inputCols=transformed_features, outputCol="features"
@@ -38,7 +41,7 @@ def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
     return stages
 
 
-def get_transformer_from_str(s: str) -> pyspark.ml.Transformer:
+def get_transformer_from_str(s: str) -> Transformer:
     """Get a Transformer from its name.
 
     Args:
@@ -56,3 +59,19 @@ def get_transformer_from_str(s: str) -> pyspark.ml.Transformer:
         )
     }
     return factory[s]
+
+
+class FormatProbability(Transformer):
+    """A transformer to format the probability column in output of a model."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):
+        """Extract the positive probability and cast it as float.
+
+        Args:
+            dataset: DataFrame to transform
+
+        Returns:
+            transformed DataFrame
+        """
+        transform_udf = F.udf(lambda v: float(v[1]), FloatType())
+        return dataset.withColumn("probability", transform_udf("probability"))

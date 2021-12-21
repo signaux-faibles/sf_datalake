@@ -8,7 +8,9 @@ from typing import Tuple
 import pyspark.ml  # pylint: disable=E0401
 import pyspark.ml.classification  # pylint: disable=E0401
 import pyspark.sql.functions as F  # pylint: disable=E0401
-from pyspark.sql.types import FloatType, StringType  # pylint: disable=E0401
+from pyspark.sql.types import StringType  # pylint: disable=E0401
+
+from sf_datalake.transformer import FormatProbability
 
 
 def generate_stage(config: dict) -> pyspark.ml.Model:
@@ -21,7 +23,10 @@ def generate_stage(config: dict) -> pyspark.ml.Model:
     Returns:
         A prepared Model.
     """
-    return get_model_from_conf(config["MODEL"])
+    stages = []
+    stages += [get_model_from_conf(config["MODEL"])]
+    stages += [FormatProbability()]
+    return stages
 
 
 def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
@@ -39,20 +44,10 @@ def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
             regParam=model_config["REGULARIZATION_COEFF"],
             standardization=False,
             maxIter=model_config["MAX_ITER"],
-            tol=model_config[
-                "TOL"
-            ],  # TODO Need to precise the name of the variables here
+            tol=model_config["TOL"],
         )
     }
     return factory[model_config["MODEL_NAME"]]
-
-
-@F.udf(
-    returnType=FloatType()
-)  # TODO is it ncessary? (see main previous scrip logistic)
-def positive_class_proba_extractor(v):
-    """Extract the probability as float."""
-    return float(v[1])
 
 
 @F.udf(returnType=StringType())
