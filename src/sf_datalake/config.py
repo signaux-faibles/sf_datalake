@@ -23,5 +23,6 @@ def get_config(config_path: str) -> dict:
     )
     config["FEATURES"] = list(set(config["SF_VARIABLES"] + config["MRV_VARIABLES"]))
 
-    config["TRANSFORMERS"] = [(config["FEATURES"], "StandardScaler")]
+    config["FEATURES_TO_StandardScaler"] = config["FEATURES"]
+    config["TRANSFORMERS"] = [(config["FEATURES_TO_StandardScaler"], "StandardScaler")]
     return config

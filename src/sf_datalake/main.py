@@ -76,7 +76,7 @@ data_train_transformed = pipeline_model.transform(data_train)
 data_test_transformed = pipeline_model.transform(data_test)
 data_prediction_transformed = pipeline_model.transform(data_prediction)
 
-model = pipeline_model.stages[-1]
+model = pipeline_model.stages[-2]
 
 logging.info(
     "Model weights: %.3f", model.coefficients

@@ -61,10 +61,11 @@ def get_transformer_from_str(s: str) -> Transformer:
     return factory[s]
 
 
-class FormatProbability(Transformer):
+class FormatProbability(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to format the probability column in output of a model."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Extract the positive probability and cast it as float.
 
         Args:
