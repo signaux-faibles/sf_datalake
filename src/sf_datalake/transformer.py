@@ -2,104 +2,57 @@
 
 Transformer is an abstract class to define different transformers.
 """
+from typing import List
 
-import abc
-from typing import Iterable, Optional
-
-import pyspark.sql  # pylint: disable=E0401
-from pyspark.ml.feature import StandardScaler, VectorAssembler  # pylint: disable=E0401
+import pyspark.ml
+from pyspark.ml.feature import StandardScaler, VectorAssembler
 
 
-class Transformer(abc.ABC):
-    """Abstract class as an interface for subclasses that represent different transformers.
-    A transformer handles data treatments to apply on multiple variables such as scaling
-    before feeding data to a model. It also contains static methods useful for subclasses."""
+def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
+    """Generate all stages related to Transformers. Ready to be
+    included in a pyspark.ml.Pipeline.
 
-    def __init__(self, config: dict, sampling_ratio: Optional[float] = None):
-        """The class constructor. self.model is set to None by the constructor and will get a
-        value once self.fit() is called.
+    Args:
+        config : the config parameters (see config.get_config())
 
-        Args:
-            config: the config parameters (see config.get_config())
-            sampling_ratio: If desired, only a proportion (float smaller than 1) of the
-                        dataset can be used for fitting in order to increase speed. Defaults
-                        to None.
-        """
-        self.config = config
-        self.colname_to_transform = "assembled_features"
-        self.colname_transformed = "assembled_transformed_features"
-        self.sampling_ratio = sampling_ratio
-        self.assembler = VectorAssembler(
-            inputCols=self.config["STD_SCALE_FEATURES"],
-            outputCol=self.colname_to_transform,
+    Returns:
+        List of prepared Transformers.
+    """
+    stages = []
+    transformed_features = []
+    for (features, transformer_name) in config["TRANSFORMERS"]:
+        output_col = f"features_to_transform_{transformer_name}"
+        vector_assembler = VectorAssembler(
+            inputCols=features,
+            outputCol=output_col,  # TODO is it necessary or overwritting
+            # the same name during stages works?
         )
-        self.model = None
+        transformer = get_transformer_from_str(transformer_name)
+        stages += [vector_assembler, transformer]
+        transformed_features += [output_col]
 
-    @abc.abstractmethod
-    def fit(self, df: pyspark.sql.DataFrame):
-        """Fit a Tranformer on some pre-assembled data.
-
-        Args:
-            df : The DataFrame to fit on .
-        """
-
-    @abc.abstractmethod
-    def transform(
-        self,
-        df: pyspark.sql.DataFrame,
-        label_col: str,
-        keep_cols: Optional[Iterable[str]] = None,
-    ) -> pyspark.sql.DataFrame:
-        """Transform the data according to the fitted transformer.
-
-        Args:
-            df: The spark dataframe to transform.
-            label_col: The name of the column containing the target variable.
-                    It should be a column of booleans.
-            keep_cols: If some columns, other than those inside features and label,
-                    are to be preserved after scaling, they should be mentioned here as a list.
-
-        Returns:
-            The transformed DataFrame.
-        """
+    vector_assembler = VectorAssembler(
+        inputCols=transformed_features, outputCol="features"
+    )
+    stages += [vector_assembler]
+    return stages
 
 
-class StandardTransformer(Transformer):
-    """Transformer that implements the standard scaling."""
+def get_transformer_from_str(s: str) -> pyspark.ml.Transformer:
+    """Get a Transformer from its name.
 
-    def fit(self, df: pyspark.sql.DataFrame):  # pylint: disable=C0115
-        assembled_to_fit = self.assembler.transform(df)
-        assembled_to_fit = (
-            assembled_to_fit.sample(self.sampling_ratio)
-            if self.sampling_ratio is not None
-            else assembled_to_fit
-        )
+    Args:
+        s: Name of the Transformer
 
-        scaler = StandardScaler(
-            # withMean=True,
+    Returns:
+        The selected Transformer with prepared parameters
+    """
+    factory = {
+        "StandardScaler": StandardScaler(
+            withMean=True,
             withStd=True,
-            inputCol=self.colname_to_transform,
-            outputCol=self.colname_transformed,
+            inputCol="features_to_transform_StandardScaler",
+            outputCol="features_transformed_StandardScaler",
         )
-
-        self.model = scaler.fit(assembled_to_fit)
-
-    def transform(
-        self,
-        df: pyspark.sql.DataFrame,
-        label_col: str,
-        keep_cols: Optional[Iterable[str]] = None,
-    ) -> pyspark.sql.DataFrame:  # pylint: disable=C0115
-
-        assembled_df = self.assembler.transform(df)
-        scaled_data = self.model.transform(assembled_df)
-
-        selected_cols = [self.colname_transformed, label_col]
-        if keep_cols is not None:
-            selected_cols += keep_cols
-        selected_data = (
-            scaled_data.select(selected_cols)
-            .withColumnRenamed(self.colname_transformed, "features")
-            .withColumn("label", df[label_col].astype("integer"))
-        )
-        return selected_data
+    }
+    return factory[s]

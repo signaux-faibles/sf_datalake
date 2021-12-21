@@ -6,8 +6,8 @@ import logging
 from os import path
 from typing import Dict
 
-import pyspark.sql  # pylint: disable=E0401
-from pyspark.sql import functions as F  # pylint: disable=E0401
+import pyspark.sql
+from pyspark.sql import functions as F
 
 from sf_datalake.utils import instantiate_spark_session
 
@@ -86,10 +86,18 @@ def write_output_model(
     explanation_output_path = path.join(output_folder, "explanation_data")
 
     logging.info("Writing test data to file %s", test_output_path)
-    test_data.write.csv(test_output_path, header=True)
+    test_data.select(
+        ["siren", "time_til_failure", "failure_within_18m", "probability"]
+    ).write.csv(test_output_path, header=True)
 
     logging.info("Writing prediction data to file %s", prediction_output_path)
-    prediction_data.drop("features").write.csv(prediction_output_path, header=True)
+    columns_to_drop = [
+        colname
+        for colname in prediction_data.columns
+        if colname.startswith("features_")
+    ]
+    columns_to_drop += ["features", "prediction", "rawPrediction", "failure_within_18m"]
+    prediction_data.drop(columns_to_drop).write.csv(prediction_output_path, header=True)
 
     logging.info("Writing concerning features to file %s", concerning_output_path)
     micro_scores_df.write.csv(concerning_output_path, header=True)

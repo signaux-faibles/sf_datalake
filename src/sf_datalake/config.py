@@ -22,5 +22,6 @@ def get_config(config_path: str) -> dict:
         config["SUM_VARIABLES"] + config["AVG_VARIABLES"] + config["COMP_VARIABLES"]
     )
     config["FEATURES"] = list(set(config["SF_VARIABLES"] + config["MRV_VARIABLES"]))
-    config["STD_SCALE_FEATURES"] = config["FEATURES"]
+
+    config["TRANSFORMERS"] = [(config["FEATURES"], "StandardScaler")]
     return config

@@ -1,8 +1,12 @@
 {
+	"DATA_ROOT_DIR": "/projets/TSF/sources",
 	"PREPROCESSOR": "BasePreprocessor",
-	"SAMPLER": "BaseSampler",
-	"TRANSFORMER": "StandardTransformer",
-	"MODEL": "LogisticRegressionModel",
+	"MODEL": {
+		"MODEL_NAME":"LogisticRegression",
+		"REGULARIZATION_COEFF": 0.05,
+		"MAX_ITER": 50,
+		"TOL": 1e-5
+	},
 	"MACRO_SCORES_COLUMNS": [
 		"sante_financiere_macro_score",
 		"dette_urssaf_macro_score",
@@ -12,10 +16,7 @@
 
 	"FILL_MISSING_VALUES": 1,
 	"OVERSAMPLING_RATIO": 0.2,
-	"REGULARIZATION_COEFF": 0.05,
 	"N_CONCERNING_MICRO": 3,
-	"MAX_ITER": 50,
-	"TOL": 1e-5,
 
 	"TRAIN_DATES": ["2016-01-01", "2018-05-31"],
 	"TEST_DATES": ["2018-06-01", "2018-11-01"],

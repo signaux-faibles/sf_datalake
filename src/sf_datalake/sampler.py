@@ -3,8 +3,8 @@
 """
 from typing import Tuple
 
-import pyspark.sql  # pylint: disable=E0401
-from pyspark.sql import functions as F  # pylint: disable=E0401
+import pyspark.sql
+from pyspark.sql import functions as F
 
 
 def sample_df(
@@ -21,7 +21,7 @@ def sample_df(
     Returns:
         3 DataFrames, one for each of the following part: learn, test, prediction.
     """
-    will_fail_mask = df["failure_within_18m"]
+    will_fail_mask = df["failure_within_18m"].astype("boolean")
 
     n_samples = df.count()
     n_failing = df.filter(will_fail_mask).count()

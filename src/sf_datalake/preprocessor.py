@@ -293,4 +293,7 @@ class BasePreprocessor(Preprocessor):
             )
         ).filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
 
+        df = df.withColumn(
+            "failure_within_18m", df.failure_within_18m.astype("integer")
+        )  # Needed  for models
         return df
