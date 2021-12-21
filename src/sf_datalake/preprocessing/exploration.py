@@ -3,8 +3,8 @@
 
 from typing import Iterable, Tuple
 
-import pyspark  # pylint: disable=E0401
-import pyspark.sql.functions as F  # pylint: disable=E0401
+import pyspark
+import pyspark.sql.functions as F
 
 
 def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:

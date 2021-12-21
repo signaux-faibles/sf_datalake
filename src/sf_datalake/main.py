@@ -12,7 +12,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 
-from pyspark.ml import Pipeline  # pylint: disable=E0401
+from pyspark.ml import Pipeline
 
 import sf_datalake.model
 import sf_datalake.preprocessor

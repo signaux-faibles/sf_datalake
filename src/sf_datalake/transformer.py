@@ -4,11 +4,11 @@ Transformer is an abstract class to define different transformers.
 """
 from typing import List
 
-import pyspark.ml  # pylint: disable=E0401
-import pyspark.sql.functions as F  # pylint: disable=E0401
+import pyspark.ml
+import pyspark.sql.functions as F
 from pyspark.ml import Transformer
-from pyspark.ml.feature import StandardScaler, VectorAssembler  # pylint: disable=E0401
-from pyspark.sql.types import FloatType  # pylint: disable=E0401
+from pyspark.ml.feature import StandardScaler, VectorAssembler
+from pyspark.sql.types import FloatType
 
 
 def generate_stages(config: dict) -> List[Transformer]:
