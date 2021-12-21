@@ -4,8 +4,8 @@ Transformer is an abstract class to define different transformers.
 """
 from typing import List
 
-import pyspark.ml  # pylint: disable=E0401
-from pyspark.ml.feature import StandardScaler, VectorAssembler  # pylint: disable=E0401
+import pyspark.ml
+from pyspark.ml.feature import StandardScaler, VectorAssembler
 
 
 def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:

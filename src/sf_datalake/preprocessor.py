@@ -7,11 +7,11 @@ import abc
 from functools import reduce
 from typing import Iterable
 
-import pyspark.ml  # pylint: disable=E0401
-import pyspark.sql  # pylint: disable=E0401
-import pyspark.sql.functions as F  # pylint: disable=E0401
-from pyspark.sql.types import StringType  # pylint: disable=E0401
-from pyspark.sql.window import Window  # pylint: disable=E0401
+import pyspark.ml
+import pyspark.sql
+import pyspark.sql.functions as F
+from pyspark.sql.types import StringType
+from pyspark.sql.window import Window
 
 
 class Preprocessor(abc.ABC):
