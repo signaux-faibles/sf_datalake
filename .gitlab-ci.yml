@@ -1,265 +1,282 @@
-  variables:
-    PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.cache/pip"
-    # gitlab docker runner has a mounted volume HOST:/home/cloudadm/.ci-python_packages/ = CONTAINER:/packages
-    CACHE_ROOT: "/home/cloudadm/.ci-python_packages"
-    CACHE_KEY: "${CI_PIPELINE_ID}"
-    CACHE: "${CACHE_ROOT}/${CACHE_KEY}"
-    API_HOME: "/home/cloudadm/KitPerlAPIDTK/"
-    PACKAGE: "python_packages.tar.gz"
-    SCRIPT: "src/sf_datalake/processing/logreg_model.py"
-    LAKE_HOME: "/projets/TSF/applicatifs"
-    LAKE_TARGET: "${LAKE_HOME}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
-    LAKE_ENTRYPOINT: "${LAKE_HOME}/main.py"
-    BRANCH_TO_DEPLOY: "${CI_DEFAULT_BRANCH}"
-    #BRANCH_TO_DEPLOY: "feat/enhance_pipeline"
+variables:
+  PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.cache/pip"
+  # gitlab docker runner has a mounted volume HOST:/home/cloudadm/.ci-python_packages/ = CONTAINER:/packages
+  # todo : modifier le point de montage en fonction de la configuration du fichier de config
+  CACHE_ROOT: "/home/cloudadm/.ci-python_packages"
+  CACHE_KEY: "${CI_PIPELINE_ID}"
+  CACHE: "${CACHE_ROOT}/${CACHE_KEY}"
+  PACKAGE: "python_packages.tar.gz"
+  SCRIPT: "${CI_PROJECT_DIR}/src/sf_datalake/processing/write_data_to_csv.py"
+  LAKE_WORKSPACE: "/projets/TSF"
+  LAKE_HOME: "${LAKE_WORKSPACE}/applicatifs"
+  LAKE_TARGET: "${LAKE_HOME}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
+  LAKE_ENTRYPOINT: "${LAKE_HOME}/main.py"
+  BRANCH_TO_DEPLOY: "${CI_DEFAULT_BRANCH}"
+  #BRANCH_TO_DEPLOY: "feat/handle_model_after_success"
+  MODEL_OUTPUT: "donnees/test"
 
 
-  # Pip's cache doesn't store the python packages
-  # https://pip.pypa.io/en/stable/reference/pip_install/#caching
-  #
-  # If you want to also cache the installed packages, you have to install
-  # them in a virtualenv and cache it as well.
-  cache:
-    paths:
-      - .cache/pip
-      - venv/
+# Pip's cache doesn't store the python packages
+# https://pip.pypa.io/en/stable/reference/pip_install/#caching
+#
+# If you want to also cache the installed packages, you have to install
+# them in a virtualenv and cache it as well.
+cache:
+  paths:
+    - .cache/pip
+    - venv/
 
-  .python:
-    tags:
-      - ci
-    image: python:3.6.8
-    before_script:
-      - python -V  # Print out python version for debugging
-      - pip install -U pip
-      - pip install virtualenv
-      - virtualenv venv
-      - source venv/bin/activate
+.python:
+  tags:
+    - ci
+  image: python:3.6.8
+  before_script:
+    - python -V  # Print out python version for debugging
+    - pip install -U pip
+    - pip install virtualenv
+    - virtualenv venv
+    - source venv/bin/activate
 
-  .lake:
-    tags:
-      - datalake
-    before_script:
-      - cd ${CACHE}/bin
+.lake:
+  tags:
+    - datalake
+  before_script:
+    - cd ${CACHE}/bin && pwd
 
-  ##########################
-  #  PIPELINE STARTS HERE  #
-  ##########################
+##########################
+#  PIPELINE STARTS HERE  #
+##########################
 
-  prepare_pipeline_env:
-    stage: .pre
-    extends: .lake
-    before_script:
-      - echo "Nothing to do, but must exist"
-    script:
-      - echo "Prepare cache & conf in ${CACHE}."
-      - mkdir -p ${CACHE}
-      - mkdir -p ${CACHE}/trace
-      - mkdir -p ${CACHE}/log
-      - mkdir -p ${CACHE}/bin
-      - mkdir -p ${CACHE}/model
-      - echo "prepare API"
-      - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
-      - git clone https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
-      - cat ${CACHE}/ci_job.par
-      - echo "Clean older cached data."
-      - find ${CACHE_ROOT} -type d -mtime +1 -exec rm -rf {} \; || echo "Please, fix this syntax."
+prepare_pipeline_env:
+  stage: .pre
+  extends: .lake
+  before_script:
+    - echo "Nothing to do, but must exist to reset before_script instructions from .lake"
+  script:
+    - echo "Prepare cache & conf in ${CACHE}."
+    - "[[ -d ${CACHE} ]] && rm -rf ${CACHE}"
+    - mkdir -p ${CACHE}
+    - mkdir -p ${CACHE}/trace
+    - mkdir -p ${CACHE}/log
+    - mkdir -p ${CACHE}/bin
+    - mkdir -p ${CACHE}/results
+    - echo "prepare API"
+    - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
+    - git clone https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
+    - cat ${CACHE}/ci_job.par
+    - echo "Clean older cached data."
+    # on ne garde que les 5 derniers
+    - ls -1QAtd ${CACHE_ROOT}/* | tail -n+10 | xargs rm -rf
 
-  pylint:
-    stage: test
-    extends: .python
-    script:
-    - pip install pylint
-    - pylint --rcfile=.pylintrc src/sf_datalake/
-    rules:
-      - changes:
-          - src/sf_datalake/*
-
-  build_package:
-    stage: build
-    extends: .python
-    needs:
-      - job: prepare_pipeline_env
-    script:
-      - pip install -v .
-      - venv-pack -o /packages/${CACHE_KEY}/${PACKAGE}
-
-  send_package_to_lake:
-    stage: deploy
-    extends: .lake
-    needs:
-      - job: build_package
-    script:
-      - echo "Remove old package when possible."
-      - ./api_maacdo.pl
-          -a SuppressionFichier
-          -i ${LAKE_TARGET}
-          -c ${CACHE}/ci_job.par ||
-          echo "Fail removing ${LAKE_TARGET}. Maybe doesn't exist."
-      - echo "Send new python package."
-      - ./api_maacdo.pl
-        -a EnvoyerFichier
-        -l ${CACHE}/${PACKAGE}
-        -i ${LAKE_TARGET}
-        -c ${CACHE}/ci_job.par
-
-  refresh_lake:
-    stage: deploy
-    extends: .lake
-    script:
-      - echo "Clean entry point and models on the lake HDFS."
-      - ./rmRecursifHdfs.sh test
-      - ls -al ${CACHE}
-      - ./api_maacdo.pl
-          -a SuppressionFichier
-          -i ${LAKE_ENTRYPOINT}
-          -c ${CACHE}/ci_job.par ||
-          echo "Fail removing file. Maybe doesn't exist."
-          - echo "Send new python package."
-      - ./api_maacdo.pl
-        -a EnvoyerFichier
-        -l ${SCRIPT}
-        -i ${LAKE_ENTRYPOINT}
-        -c ${CACHE}/ci_job.par
-    rules:
-      - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-
-  start_spark_task:
-    stage: deploy
-    extends: .lake
-    needs:
-      - job: "refresh_lake"
-        optional: true
-      - job: "send_package_to_lake"
-    script:
-      - echo "Launching spark job, getting livy ID."
-      - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${CACHE}/ci_job.par | grep ID |  cut -d: -f2)'
-      - echo ${idLivy} | xargs > ${CACHE}/idLivy
-    rules:
-      - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-
-  wait_for_task_finishing:
-    stage: deploy
-    extends: .lake
-    needs: ["start_spark_task"]
-    script:
-      - export ID_LIVY=$(cat ${CACHE}/idLivy)
-      - |
-        LAST=""
-        while true; do
-          TACHE_SPARK=$(./api_maacdo.pl -a EtatTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
-          STATUS=$(echo ${TACHE_SPARK} | awk '{print $NF}' | tr -dc '[:alnum:]\r\n' | tr '[:lower:]' '[:upper:]')
-          echo "${STATUS}" > ${CACHE}/status_${ID_LIVY}
-          echo "Status of task ${ID_LIVY} is '${STATUS}'"
-          [[ ${STATUS} == 'DEAD' ]] && exit 111
-          [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]] || break
-          LOGS=$(./api_maacdo.pl -a LogsTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
-          CURRENT=$(printf '%s' "${LOGS}" | md5sum)
-          if [[ ${LAST} == ${CURRENT} ]]
-          then
-            echo "No fresh logs, waiting for another 60s."
-          else
-            echo "New available logs:"
-            echo ${LOGS}
-            LAST=${CURRENT}
-            echo "Waiting for another 60s."
-          fi
-          sleep 60
-        done
-    rules:
-      - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-
-  stop_spark_task:
-    stage: deploy
-    extends: .lake
-    needs: ["start_spark_task"]
-    script:
-      - export ID_LIVY=$(cat ${CACHE}/idLivy)
-      - export STATUS=$(cat ${CACHE}/status_${ID_LIVY})
-      - echo "Task ${ID_LIVY} has status ${STATUS}"
-      - |
-        if [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]]
-        then
-          ./api_maacdo.pl -a ArretTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par
-        else
-          echo "Nothing to do"
-        fi
-    rules:
-      - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-        when: manual
-
-  pages:
-    stage: deploy
-    extends: .python
-    script:
-      - pwd
-      - pip install sphinx sphinx-rtd-theme
-      - cd docs/
-      - sphinx-apidoc -f -o source/ ../src/
-      - make html
-      - mv build/html/ ../public/
-  #  artifacts:
-  #    paths:
-  #      - public
-    rules:
-      - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-        changes:
+pylint:
+  stage: test
+  extends: .python
+  script:
+  - pip install pylint
+  - pylint --rcfile=.pylintrc src/sf_datalake/
+  rules:
+    - changes:
         - src/sf_datalake/*
 
-  fetch_yarn_logs:
-    stage: .post
-    extends: .lake
-    needs: ["wait_for_task_finishing"]
-    script:
-      - export ID_LIVY=$(cat ${CACHE}/idLivy)
-      - ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${ID_LIVY} -c ${CACHE}/ci_job.par
-      - |
-        for file in $(ls ${CACHE}/log/yarnLogsTacheSpark_*)
-        do
-          echo " --- log file -> ${file} --- "
-          tail -n 100 ${file}
-          echo " --------------- "
-        done
-    rules:
+build_package:
+  stage: build
+  extends: .python
+  needs:
+    - job: prepare_pipeline_env
+  script:
+    - pip install -v .
+    - venv-pack -o /packages/${CACHE_KEY}/${PACKAGE}
+
+send_package_to_lake:
+  stage: deploy
+  extends: .lake
+  needs:
+    - job: build_package
+  script:
+    - echo "Remove old package when possible."
+    - ./api_maacdo.pl
+        -a SuppressionFichier
+        -i ${LAKE_TARGET}
+        -c ${CACHE}/ci_job.par ||
+        echo "Fail removing ${LAKE_TARGET}. Maybe doesn't exist."
+    - echo "Send new python package."
+    - ./api_maacdo.pl
+      -a EnvoyerFichier
+      -l ${CACHE}/${PACKAGE}
+      -i ${LAKE_TARGET}
+      -c ${CACHE}/ci_job.par
+
+prepare_lake_workspace:
+  stage: deploy
+  extends: .lake
+  script:
+    - ./api_maacdo.pl
+        -a SuppressionFichier
+        -i ${LAKE_ENTRYPOINT}
+        -c ${CACHE}/ci_job.par ||
+        echo "Fail removing file. Maybe doesn't exist."
+    - echo "Send new python script."
+    - ./api_maacdo.pl
+      -a EnvoyerFichier
+      -l ${SCRIPT}
+      -i ${LAKE_ENTRYPOINT}
+      -c ${CACHE}/ci_job.par
+  rules:
     - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-      when: on_failure
 
-  fetch_model:
-    stage: .post
-    extends: .lake
-    needs: ["wait_for_task_finishing"]
-    script:
-      - export ID_LIVY=$(cat ${CACHE}/idLivy)
-      - echo "Should fetch model"
-    rules:
+drop_old_results:
+  stage: deploy
+  extends: .lake
+  script:
+    - echo "Clean entry point and models on the lake HDFS."
+    - ./api_maacdo.pl -a 'CreerRepertoire' -i ${LAKE_WORKSPACE}/${MODEL_OUTPUT} -c ${CACHE}/ci_job.par # pour eviter l'erreur ou le repertoire n'existe pas
+    - bash rmRecursifHdfs.sh ${MODEL_OUTPUT} ${CACHE}/ci_job.par
+  rules:
     - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-      when: on_success
-  #
-  # END of PIPELINE
-  #
 
+start_spark_task:
+  stage: deploy
+  extends: .lake
+  needs:
+    - job: "prepare_lake_workspace"
+    - job: "drop_old_results"
+    - job: "send_package_to_lake"
+  script:
+    - echo "Launch spark job, getting livy ID."
+    - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${CACHE}/ci_job.par | grep ID |  cut -d: -f2)'
+    - echo "Spark task is started with id [$idLivy]"
+    - echo ${idLivy} | xargs > ${CACHE}/idLivy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
 
-  print-docker-env:
-    stage: .pre
-    extends: .python
-    script:
-      - env | sort
-      - pwd
-      - whoami
-      - ls -al /packages
-    when: manual
+wait_for_task_finishing:
+  stage: deploy
+  extends: .lake
+  needs: ["start_spark_task"]
+  script:
+    - export ID_LIVY=$(cat ${CACHE}/idLivy)
+    - |
+      LAST=""
+      while true; do
+        TACHE_SPARK=$(./api_maacdo.pl -a EtatTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
+        STATUS=$(echo ${TACHE_SPARK} | awk '{print $NF}' | tr -dc '[:alnum:]\r\n' | tr '[:lower:]' '[:upper:]')
+        echo "${STATUS}" > ${CACHE}/status_${ID_LIVY}
+        echo "Status of task ${ID_LIVY} is '${STATUS}'"
+        [[ ${STATUS} == 'DEAD' ]] && exit 111
+        [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]] || break
+        LOGS=$(./api_maacdo.pl -a LogsTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
+        CURRENT=$(printf '%s' "${LOGS}" | md5sum)
+        if [[ ${LAST} == ${CURRENT} ]]
+        then
+          echo "No fresh logs, waiting for another 60s."
+        else
+          echo "New available logs:"
+          echo ${LOGS}
+          LAST=${CURRENT}
+          echo "Waiting for another 60s."
+        fi
+        sleep 60
+      done
+  rules:
+    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
 
-  print-shell-env:
-    stage: .pre
-    extends: .lake
-    script:
-      - env | sort
-      - whoami
-      - echo "Files on the nubo VM at ${API_HOME}:"
-      - ls -al
-      - echo "Files on the HDFS at ${LAKE_HOME}:"
-      - ./api_maacdo.pl
-        -a ListContenuRepertoire
-        -i ${LAKE_HOME}
-      - echo "Files in ${CACHE}:"
-      - ls -al ${CACHE}
-    when: manual
+stop_spark_task:
+  stage: deploy
+  extends: .lake
+  needs: ["start_spark_task"]
+  script:
+    - export ID_LIVY=$(cat ${CACHE}/idLivy)
+    - export STATUS=$(cat ${CACHE}/status_${ID_LIVY})
+    - echo "Task ${ID_LIVY} has status ${STATUS}"
+    - |
+      if [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]]
+      then
+        ./api_maacdo.pl -a ArretTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par
+      else
+        echo "Nothing to do"
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+      when: manual
+
+pages:
+  stage: deploy
+  extends: .python
+  script:
+    - pwd
+    - pip install sphinx sphinx-rtd-theme
+    - cd docs/
+    - sphinx-apidoc -f -o source/ ../src/
+    - make html
+    - mv build/html/ ../public/
+#  artifacts:
+#    paths:
+#      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+      changes:
+        - src/sf_datalake/*
+
+fetch_yarn_logs:
+  stage: .post
+  extends: .lake
+  needs: ["wait_for_task_finishing"]
+  script:
+    - export ID_LIVY=$(cat ${CACHE}/idLivy)
+    - ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${ID_LIVY} -c ${CACHE}/ci_job.par
+    - |
+      for file in $(ls ${CACHE}/log/YarnLogsTacheSpark_*)
+      do
+        echo " --- log file -> ${file} --- "
+        tail -n 100 ${file}
+        echo " --------------- "
+      done
+  rules:
+  - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+    when: on_failure
+
+fetch_model:
+  stage: .post
+  extends: .lake
+  needs: ["wait_for_task_finishing"]
+  script:
+    - export ID_LIVY=$(cat ${CACHE}/idLivy)
+    - bash recup_folder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
+    - |
+      for file in ${CACHE}/results/*
+      do
+        # on zippe le csv puis on le supprime en cas de succes
+        zip ${file}.zip ${file} && rm ${file}
+      done
+  rules:
+  - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+
+#
+# END of PIPELINE
+#
+
+print-docker-env:
+  stage: .pre
+  extends: .python
+  script:
+    - env | sort
+    - pwd
+    - whoami
+    - ls -al /packages
+  when: manual
+
+print-shell-env:
+  stage: .pre
+  extends: .lake
+  script:
+    - env | sort
+    - whoami
+    - echo "Files on the nubo VM at $(pwd)"
+    - ls -al
+    - echo "Files on the HDFS at ${LAKE_HOME}:"
+    - ./api_maacdo.pl
+      -a ListContenuRepertoire
+      -i ${LAKE_HOME}
+    - echo "Files in ${CACHE}:"
+    - ls -al ${CACHE}
+  when: manual
