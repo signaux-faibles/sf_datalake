@@ -102,7 +102,7 @@ def explain_LogisticRegression(
     explanation_df = (
         ep.transform(df)
         .rdd.map(lambda r: [r["siren"]] + [float(f) for f in r["eprod"]])
-        .toDF(["siren"] + config["FEATURES_TO_StandardScaler"])
+        .toDF(["siren"] + config["FEATURES_TO_STANDARDSCALER"])
     )
     for group, features in config["MESO_URSSAF_GROUPS"].items():
         explanation_df = explanation_df.withColumn(

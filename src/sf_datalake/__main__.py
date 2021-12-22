@@ -1,5 +1,6 @@
 """Main script for statistical prediction of company failure."""
 
+import argparse
 import logging
 import os
 import sys
@@ -17,15 +18,22 @@ from pyspark.ml import Pipeline
 import sf_datalake.model
 import sf_datalake.preprocessor
 import sf_datalake.transformer
-from sf_datalake.config import get_config
+import sf_datalake.utils
 from sf_datalake.io import load_data, write_output_model
 from sf_datalake.sampler import sample_df
 from sf_datalake.transformer import FormatProbability
-from sf_datalake.utils import instantiate_spark_session
 
-config = get_config("configs/config_base.json")  # [TODO] - Need to adjust the path here
-preprocessor = getattr(sf_datalake.preprocessor, config["PREPROCESSOR"])(config)
-spark = instantiate_spark_session()
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-c",
+    "--config",
+    help="Configuration file name (including '.json' extension).",
+    default="base.json",
+)
+args = parser.parse_args()
+
+config = sf_datalake.utils.get_config(args.config)
+spark = sf_datalake.utils.instantiate_spark_session()
 
 # Prepare data
 
@@ -43,6 +51,7 @@ logging.info("Aggregating data at the SIREN level")
 logging.info("Feature engineering")
 logging.info("Creating objective variable 'failure_within_18m'")
 logging.info("Filtering out firms on 'effectif' and 'code_naf' variables.")
+preprocessor = getattr(sf_datalake.preprocessor, config["PREPROCESSOR"])(config)
 indics_annuels = preprocessor.run(indics_annuels)
 
 logging.info(
