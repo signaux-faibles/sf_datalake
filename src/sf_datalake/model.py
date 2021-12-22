@@ -50,16 +50,6 @@ def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
     return factory[model_config["MODEL_NAME"]]
 
 
-@F.udf(returnType=StringType())
-def get_max_value_colname(meso_features, max_col):
-    """Extract the column name where the nth highest value is found."""
-    row = F.array(meso_features)
-    for i, name in enumerate(meso_features):
-        if row[i] == max_col:
-            return name
-    raise NameError(f"Could not find columns associated to {max_col}")
-
-
 def explain(
     config: dict, model: pyspark.ml.Model, df: pyspark.sql.DataFrame
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
@@ -142,18 +132,26 @@ def explain_LogisticRegression(
         )
     )
 
+    @F.udf(returnType=StringType())
+    def get_max_value_colname(row, max_col):
+        """Extract the column name where the nth highest value is found."""
+        for i, name in enumerate(meso_features):
+            if row[i] == max_col:
+                return name
+        raise NameError(f"Could not find columns associated to {max_col}")
+
     explanation_df = (
         explanation_df.withColumn(
             "1st_concerning_feat",
-            get_max_value_colname(meso_features, "1st_concerning_val"),
+            get_max_value_colname(F.array(meso_features), "1st_concerning_val"),
         )
         .withColumn(
             "2nd_concerning_feat",
-            get_max_value_colname(meso_features, "2nd_concerning_val"),
+            get_max_value_colname(F.array(meso_features), "2nd_concerning_val"),
         )
         .withColumn(
             "3rd_concerning_feat",
-            get_max_value_colname(meso_features, "3rd_concerning_val"),
+            get_max_value_colname(F.array(meso_features), "3rd_concerning_val"),
         )
     )
     micro_scores_columns = [
