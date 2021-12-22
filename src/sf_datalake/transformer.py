@@ -1,6 +1,6 @@
-"""Transformer class.
+"""Transformer utilities and classes.
 
-Transformer is an abstract class to define different transformers.
+Transformer is a pyspark abstract class that defines different data transformers.
 """
 from typing import List
 
@@ -12,11 +12,12 @@ from pyspark.sql.types import FloatType
 
 
 def generate_stages(config: dict) -> List[Transformer]:
-    """Generate all stages related to Transformers. Ready to be
-    included in a pyspark.ml.Pipeline.
+    """Generates all stages related to Transformer objects.
+
+    The stages are ready to be included in a pyspark.ml.Pipeline.
 
     Args:
-        config : the config parameters (see config.get_config())
+        config : the config parameters (see utils.get_config())
 
     Returns:
         List of prepared Transformers.
@@ -72,7 +73,8 @@ class FormatProbability(Transformer):  # pylint: disable=R0903
             dataset: DataFrame to transform
 
         Returns:
-            transformed DataFrame
+            Transformed DataFrame with casted probability data.
+
         """
         transform_udf = F.udf(lambda v: float(v[1]), FloatType())
         return dataset.withColumn("probability", transform_udf("probability"))
