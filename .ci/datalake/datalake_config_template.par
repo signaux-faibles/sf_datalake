@@ -4,33 +4,41 @@ mdpconx=${API_MAACDO_PWD}
 trace=0
 dumptrace=0
 aide=0
-reptrdplg=${CACHE}/trace/
+reptrdplg=/tmp/
 
 [ArretTacheSpark]
-logout=${CACHE}/log/arretTacheSpark_
+#logout=${CACHE}/log/ArretTacheSpark_
+
+[CreerRepertoire]
+#logout=${CACHE}/log/CreerRepertoire_
 
 [DemarrageTacheSpark]
 data={  "file": "$LAKE_HOME/main.py",  "executorMemory":"2g",  "executorCores": 2, "numExecutors": 2, "driverMemory": "5g", "driverCores": 2, "queue":"TSF", "archives": ["$LAKE_TARGET#venv"]}
-logout=${CACHE}/log/demarrageTacheSpark_
+#data={  "file": "$LAKE_HOME/main.py",  "executorMemory":"8g", "executorCores": 5, "numExecutors": 5, "driverMemory": "10g", "driverCores": 2, "queue":"TSF", "archives": ["$LAKE_TARGET#venv"]}
+#logout=${CACHE}/log/DemarrageTacheSpark_
 
 [EnvoyerFichier]
-# nothing to override, but must be declared
+# in this case, must precise an existing file
+#logout=${CACHE}/log/EnvoyerFichier_
 
 [EtatTacheSpark]
-logout=${CACHE}/log/etatTacheSpark_
+#logout=${CACHE}/log/EtatTacheSpark_
 
 [ListContenuRepertoire]
 # nothing to override, but must be declared
 
 [LogsTacheSpark]
-logout=${CACHE}/log/logsTacheSpark_
+#logout=${CACHE}/log/LogsTacheSpark_
+
+[RecuperationFichier]
+#logout=${CACHE}/log/RecuperationFichier_
 
 [SuiviTacheSpark]
-logout=${CACHE}/log/SuiviTacheSpark_
+#logout=${CACHE}/log/SuiviTacheSpark_
 
 [SuppressionFichier]
-# nothing to override, but must be declared
+#logout=${CACHE}/log/SuppressionFichier_
 
 [YarnLogsTacheSpark]
 # CAUTION this variable is used in in gitlab-ci.yml
-logout=${CACHE}/log/yarnLogsTacheSpark_
+logout=${CACHE}/log/YarnLogsTacheSpark_
