@@ -24,7 +24,7 @@ class Preprocessor(abc.ABC):
         """The class constructor.
 
         Args:
-            config: the config parameters (see config.get_config())
+            config: the config parameters (see sf_datalake.utils.get_config())
         """
         self.config = config
 

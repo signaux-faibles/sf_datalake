@@ -16,7 +16,7 @@ def generate_stages(config: dict) -> List[Transformer]:
     included in a pyspark.ml.Pipeline.
 
     Args:
-        config : the config parameters (see config.get_config())
+        config : the config parameters (see sf_datalake.utils.get_config())
 
     Returns:
         List of prepared Transformers.
