@@ -61,11 +61,11 @@ def explain(
         - first, a DataFrame with the contribution of groups of features (macro)
         - second, a DataFrame with the TOP3 contributions of the features (micro)
     """
-    factory = {"LogisticRegression": explain_LogisticRegression}
+    factory = {"LogisticRegression": explain_logistic_regression}
     return factory[config["MODEL"]["MODEL_NAME"]](config, model, df)
 
 
-def explain_LogisticRegression(
+def explain_logistic_regression(
     config: dict, model: pyspark.ml.Model, df: pyspark.sql.DataFrame
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
     """Compute the contribution of multiples groups of features and the TOP3
