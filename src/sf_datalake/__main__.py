@@ -21,7 +21,7 @@ import sf_datalake.transformer
 import sf_datalake.utils
 from sf_datalake.io import load_data, write_output_model
 from sf_datalake.sampler import sample_df
-from sf_datalake.transformer import FormatProbability
+from sf_datalake.transformer import ProbabilityFormatter
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -76,8 +76,8 @@ logging.info(
 
 stages = []
 stages += sf_datalake.transformer.generate_stages(config)
-stages += [sf_datalake.model.generate_stage(config)]
-stages += [FormatProbability()]
+stages += sf_datalake.model.generate_stages(config)
+stages += [ProbabilityFormatter()]
 
 pipeline = Pipeline(stages=stages)
 pipeline_model = pipeline.fit(data_train)

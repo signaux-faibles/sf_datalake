@@ -3,17 +3,15 @@
 Model is an abstract class to define different models.
 """
 
-from typing import Tuple
+from typing import List, Tuple
 
 import pyspark.ml
 import pyspark.ml.classification
 import pyspark.sql.functions as F
 from pyspark.sql.types import StringType
 
-from sf_datalake.transformer import FormatProbability
 
-
-def generate_stage(config: dict) -> pyspark.ml.Model:
+def generate_stages(config: dict) -> List[pyspark.ml.Model]:
     """Generate stage related to Model. Ready to be
     included in a pyspark.ml.Pipeline.
 
@@ -23,9 +21,7 @@ def generate_stage(config: dict) -> pyspark.ml.Model:
     Returns:
         A prepared Model.
     """
-    stages = []
-    stages += [get_model_from_conf(config["MODEL"])]
-    stages += [FormatProbability()]
+    stages = [get_model_from_conf(config["MODEL"])]
     return stages
 
 
