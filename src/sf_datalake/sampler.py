@@ -16,7 +16,7 @@ def sample_df(
 
     Args:
         df: the DataFrame to sample
-        config: the config parameters (see sf_datalake.utils.get_config())
+        config: the config parameters (see utils.get_config())
 
     Returns:
         3 DataFrames, one for each of the following part: learn, test, prediction.

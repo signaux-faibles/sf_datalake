@@ -18,7 +18,7 @@ def generate_stage(config: dict) -> pyspark.ml.Model:
     included in a pyspark.ml.Pipeline.
 
     Args:
-        config : the config parameters (see sf_datalake.utils.get_config())
+        config : the config parameters (see utils.get_config())
 
     Returns:
         A prepared Model.
@@ -57,7 +57,7 @@ def explain(
        individual features depending of the model used.
 
     Args:
-        config: the config parameters (see sf_datalake.utils.get_config())
+        config: the config parameters (see utils.get_config())
         model: the model fit in the pipeline
         df: prediction sample
 
@@ -78,7 +78,7 @@ def explain_LogisticRegression(
     Args:
         model: the model fit in the pipeline
         df: prediction sample
-        config: the config parameters (see sf_datalake.utils.get_config())
+        config: the config parameters (see utils.get_config())
 
     Returns:
         - first, a DataFrame with the contribution of groups of features (macro)
