@@ -82,7 +82,9 @@ class Preprocessor(abc.ABC):
             The DataFrame with a new "paydex_yoy" column.
 
         """
-        # TODO check if paydex_nb_jours, paydex_nb_jours_past_12 exists?
+        assert "paydex_nb_jours" in data.columns
+        assert "paydex_nb_jours_past_12" in data.columns
+
         return data.withColumn(
             "paydex_yoy", data["paydex_nb_jours"] - data["paydex_nb_jours_past_12"]
         )
@@ -106,6 +108,8 @@ class Preprocessor(abc.ABC):
             The DataFrame with a new "paydex_group" column.
 
         """
+        assert input_col in data.columns
+
         qds = pyspark.ml.feature.QuantileDiscretizer(
             inputCol=input_col,
             outputCol=output_col,
