@@ -14,17 +14,13 @@ from pyspark.sql.types import FloatType
 def generate_stages(config: dict) -> List[Transformer]:
     """Generates all stages related to Transformer objects.
 
-        The stages are ready to be included in a pyspark.ml.Pipeline.
+    The stages are ready to be included in a pyspark.ml.Pipeline.
 
-        Args:
-    <<<<<<< HEAD
-            config : the config parameters (see sf_datalake.utils.get_config())
-    =======
-            config : the config parameters (see utils.get_config())
-    >>>>>>> 0a132954c2d53b1d5fc724d91e921f5817133c43
+    Args:
+        config : the config parameters (see utils.get_config())
 
-        Returns:
-            List of prepared Transformers.
+    Returns:
+        List of prepared Transformers.
     """
     stages = []
     transformed_features = []
