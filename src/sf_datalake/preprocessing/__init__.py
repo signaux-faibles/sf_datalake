@@ -1,11 +1,7 @@
 """Defines data paths and file names on the datalake.
 """
 
-from os import path
-
-OUTPUT_ROOT_DIR = "/projets/TSF/donnees"
-DATA_ROOT_DIR = "/projets/TSF/sources"
-VUES_DIR = path.join(DATA_ROOT_DIR, "livraison_MRV-DTNUM_juin_2021")
+VUES_DIR = "/projets/TSF/sources/livraison_MRV-DTNUM_juin_2021"
 
 ETL_FILES = [
     "etl_associe-ref_groupe_france",

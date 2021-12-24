@@ -97,7 +97,9 @@ def write_output_model(
         if colname.startswith("features_")
     ]
     columns_to_drop += ["features", "prediction", "rawPrediction", "failure_within_18m"]
-    prediction_data.drop(columns_to_drop).write.csv(prediction_output_path, header=True)
+    prediction_data.drop(*columns_to_drop).write.csv(
+        prediction_output_path, header=True
+    )
 
     logging.info("Writing concerning features to file %s", concerning_output_path)
     micro_scores_df.write.csv(concerning_output_path, header=True)
