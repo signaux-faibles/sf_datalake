@@ -1,6 +1,4 @@
 """Transformer utilities and classes.
-
-Transformer is a pyspark abstract class that defines different data transformers.
 """
 from typing import List
 
@@ -24,7 +22,7 @@ def generate_stages(config: dict) -> List[Transformer]:
     """
     stages = []
     transformed_features = []
-    for (features, transformer_name) in config["TRANSFORMERS"]:
+    for [features, transformer_name] in config["TRANSFORMERS"]:
         outputCol = f"features_to_transform_{transformer_name}"
         vector_assembler = VectorAssembler(
             inputCols=features,

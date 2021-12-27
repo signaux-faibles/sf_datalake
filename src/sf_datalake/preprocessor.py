@@ -1,303 +1,407 @@
-"""Preprocessor class.
-
-Preprocessor is an abstract class to define different preprocessors.
+"""Preprocessor utilities and classes.
 """
-
-import abc
 from functools import reduce
-from typing import Iterable
+from typing import Iterable, List
 
 import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
+from pyspark.ml import Transformer
 from pyspark.sql.types import StringType
 from pyspark.sql.window import Window
 
 
-class Preprocessor(abc.ABC):
-    """Abstract class as an interface for subclasses that represent
-    different preprocessors. A preprocessor handles all basic data
-    treatments before feeding data to a model. It also contains static
-    methods useful for subclasses."""
+def parse_date(
+    df: pyspark.sql.DataFrame, colnames: Iterable[str]
+) -> pyspark.sql.DataFrame:
+    """Parse multiple columns of a pyspark.sql.DataFrame as date.
 
-    def __init__(self, config: dict):
-        """The class constructor.
+    Args:
+        df: A DataFrame with dates represented as "yyyyMMdd" strings or integers.
+        colnames : Names of the columns to parse.
 
-        Args:
-            config: the config parameters (see utils.get_config())
-        """
-        self.config = config
+    Returns:
+        A new DataFrame with date columns as pyspark date types.
 
-    @abc.abstractmethod
-    def run(self, df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Compute the treatments."""
+    """
+    for name in colnames:
+        df = df.withColumn(name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd"))
+    return df
 
-    @staticmethod
-    def avg_delta_debt_per_size(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+
+def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+    """Compute the number of payments.
+
+    Args:
+        df: A DataFrame containing payment data.
+
+    Returns:
+        A DataFrame with a new "nb_paiement" column.
+
+    """
+    df = df.withColumn("mvt_djc_int", F.unix_timestamp(F.col("mvt_djc")))
+    df = df.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
+        ["frp", "art_cleart", "mvt_deff"]
+    )
+    df = (
+        df.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
+        .select(["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"])
+        .withColumnRenamed("min(mvt_djc_int)", "min_mvt_djc_int")
+        .withColumnRenamed("sum(mvt_mcrd)", "sum_mvt_mcrd")
+        .dropDuplicates()
+    )
+
+    windowval = (
+        Window.partitionBy("art_cleart")
+        .orderBy(["frp", "min_mvt_djc_int"])
+        .rangeBetween(Window.unboundedPreceding, 0)
+    )
+    df = (
+        df.filter("sum_mvt_mcrd != 0")
+        .withColumn("mnt_paiement_cum", F.sum("sum_mvt_mcrd").over(windowval))
+        .withColumn("nb_paiement", F.count("sum_mvt_mcrd").over(windowval))
+        .dropDuplicates()
+    )
+    return df
+
+
+class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to compute the average change in social debt / nb of employees."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Computes the average change in social debt / nb of employees.
 
         Args:
-            data: A DataFrame containing debt and company size ("effectif") data.
+            dataset: DataFrame to transform containing debt and company size ("effectif") data.
 
         Returns:
-            A DataFrame with an extra `avg_delta_dette_par_effectif` column.
+            Transformed DataFrame with an extra `avg_delta_dette_par_effectif` column.
 
         """
-        # TODO check if montant_part_ouvriere, montant_part_patronale,
-        # montant_part_ouvriere_past_3, montant_part_patronale_past_3 exists?
-        data = data.withColumn(
+        assert "montant_part_ouvriere" in dataset.columns
+        assert "montant_part_patronale" in dataset.columns
+        assert "montant_part_ouvriere_past_3" in dataset.columns
+        assert "montant_part_patronale_past_3" in dataset.columns
+        assert "effectif" in dataset.columns
+
+        dataset = dataset.withColumn(
             "dette_par_effectif",
-            (data["montant_part_ouvriere"] + data["montant_part_patronale"])
-            / data["effectif"],
+            (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
+            / dataset["effectif"],
         )
         # TODO replace([np.nan, np.inf, -np.inf], 0)
 
-        data = data.withColumn(
+        dataset = dataset.withColumn(
             "dette_par_effectif_past_3",
             (
-                data["montant_part_ouvriere_past_3"]
-                + data["montant_part_patronale_past_3"]
+                dataset["montant_part_ouvriere_past_3"]
+                + dataset["montant_part_patronale_past_3"]
             )
-            / data["effectif"],
+            / dataset["effectif"],
         )
         # TODO replace([np.nan, np.inf, -np.inf], 0)
 
-        data = data.withColumn(
+        dataset = dataset.withColumn(
             "avg_delta_dette_par_effectif",
-            (data["dette_par_effectif"] - data["dette_par_effectif_past_3"]) / 3,
+            (dataset["dette_par_effectif"] - dataset["dette_par_effectif_past_3"]) / 3,
         )
 
         drop_columns = ["dette_par_effectif", "dette_par_effectif_past_3"]
-        return data.drop(*drop_columns)
+        return dataset.drop(*drop_columns)
 
-    @staticmethod
-    def make_paydex_yoy(data: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Computes a new column for the dataset containing the year-over-year
+
+class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to compute the debt ratio."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Computes the debt ratio.
 
         Args:
-            data: A DataFrame object with "paydex_nb_jours" and "paydex_nb_jours_past_12"
-            columns.
+            dataset: DataFrame to transform.
 
         Returns:
-            The DataFrame with a new "paydex_yoy" column.
+            Transformed DataFrame with an extra `ratio_dette` column.
 
         """
-        assert "paydex_nb_jours" in data.columns
-        assert "paydex_nb_jours_past_12" in data.columns
+        assert "montant_part_ouvriere" in dataset.columns
+        assert "montant_part_patronale" in dataset.columns
+        assert "cotisation_moy12m" in dataset.columns
 
-        return data.withColumn(
-            "paydex_yoy", data["paydex_nb_jours"] - data["paydex_nb_jours_past_12"]
+        dataset = dataset.withColumn(
+            "ratio_dette",
+            (dataset.montant_part_ouvriere + dataset.montant_part_patronale)
+            / dataset.cotisation_moy12m,
+        )
+        return dataset
+
+
+class PaydexYoyColumnAdder(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to compute the year over year values with Paydex data."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Computes the year over year values with Paydex data.
+
+        Args:
+            dataset: DataFrame to transform containing "paydex_nb_jours" and
+                     "paydex_nb_jours_past_12" columns.
+
+        Returns:
+            Transformed DataFrame with an extra `paydex_yoy` column.
+
+        """
+        assert "paydex_nb_jours" in dataset.columns
+        assert "paydex_nb_jours_past_12" in dataset.columns
+
+        return dataset.withColumn(
+            "paydex_yoy",
+            dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
         )
 
-    @staticmethod
-    def make_paydex_bins(
-        data: pyspark.sql.DataFrame,
-        input_col: str = "paydex_nb_jours",
-        output_col: str = "paydex_bins",
-        num_buckets: int = 6,
-    ) -> pyspark.sql.DataFrame:
+
+class PaydexGroupColumnAdder(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to cut paydex number of days data into quantile bins."""
+
+    def __init__(self, num_buckets) -> None:
+        super().__init__()
+        self.num_buckets = num_buckets
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Cuts paydex number of days data into quantile bins.
 
         Args:
-            data: A pyspark.sql.DataFrame object.
-            input_col: The name of the input column containing number of late days.
-            output_col: The name of the output binned data column.
-            num_buckets: Number of bins.
+            dataset: DataFrame to transform containing "paydex_nb_jours".
 
         Returns:
-            The DataFrame with a new "paydex_group" column.
+            Transformed DataFrame with an extra `paydex_bins` column.
 
         """
-        assert input_col in data.columns
+        assert "paydex_nb_jours" in dataset.columns
 
         qds = pyspark.ml.feature.QuantileDiscretizer(
-            inputCol=input_col,
-            outputCol=output_col,
+            inputCol="paydex_nb_jours",
+            outputCol="paydex_bins",
             handleInvalid="error",
-            numBuckets=num_buckets,
+            numBuckets=self.num_buckets,
         )
-        return qds.fit(data).transform(data)
+        return qds.fit(dataset).transform(dataset)
 
-    @staticmethod
-    def parse_date(
-        df: pyspark.sql.DataFrame, colnames: Iterable[str]
-    ) -> pyspark.sql.DataFrame:
-        """Parse multiple columns of a pyspark.sql.DataFrame as date.
+
+class MissingValuesHandler(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to handle missing values."""
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Fill missing values by the median or a specific value (see config['DEFAULT_VALUES']).
 
         Args:
-            df: A DataFrame with dates represented as "yyyyMMdd" strings or integers.
-            colnames : Names of the columns to parse.
+            dataset: DataFrame to transform containing missing values.
 
         Returns:
-            A new DataFrame with date columns as pyspark date types.
+            Transformed DataFrame with missing values completed.
 
         """
-        for name in colnames:
-            df = df.withColumn(
-                name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd")
-            )
-        return df
+        assert "FEATURES" in self.config
+        assert "FILL_MISSING_VALUES" in self.config
+        assert "DEFAULT_VALUES" in self.config
+        assert "time_til_failure" in dataset.columns
 
-    @staticmethod
-    def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Compute the number of payments.
-
-        Args:
-            df: A DataFrame containing payment data.
-
-        Returns:
-            A DataFrame with a new "nb_paiement" column.
-
-        """
-        df = df.withColumn("mvt_djc_int", F.unix_timestamp(F.col("mvt_djc")))
-        df = df.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
-            ["frp", "art_cleart", "mvt_deff"]
-        )
-        df = (
-            df.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
-            .select(["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"])
-            .withColumnRenamed("min(mvt_djc_int)", "min_mvt_djc_int")
-            .withColumnRenamed("sum(mvt_mcrd)", "sum_mvt_mcrd")
-            .dropDuplicates()
-        )
-
-        windowval = (
-            Window.partitionBy("art_cleart")
-            .orderBy(["frp", "min_mvt_djc_int"])
-            .rangeBetween(Window.unboundedPreceding, 0)
-        )
-        df = (
-            df.filter("sum_mvt_mcrd != 0")
-            .withColumn("mnt_paiement_cum", F.sum("sum_mvt_mcrd").over(windowval))
-            .withColumn("nb_paiement", F.count("sum_mvt_mcrd").over(windowval))
-            .dropDuplicates()
-        )
-        return df
-
-
-class BasePreprocessor(Preprocessor):
-    """The basic preprocessor proceeds to the following steps:
-    - Fill missing values by the median or a specific value (see config['SF_DEFAULT_VALUES'])
-    - Aggregate at a SIREN level by sum or average
-    - Data featuring:
-            o creating ratio of the average debt
-            o creating the objective variable 'failure_within_18m'
-    - Filtering out firms on 'effectif' and 'code_naf' variables such that:
-      effectif >= 10 AND code_naf NOT IN ('O', 'P')
-    """
-
-    def run(self, df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        ### Default values for missing data
-        non_ratio_variables = list(
-            filter(lambda x: x[:3] != "RTO", self.config["MRV_VARIABLES"])
-        )
         ratio_variables = list(
-            filter(lambda x: x[:3] == "RTO", self.config["MRV_VARIABLES"])
+            filter(lambda x: x[:3] == "RTO", self.config["FEATURES"])
         )
+        if ratio_variables:
+            ratio_default_values = {}
+            data_medians = reduce(
+                lambda x, y: x + y, dataset.approxQuantile(ratio_variables, [0.5], 0.05)
+            )
+            for var, med in zip(ratio_variables, data_medians):
+                ratio_default_values[var] = med
 
-        mrv_default_values = {v: 0.0 for v in non_ratio_variables}
-        data_medians = reduce(
-            lambda x, y: x + y, df.approxQuantile(ratio_variables, [0.5], 0.05)
-        )
-        for var, med in zip(ratio_variables, data_medians):
-            mrv_default_values[var] = med
-
-        default_data_values = dict(
-            **mrv_default_values, **self.config["SF_DEFAULT_VALUES"]
-        )
-
-        if self.config["FILL_MISSING_VALUES"]:
-            df = df.fillna(
-                {k: v for (k, v) in default_data_values.items() if k in df.columns}
+            default_data_values = dict(
+                **ratio_default_values, **self.config["DEFAULT_VALUES"]
             )
         else:
-            df = df.fillna(
+            default_data_values = self.config["DEFAULT_VALUES"]
+
+        if self.config["FILL_MISSING_VALUES"]:
+            dataset = dataset.fillna(
+                {k: v for (k, v) in default_data_values.items() if k in dataset.columns}
+            )
+        else:
+            dataset = dataset.fillna(
                 {
-                    "time_til_failure": self.config["SF_DEFAULT_VALUES"][
+                    "time_til_failure": self.config["DEFAULT_VALUES"][
                         "time_til_failure"
                     ],
                 }
             )
+            variables_to_dropna = [
+                x for x in self.config["FEATURES"] if x in dataset.columns
+            ]
+            dataset = dataset.dropna(subset=tuple(variables_to_dropna))
+        return dataset
 
-        ### Aggregation at SIREN level.
-        # Signaux faibles variables
-        df_sf = df.select(
-            *(
-                set(
-                    self.config["SUM_VARIABLES"]
-                    + self.config["AVG_VARIABLES"]
-                    + self.config["BASE_VARIABLES"]
-                )
-            )
-        )
 
-        # Sums
-        gb_sum = df_sf.groupBy("siren", "periode").sum(*self.config["SUM_VARIABLES"])
-        for col_name in self.config["SUM_VARIABLES"]:
-            gb_sum = gb_sum.withColumnRenamed(f"sum({col_name})", col_name)
+class SirenAggregator(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to aggregate data at a SIREN level."""
 
-        # Averages
-        gb_avg = df_sf.groupBy("siren", "periode").avg(*self.config["AVG_VARIABLES"])
-        for col_name in self.config["AVG_VARIABLES"]:
-            gb_avg = gb_avg.withColumnRenamed(f"avg({col_name})", col_name)
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Aggregate data at a SIREN level by sum or average.
+
+        Args:
+            dataset: DataFrame to transform containing data at a SIRET level.
+
+        Returns:
+            Transformed DataFrame at a SIREN level.
+
+        """
+        assert "BASE_FEATURES" in self.config
+        assert "FEATURES" in self.config
+        assert "AGG_DICT" in self.config
+        assert "siren" in dataset.columns
+        assert "periode" in dataset.columns
+
+        no_agg_colnames = [
+            feat
+            for feat in self.config["FEATURES"]
+            if (not feat in self.config["AGG_DICT"]) and (feat in dataset.columns)
+        ]  # already at SIREN level
+        groupby_colnames = self.config["BASE_FEATURES"] + no_agg_colnames
+        # TODO problem here: code_naf and time_til_failure are not unique for one
+        # SIREN: example for code_naf see siren 311403976, is it ok?
+
+        dataset = dataset.groupBy(*(set(groupby_colnames))).agg(self.config["AGG_DICT"])
+        for colname, func in self.config["AGG_DICT"].items():
+            if func == "mean":
+                func = "avg"  # groupBy mean produces variables such as avg(colname)
+            dataset = dataset.withColumnRenamed(f"{func}({colname})", colname)
 
         ### TODO : ratio_dette_moyenne12m should be computed from the
         ### aggregated ratio_dette variable.
-        # w = df_sf.groupBy("siren", F.window(df.periode - 365
+        # w = dataset.groupBy("siren", F.window(dataset.periode - 365
         # days, "365 days")).avg("ratio_dette")
+        return dataset
 
-        # Joining grouped data
-        df_sf = (
-            df_sf.drop(
-                *(set(self.config["SUM_VARIABLES"] + self.config["AVG_VARIABLES"]))
-            )
-            .join(gb_sum, on=["siren", "periode"])
-            .join(gb_avg, on=["siren", "periode"])
+
+class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to aggregate data at a SIREN level."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Create the objective variable `failure_within_18m` and cast it as integer.
+
+        Args:
+            dataset: DataFrame to transform containing `time_til_failure` variable.
+
+        Returns:
+            Transformed DataFrame with an extra `failure_within_18m` column.
+
+        """
+        assert "time_til_failure" in dataset.columns
+
+        dataset = dataset.withColumn(
+            "failure_within_18m", dataset["time_til_failure"] <= 18
         )
+        dataset = dataset.withColumn(
+            "failure_within_18m", dataset.failure_within_18m.astype("integer")
+        )  # Needed  for models
+        return dataset
 
-        ### Feature engineering
-        # delta_dette_par_effectif
-        df_sf = Preprocessor.avg_delta_debt_per_size(df_sf)
 
-        # ratio_dette : real computation after sum
-        df_sf = df_sf.withColumn(
-            "ratio_dette",
-            (df_sf.montant_part_ouvriere + df_sf.montant_part_patronale)
-            / df_sf.cotisation_moy12m,
-        )
+class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to select the columns of the dataset used in the model."""
 
-        df_sf = df_sf.dropDuplicates(["siren", "periode"])
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
 
-        # DGFIP Variables
-        df_dgfip = df.select(
-            *(set(self.config["MRV_VARIABLES"]) | {"siren", "periode"})
-        ).dropDuplicates(["siren", "periode"])
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Select the columns of the dataset used in the model.
 
-        # Joining data
-        df = df_sf.join(df_dgfip, on=["siren", "periode"])
+        Args:
+            dataset: DataFrame to select columns from.
 
-        if self.config["FILL_MISSING_VALUES"]:
-            df = df.fillna(
-                {k: v for (k, v) in default_data_values.items() if k in df.columns}
-            )
-        else:
-            df = df.dropna(subset=tuple(self.config["FEATURES"]))
+        Returns:
+            Transformed DataFrame.
 
-        # Creating objective variable 'failure_within_18m'
-        df = df.withColumn("failure_within_18m", df["time_til_failure"] <= 18)
+        """
+        assert "BASE_FEATURES" in self.config
+        assert "FEATURES" in self.config
+        assert "TARGET_FEATURE" in self.config
 
-        # Filtering out firms on 'effectif' and 'code_naf' variables.
-        df = df.select(
+        dataset = dataset.select(
             *(
                 set(
-                    self.config["BASE_VARIABLES"]
+                    self.config["BASE_FEATURES"]
                     + self.config["FEATURES"]
-                    + self.config["TARGET_VARIABLE"]
+                    + self.config["TARGET_FEATURE"]
                 )
             )
-        ).filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
+        )
+        return dataset
 
-        df = df.withColumn(
-            "failure_within_18m", df.failure_within_18m.astype("integer")
-        )  # Needed  for models
-        return df
+
+class DatasetFilter(Transformer):  # pylint: disable=R0903
+    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
+    """A transformer to filter the dataset."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Filter the dataset by filtering out firms on 'effectif' and 'code_naf' variables.
+
+        Args:
+            dataset: DataFrame to transform/filter.
+
+        Returns:
+            Transformed/filtered DataFrame.
+
+        """
+        assert "effectif" in dataset.columns
+        assert "code_naf" in dataset.columns
+
+        return dataset.filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
+
+
+def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
+    """Generate stage related to the preprocessing to be transformed in a preprocessing pipeline.
+
+    Args:
+        config : the config parameters (see utils.get_config())
+
+    Returns:
+        List of the preprocessing stages.
+    """
+    stages = [
+        MissingValuesHandler(config),
+        SirenAggregator(config),
+        AvgDeltaDebtPerSizeColumnAdder(),
+        DebtRatioColumnAdder(),
+        TargetVariableColumnAdder(),
+        DatasetColumnSelector(config),
+        DatasetFilter(),
+    ]
+    # TODO: "siren='347546970' AND periode='2021-01-01 01:00:00'"
+    # => should be kept (was not the case before)
+    # TODO: indics_annuels.filter(
+    #           "siren='397988239' AND periode='2016-06-01 02:00:00'"
+    #       ).select(
+    #           ["siret", "siren", "periode", "code_naf", "time_til_failure",
+    #            "effectif", "MNT_AF_BFONC_BFR","MNT_AF_BFONC_TRESORERIE",
+    #            "RTO_AF_RATIO_RENT_MBE","MNT_AF_BFONC_FRNG","MNT_AF_CA",
+    #            "MNT_AF_SIG_EBE_RET","RTO_AF_RENT_ECO","RTO_AF_SOLIDITE_FINANCIERE",
+    #            "RTO_INVEST_CA"]).show()
+    # => duplicate SIRET, mutiple MRV values => Need also an agg function OR Error?
+    # => before effectif was aggregated and this data was kept in study but should it be?
+    return stages

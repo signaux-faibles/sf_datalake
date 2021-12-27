@@ -116,7 +116,7 @@ tac_base = df.join(
     df_ante,
     on=[
         df_ante.siren_ante == df.siren,
-        df_ante.per_rank_ante + 2 == df.per_rank,  # TODO: pas compris ce que ça fait
+        df_ante.per_rank_ante + 2 == df.per_rank,
     ],
     how="left",
 )

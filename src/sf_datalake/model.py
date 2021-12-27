@@ -1,6 +1,4 @@
-"""Model class.
-
-Model is an abstract class to define different models.
+"""Model utilities and classes.
 """
 
 from typing import List, Tuple
@@ -90,7 +88,7 @@ def explain_logistic_regression(
     # Get feature influence
     ep = (
         pyspark.ml.feature.ElementwiseProduct()
-    )  # [TODO] Will need so adjustments because this line needs a SparkContext initialized
+    )  # [TODO] Will need so adjustments because this line needs a SparkContext initialized, assert?
     ep.setScalingVec(model.coefficients)
     ep.setInputCol("features")
     ep.setOutputCol("eprod")

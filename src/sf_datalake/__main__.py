@@ -21,7 +21,6 @@ import sf_datalake.transformer
 import sf_datalake.utils
 from sf_datalake.io import load_data, write_output_model
 from sf_datalake.sampler import sample_df
-from sf_datalake.transformer import ProbabilityFormatter
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -45,14 +44,10 @@ indics_annuels = load_data(
     }
 )["indics_annuels"]
 
-if config["FILL_MISSING_VALUES"]:
-    logging.info("Filling missing values with default values.")
-logging.info("Aggregating data at the SIREN level")
-logging.info("Feature engineering")
-logging.info("Creating objective variable 'failure_within_18m'")
-logging.info("Filtering out firms on 'effectif' and 'code_naf' variables.")
-preprocessor = getattr(sf_datalake.preprocessor, config["PREPROCESSOR"])(config)
-indics_annuels = preprocessor.run(indics_annuels)
+pipeline_preprocessor = Pipeline(
+    stages=sf_datalake.preprocessor.generate_stages(config)
+)
+indics_annuels = pipeline_preprocessor.fit(indics_annuels).transform(indics_annuels)
 
 logging.info(
     "Creating oversampled training set with positive examples ratio %.1f",
@@ -77,7 +72,7 @@ logging.info(
 stages = []
 stages += sf_datalake.transformer.generate_stages(config)
 stages += sf_datalake.model.generate_stages(config)
-stages += [ProbabilityFormatter()]
+stages += [sf_datalake.transformer.ProbabilityFormatter()]
 
 pipeline = Pipeline(stages=stages)
 pipeline_model = pipeline.fit(data_train)
