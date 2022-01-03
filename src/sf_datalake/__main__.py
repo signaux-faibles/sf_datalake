@@ -79,28 +79,29 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     )  # TODO: Create an array attribute in the config file that lists all the
     # parameters related to the model. Then adjust logging to be more generic.
 
-    stages = []
-    stages += sf_datalake.transformer.generate_stages(config)
-    stages += sf_datalake.model.generate_stages(config)
-    stages += [sf_datalake.transformer.ProbabilityFormatter()]
+    stages = [
+        sf_datalake.transformer.generate_stages(config)
+        + sf_datalake.model.generate_stages(config)
+        + [sf_datalake.transformer.ProbabilityFormatter()]
+    ]
 
     pipeline = Pipeline(stages=stages)
-    pipeline_model = pipeline.fit(train_data)
-    _ = pipeline_model.transform(train_data)
-    test_transformed = pipeline_model.transform(test_data)
-    prediction_transformed = pipeline_model.transform(prediction_data)
-    model = pipeline_model.stages[-2]
-    macro_scores, micro_scores = sf_datalake.model.explain(
-        config, model, prediction_transformed
-    )
-
+    model_pipeline = pipeline.fit(train_data)
+    _ = model_pipeline.transform(train_data)
+    model = model_pipeline.stages[-2]
     logging.info(
         "Model weights: %.3f", model.coefficients
     )  # TODO: Find a more generic way, what if model is not parametric
     logging.info(
         "Model intercept: %.3f", model.intercept
     )  # TODO: Find a more generic way, what if model is not parametric
+    test_transformed = model_pipeline.transform(test_data)
+    prediction_transformed = model_pipeline.transform(prediction_data)
+    macro_scores, micro_scores = sf_datalake.model.explain(
+        config, model, prediction_transformed
+    )
 
+    # Write outputs.
     sf_datalake.io.write_predictions(
         config["MODEL_OUTPUT_DIR"],
         test_transformed,
