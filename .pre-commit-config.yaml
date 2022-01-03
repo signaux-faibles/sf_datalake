@@ -24,7 +24,7 @@ repos:
   hooks:
   - id: pylint
     name: pylint
-    entry: pylint
+    entry: pylint --rcfile .pylintrc
     language: system
     types: [python]
     require_serial: true

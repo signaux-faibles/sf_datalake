@@ -1,4 +1,4 @@
-"""Preprocessor utilities and classes. """
+"""Preprocessor utilities and classes."""
 
 from functools import reduce
 from typing import Iterable, List
@@ -65,6 +65,40 @@ def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     return df
 
 
+def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
+    """Generates stages for preprocessing pipeline construction.
+
+    Args:
+        config: model configuration, as loaded by utils.get_config().
+
+    Returns:
+        List of the preprocessing stages.
+    """
+    stages = [
+        MissingValuesHandler(config),
+        SirenAggregator(config),
+        AvgDeltaDebtPerSizeColumnAdder(),
+        DebtRatioColumnAdder(),
+        TargetVariableColumnAdder(),
+        DatasetColumnSelector(config),
+        DatasetFilter(),
+    ]
+    # TODO: "siren='347546970' AND periode='2021-01-01 01:00:00'"
+    # => should be kept (was not the case before)
+    # TODO: indics_annuels.filter(
+    #           "siren='397988239' AND periode='2016-06-01 02:00:00'"
+    #       ).select(
+    #           ["siret", "siren", "periode", "code_naf", "time_til_failure",
+    #            "effectif", "MNT_AF_BFONC_BFR","MNT_AF_BFONC_TRESORERIE",
+    #            "RTO_AF_RATIO_RENT_MBE","MNT_AF_BFONC_FRNG","MNT_AF_CA",
+    #            "MNT_AF_SIG_EBE_RET","RTO_AF_RENT_ECO","RTO_AF_SOLIDITE_FINANCIERE",
+    #            "RTO_INVEST_CA"]).show()
+    # => duplicate SIRET, mutiple MRV values => Need also an agg function OR Error?
+    # => before effectif was aggregated and this data was kept in study but should it
+    # be?
+    return stages
+
+
 class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
     # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to compute the average change in social debt / nb of employees."""
@@ -73,7 +107,8 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
         """Computes the average change in social debt / nb of employees.
 
         Args:
-            dataset: DataFrame to transform containing debt and company size ("effectif") data.
+            dataset: DataFrame to transform. It should contain debt and company size
+              data.
 
         Returns:
             Transformed DataFrame with an extra `avg_delta_dette_par_effectif` column.
@@ -199,7 +234,9 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
         self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Fill missing values by the median or a specific value (see config['DEFAULT_VALUES']).
+        """Fills missing values using the variable's median predefined values.
+
+        The predefined values are defined inside the `"DEFAULT_VALUES"` config field.
 
         Args:
             dataset: DataFrame to transform containing missing values.
@@ -359,7 +396,9 @@ class DatasetFilter(Transformer):  # pylint: disable=R0903
     """A transformer to filter the dataset."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Filter the dataset by filtering out firms on 'effectif' and 'code_naf' variables.
+        """Filters out small companies or public institution from a dataset.
+
+        Only keeps private companies with more than 10 employees.
 
         Args:
             dataset: DataFrame to transform/filter.
@@ -372,36 +411,3 @@ class DatasetFilter(Transformer):  # pylint: disable=R0903
         assert "code_naf" in dataset.columns
 
         return dataset.filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
-
-
-def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
-    """Generate stage related to the preprocessing to be transformed in a preprocessing pipeline.
-
-    Args:
-        config: model configuration, as loaded by utils.get_config().
-
-    Returns:
-        List of the preprocessing stages.
-    """
-    stages = [
-        MissingValuesHandler(config),
-        SirenAggregator(config),
-        AvgDeltaDebtPerSizeColumnAdder(),
-        DebtRatioColumnAdder(),
-        TargetVariableColumnAdder(),
-        DatasetColumnSelector(config),
-        DatasetFilter(),
-    ]
-    # TODO: "siren='347546970' AND periode='2021-01-01 01:00:00'"
-    # => should be kept (was not the case before)
-    # TODO: indics_annuels.filter(
-    #           "siren='397988239' AND periode='2016-06-01 02:00:00'"
-    #       ).select(
-    #           ["siret", "siren", "periode", "code_naf", "time_til_failure",
-    #            "effectif", "MNT_AF_BFONC_BFR","MNT_AF_BFONC_TRESORERIE",
-    #            "RTO_AF_RATIO_RENT_MBE","MNT_AF_BFONC_FRNG","MNT_AF_CA",
-    #            "MNT_AF_SIG_EBE_RET","RTO_AF_RENT_ECO","RTO_AF_SOLIDITE_FINANCIERE",
-    #            "RTO_INVEST_CA"]).show()
-    # => duplicate SIRET, mutiple MRV values => Need also an agg function OR Error?
-    # => before effectif was aggregated and this data was kept in study but should it be?
-    return stages

@@ -1,4 +1,4 @@
-"""Model utilities and classes. """
+"""Model utilities and classes."""
 
 from typing import List, Tuple
 
@@ -9,27 +9,31 @@ from pyspark.sql.types import StringType
 
 
 def generate_stages(config: dict) -> List[pyspark.ml.Model]:
-    """Generate stage related to Model. Ready to be
-    included in a pyspark.ml.Pipeline.
+    """Generate stages associated with a given Model.
+
+    The returned list is ready to be included into a pyspark.ml.Pipeline object.
 
     Args:
         config: model configuration, as loaded by utils.get_config().
 
     Returns:
         A prepared Model.
+
     """
     stages = [get_model_from_conf(config["MODEL"])]
     return stages
 
 
 def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
-    """Get a Model from its configuration.
+    """Generates a Model object from a given configuration.
 
     Args:
-        model_config: Configuration of the Model
+        model_config: The Model configuration. The dict contains parameters that
+          corresponds to some  pyspark.ml.Model arguments.
 
     Returns:
-        The selected Model with prepared parameters
+        The selected Model instantiated using the input config parameters.
+
     """
     factory = {
         "LogisticRegression": pyspark.ml.classification.LogisticRegression(
@@ -46,17 +50,20 @@ def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
 def explain(
     config: dict, model: pyspark.ml.Model, df: pyspark.sql.DataFrame
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
-    """Compute the contribution of multiples groups of features and
-       individual features depending of the model used.
+    """Computes the contribution of different features to the predicted output.
+
+    May depend on used model type.
 
     Args:
         config: model configuration, as loaded by utils.get_config().
-        model: the model fit in the pipeline
-        df: prediction sample
+        model: the model fit in the pipeline.
+        df: prediction sample.
 
     Returns:
-        - first, a DataFrame with the contribution of groups of features (macro)
-        - second, a DataFrame with the TOP3 contributions of the features (micro)
+        A tuple consisting of:
+        - a DataFrame with the contribution of features groups (macro).
+        - a DataFrame with the top 3 contributing features (micro).
+
     """
     factory = {"LogisticRegression": explain_logistic_regression}
     return factory[config["MODEL"]["MODEL_NAME"]](config, model, df)
@@ -65,17 +72,21 @@ def explain(
 def explain_logistic_regression(
     config: dict, model: pyspark.ml.Model, df: pyspark.sql.DataFrame
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
-    """Compute the contribution of multiples groups of features and the TOP3
-           contributions of the individual features.
+    """Computes the contribution of different features to the predicted output.
+
+    Returns the contribution on both a 'macro' (group of features) and a 'micro'
+    scale (individual features).
 
     Args:
-        model: the model fit in the pipeline
-        df: prediction sample
+        model: the LogisticRegression model fit in the pipeline.
+        df: the prediction sample.
         config: model configuration, as loaded by utils.get_config().
 
     Returns:
-        - first, a DataFrame with the contribution of groups of features (macro)
-        - second, a DataFrame with the TOP3 contributions of the features (micro)
+        A tuple consisting of:
+        - a DataFrame with the contribution of groups of features (macro).
+        - a DataFrame with the top 3 contributing features (micro).
+
     """
     # Explain prediction
     meso_features = [
@@ -84,10 +95,11 @@ def explain_logistic_regression(
         for feature in features
     ]
 
-    # Get feature influence
+    # Get individual features contribution
     ep = (
         pyspark.ml.feature.ElementwiseProduct()
-    )  # [TODO] Will need so adjustments because this line needs a SparkContext initialized, assert?
+    )  # TODO Will need some adjustments because this line needs a SparkContext
+    # initialized, assert?
     ep.setScalingVec(model.coefficients)
     ep.setInputCol("features")
     ep.setOutputCol("eprod")
