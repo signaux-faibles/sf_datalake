@@ -1,5 +1,5 @@
-"""Transformer utilities and classes.
-"""
+"""Transformer utilities and classes. """
+
 from typing import List
 
 import pyspark.ml
@@ -15,7 +15,7 @@ def generate_stages(config: dict) -> List[Transformer]:
     The stages are ready to be included in a pyspark.ml.Pipeline.
 
     Args:
-        config : the config parameters (see utils.get_config())
+        config: model configuration, as loaded by utils.get_config().
 
     Returns:
         List of prepared Transformers.

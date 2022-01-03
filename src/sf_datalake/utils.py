@@ -1,6 +1,5 @@
-"""Utility functions.
+"""Utility functions."""
 
-"""
 import json
 
 import pkg_resources

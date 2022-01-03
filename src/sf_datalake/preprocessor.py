@@ -1,5 +1,5 @@
-"""Preprocessor utilities and classes.
-"""
+"""Preprocessor utilities and classes. """
+
 from functools import reduce
 from typing import Iterable, List
 
@@ -378,7 +378,7 @@ def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
     """Generate stage related to the preprocessing to be transformed in a preprocessing pipeline.
 
     Args:
-        config : the config parameters (see utils.get_config())
+        config: model configuration, as loaded by utils.get_config().
 
     Returns:
         List of the preprocessing stages.

@@ -1,6 +1,5 @@
-"""Utility functions for data handling.
+"""Utility functions for data handling."""
 
-"""
 import logging
 from os import path
 from typing import Dict

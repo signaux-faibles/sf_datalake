@@ -1,5 +1,4 @@
-"""Model utilities and classes.
-"""
+"""Model utilities and classes. """
 
 from typing import List, Tuple
 
@@ -14,7 +13,7 @@ def generate_stages(config: dict) -> List[pyspark.ml.Model]:
     included in a pyspark.ml.Pipeline.
 
     Args:
-        config : the config parameters (see utils.get_config())
+        config: model configuration, as loaded by utils.get_config().
 
     Returns:
         A prepared Model.
@@ -51,7 +50,7 @@ def explain(
        individual features depending of the model used.
 
     Args:
-        config: the config parameters (see utils.get_config())
+        config: model configuration, as loaded by utils.get_config().
         model: the model fit in the pipeline
         df: prediction sample
 
@@ -72,7 +71,7 @@ def explain_logistic_regression(
     Args:
         model: the model fit in the pipeline
         df: prediction sample
-        config: the config parameters (see utils.get_config())
+        config: model configuration, as loaded by utils.get_config().
 
     Returns:
         - first, a DataFrame with the contribution of groups of features (macro)

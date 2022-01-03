@@ -29,7 +29,7 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
 
     # Parse a configuration file and possibly override parameters.
     args = vars(parsed_args)
-    config = sf_datalake.utils.get_config(args.pop("config"))
+    config = sf_datalake.utils.get_config(args.pop("configuration"))
     for param, value in filter(lambda kv: kv[1] is not None, args.items()):
         config[param] = value
     _ = config.setdefault(
@@ -42,19 +42,19 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     )
 
     # Prepare data.
-    indics_annuels = sf_datalake.io.load_data(
+    yearly_data = sf_datalake.io.load_data(
         {
-            "indics_annuels": path.join(
+            "yearly_data": path.join(
                 config["DATA_ROOT_DIR"], "base/indicateurs_annuels.orc"
             ),
         },
         spl_ratio=config["SAMPLE_RATIO"],
-    )["indics_annuels"]
+    )["yearly_data"]
 
     pipeline_preprocessor = Pipeline(
         stages=sf_datalake.preprocessor.generate_stages(config)
     )
-    indics_annuels = pipeline_preprocessor.fit(indics_annuels).transform(indics_annuels)
+    yearly_data = pipeline_preprocessor.fit(yearly_data).transform(yearly_data)
 
     logging.info(
         "Creating oversampled training set with positive examples ratio %.1f",
@@ -64,10 +64,10 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     logging.info("Creating test set between %s and %s.", *config["TEST_DATES"])
     logging.info("Creating a prediction set on %s.", config["PREDICTION_DATE"])
     (
-        train_df,
-        test_df,
-        prediction_df,
-    ) = sf_datalake.sampler.train_test_predict_split(indics_annuels, config)
+        train_data,
+        test_data,
+        prediction_data,
+    ) = sf_datalake.sampler.train_test_predict_split(yearly_data, config)
 
     # Build and run Pipeline
     logging.info(
@@ -85,12 +85,12 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     stages += [sf_datalake.transformer.ProbabilityFormatter()]
 
     pipeline = Pipeline(stages=stages)
-    pipeline_model = pipeline.fit(train_df)
-    _ = pipeline_model.transform(train_df)
-    test_transformed = pipeline_model.transform(test_df)
-    prediction_transformed = pipeline_model.transform(prediction_df)
+    pipeline_model = pipeline.fit(train_data)
+    _ = pipeline_model.transform(train_data)
+    test_transformed = pipeline_model.transform(test_data)
+    prediction_transformed = pipeline_model.transform(prediction_data)
     model = pipeline_model.stages[-2]
-    macro_scores_df, micro_scores_df = sf_datalake.model.explain(
+    macro_scores, micro_scores = sf_datalake.model.explain(
         config, model, prediction_transformed
     )
 
@@ -108,8 +108,8 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     )
     sf_datalake.io.write_explanations(
         config["MODEL_OUTPUT_DIR"],
-        macro_scores_df,
-        micro_scores_df,
+        macro_scores,
+        micro_scores,
     )
 
 
@@ -122,7 +122,7 @@ if __name__ == "__main__":
         """
     )
     parser.add_argument(
-        "--config",
+        "--configuration",
         help="""
         Configuration file name (including '.json' extension). If not provided,
         'base.json' will be used.
