@@ -1,25 +1,32 @@
-"""Sampling functions.
+"""Sampling functions. """
 
-"""
 from typing import Tuple
 
 import pyspark.sql
 from pyspark.sql import functions as F
 
 
-def sample_df(
+def train_test_predict_split(
     df: pyspark.sql.DataFrame,
     config: dict,
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
-    """Sample the input DataFrame by creating an oversampling training set. It
-    splits the data in 3 parts: learn, test, prediction.
+    """Splits the input DataFrame and creates an oversampled training set.
+
+    The data is split into 3 parts: learn, test, prediction. The learning set is
+    sampled so that the target positive class is represented according to the ratio
+    defined under the `TARGET_OVERSAMPLING_RATIO` config parameter.
+
+    Training set and test set relative sizes are defined through the
+    `TRAIN_TEST_SPLIT_RATIO` config parameter.
 
     Args:
         df: the DataFrame to sample
-        config: the config parameters (see utils.get_config())
+        config: model configuration, as loaded by utils.get_config().
 
     Returns:
-        3 DataFrames, one for each of the following part: learn, test, prediction.
+        A tuple of three DataFrame, each associated with the following stages: learn,
+          test, prediction.
+
     """
     will_fail_mask = df["failure_within_18m"].astype("boolean")
 
@@ -34,19 +41,25 @@ def sample_df(
     )
     oversampled_subset = failing_subset.union(not_failing_subset)
 
-    # Define dates
-    SIREN_train, SIREN_test = df.select("siren").distinct().randomSplit([0.8, 0.2])
+    # Split datasets according to dates and train/test split ratio.
+    siren_train, siren_test = (
+        df.select("siren")
+        .distinct()
+        .randomSplit(
+            [config["TRAIN_TEST_SPLIT_RATIO"], 1 - config["TRAIN_TEST_SPLIT_RATIO"]]
+        )
+    )
 
     train = (
         oversampled_subset.filter(
-            oversampled_subset["siren"].isin(SIREN_train["siren"])
+            oversampled_subset["siren"].isin(siren_train["siren"])
         )
         .filter(oversampled_subset["periode"] > config["TRAIN_DATES"][0])
         .filter(oversampled_subset["periode"] < config["TRAIN_DATES"][1])
     )
 
     test = (
-        df.filter(df["siren"].isin(SIREN_test["siren"]))
+        df.filter(df["siren"].isin(siren_test["siren"]))
         .filter(df["periode"] > config["TEST_DATES"][0])
         .filter(df["periode"] < config["TEST_DATES"][1])
     )

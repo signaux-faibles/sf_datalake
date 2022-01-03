@@ -63,9 +63,11 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     logging.info("Creating train between %s and %s.", *config["TRAIN_DATES"])
     logging.info("Creating test set between %s and %s.", *config["TEST_DATES"])
     logging.info("Creating a prediction set on %s.", config["PREDICTION_DATE"])
-    data_train, data_test, data_prediction = sf_datalake.sampler.sample_df(
-        indics_annuels, config
-    )
+    (
+        train_df,
+        test_df,
+        prediction_df,
+    ) = sf_datalake.sampler.train_test_predict_split(indics_annuels, config)
 
     # Build and run Pipeline
     logging.info(
@@ -83,12 +85,14 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     stages += [sf_datalake.transformer.ProbabilityFormatter()]
 
     pipeline = Pipeline(stages=stages)
-    pipeline_model = pipeline.fit(data_train)
-    _ = pipeline_model.transform(data_train)
-    data_test_transformed = pipeline_model.transform(data_test)
-    data_prediction_transformed = pipeline_model.transform(data_prediction)
-
+    pipeline_model = pipeline.fit(train_df)
+    _ = pipeline_model.transform(train_df)
+    test_transformed = pipeline_model.transform(test_df)
+    prediction_transformed = pipeline_model.transform(prediction_df)
     model = pipeline_model.stages[-2]
+    macro_scores_df, micro_scores_df = sf_datalake.model.explain(
+        config, model, prediction_transformed
+    )
 
     logging.info(
         "Model weights: %.3f", model.coefficients
@@ -99,11 +103,8 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
 
     sf_datalake.io.write_predictions(
         config["MODEL_OUTPUT_DIR"],
-        data_test_transformed,
-        data_prediction_transformed,
-    )
-    macro_scores_df, micro_scores_df = sf_datalake.model.explain(
-        config, model, data_prediction_transformed
+        test_transformed,
+        prediction_transformed,
     )
     sf_datalake.io.write_explanations(
         config["MODEL_OUTPUT_DIR"],
