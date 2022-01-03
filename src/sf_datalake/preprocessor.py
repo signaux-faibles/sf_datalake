@@ -83,24 +83,10 @@ def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
         DatasetColumnSelector(config),
         DatasetFilter(),
     ]
-    # TODO: "siren='347546970' AND periode='2021-01-01 01:00:00'"
-    # => should be kept (was not the case before)
-    # TODO: indics_annuels.filter(
-    #           "siren='397988239' AND periode='2016-06-01 02:00:00'"
-    #       ).select(
-    #           ["siret", "siren", "periode", "code_naf", "time_til_failure",
-    #            "effectif", "MNT_AF_BFONC_BFR","MNT_AF_BFONC_TRESORERIE",
-    #            "RTO_AF_RATIO_RENT_MBE","MNT_AF_BFONC_FRNG","MNT_AF_CA",
-    #            "MNT_AF_SIG_EBE_RET","RTO_AF_RENT_ECO","RTO_AF_SOLIDITE_FINANCIERE",
-    #            "RTO_INVEST_CA"]).show()
-    # => duplicate SIRET, mutiple MRV values => Need also an agg function OR Error?
-    # => before effectif was aggregated and this data was kept in study but should it
-    # be?
     return stages
 
 
 class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to compute the average change in social debt / nb of employees."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
@@ -114,11 +100,15 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with an extra `avg_delta_dette_par_effectif` column.
 
         """
-        assert "montant_part_ouvriere" in dataset.columns
-        assert "montant_part_patronale" in dataset.columns
-        assert "montant_part_ouvriere_past_3" in dataset.columns
-        assert "montant_part_patronale_past_3" in dataset.columns
-        assert "effectif" in dataset.columns
+
+        mandatory_cols = {
+            "montant_part_ouvriere",
+            "montant_part_patronale",
+            "montant_part_ouvriere_past_3",
+            "montant_part_patronale_past_3",
+            "effectif",
+        }
+        assert mandatory_cols <= set(dataset.columns)
 
         dataset = dataset.withColumn(
             "dette_par_effectif",
@@ -147,7 +137,6 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
 
 
 class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to compute the debt ratio."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
@@ -160,9 +149,11 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with an extra `ratio_dette` column.
 
         """
-        assert "montant_part_ouvriere" in dataset.columns
-        assert "montant_part_patronale" in dataset.columns
-        assert "cotisation_moy12m" in dataset.columns
+        assert {
+            "montant_part_ouvriere",
+            "montant_part_patronale",
+            "cotisation_moy12m",
+        } <= set(dataset.columns)
 
         dataset = dataset.withColumn(
             "ratio_dette",
@@ -173,7 +164,6 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
 
 
 class PaydexYoyColumnAdder(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to compute the year over year values with Paydex data."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
@@ -187,8 +177,7 @@ class PaydexYoyColumnAdder(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with an extra `paydex_yoy` column.
 
         """
-        assert "paydex_nb_jours" in dataset.columns
-        assert "paydex_nb_jours_past_12" in dataset.columns
+        assert {"paydex_nb_jours", "paydex_nb_jours_past_12"} <= set(dataset.columns)
 
         return dataset.withColumn(
             "paydex_yoy",
@@ -197,7 +186,6 @@ class PaydexYoyColumnAdder(Transformer):  # pylint: disable=R0903
 
 
 class PaydexGroupColumnAdder(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to cut paydex number of days data into quantile bins."""
 
     def __init__(self, num_buckets) -> None:
@@ -226,7 +214,6 @@ class PaydexGroupColumnAdder(Transformer):  # pylint: disable=R0903
 
 
 class MissingValuesHandler(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to handle missing values."""
 
     def __init__(self, config) -> None:
@@ -245,9 +232,7 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with missing values completed.
 
         """
-        assert "FEATURES" in self.config
-        assert "FILL_MISSING_VALUES" in self.config
-        assert "DEFAULT_VALUES" in self.config
+        assert {"FEATURES", "FILL_MISSING_VALUES", "DEFAULT_VALUES"} <= set(self.config)
         assert "time_til_failure" in dataset.columns
 
         ratio_variables = list(
@@ -287,7 +272,6 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
 
 
 class SirenAggregator(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to aggregate data at a SIREN level."""
 
     def __init__(self, config) -> None:
@@ -304,11 +288,8 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             Transformed DataFrame at a SIREN level.
 
         """
-        assert "BASE_FEATURES" in self.config
-        assert "FEATURES" in self.config
-        assert "AGG_DICT" in self.config
-        assert "siren" in dataset.columns
-        assert "periode" in dataset.columns
+        assert {"BASE_FEATURES", "FEATURES", "AGG_DICT"} <= set(self.config)
+        assert {"siren", "periode"} <= set(dataset.columns)
 
         no_agg_colnames = [
             feat
@@ -333,7 +314,6 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
 
 
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to aggregate data at a SIREN level."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
@@ -358,7 +338,6 @@ class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
 
 
 class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to select the columns of the dataset used in the model."""
 
     def __init__(self, config) -> None:
@@ -375,9 +354,7 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
             Transformed DataFrame.
 
         """
-        assert "BASE_FEATURES" in self.config
-        assert "FEATURES" in self.config
-        assert "TARGET_FEATURE" in self.config
+        assert {"BASE_FEATURES", "FEATURES", "TARGET_FEATURE"} <= set(self.config)
 
         dataset = dataset.select(
             *(
@@ -392,7 +369,6 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
 
 
 class DatasetFilter(Transformer):  # pylint: disable=R0903
-    # pylint disable to be consistent with the abstract class pyspark.ml.Transformer
     """A transformer to filter the dataset."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
@@ -407,7 +383,6 @@ class DatasetFilter(Transformer):  # pylint: disable=R0903
             Transformed/filtered DataFrame.
 
         """
-        assert "effectif" in dataset.columns
-        assert "code_naf" in dataset.columns
+        assert {"effectif", "code_naf"} <= set(dataset.columns)
 
         return dataset.filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
