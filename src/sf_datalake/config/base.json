@@ -1,6 +1,5 @@
 {
 	"OUTPUT_ROOT_DIR": "/projets/TSF/donnees",
-	"MODEL_OUTPUT_DIR": "/projets/TSF/donnees/sorties_modeles",
 	"DATA_ROOT_DIR": "/projets/TSF/sources",
 
 	"FILL_MISSING_VALUES": 1,

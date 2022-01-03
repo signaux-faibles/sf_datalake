@@ -1,6 +1,7 @@
 """Main script for statistical prediction of company failure."""
 
 import argparse
+import datetime
 import logging
 import os
 import sys
@@ -31,6 +32,14 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     config = sf_datalake.utils.get_config(args.pop("config"))
     for param, value in args.items():
         config[param] = value
+    _ = config.setdefault(
+        "MODEL_OUTPUT_DIR",
+        path.join(
+            config["OUTPUT_ROOT_DIR"],
+            "sorties_modeles",
+            datetime.date.today().isoformat(),
+        ),
+    )
 
     # Prepare data.
     indics_annuels = sf_datalake.io.load_data(
@@ -105,7 +114,12 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
 
 def parse_args() -> argparse.Namespace:
     """Returns CLI-fetched arguments for configuration and learning parameters."""
-    parser = argparse.ArgumentParser("__main__.py", description="Run a prediction.")
+    parser = argparse.ArgumentParser(
+        description="""
+        Run a 'Signaux Faibles' distributed prediction with the chosen set of
+        parameters.
+        """
+    )
     parser.add_argument(
         "--config",
         help="""
@@ -118,7 +132,7 @@ def parse_args() -> argparse.Namespace:
         "--output_directory",
         dest="MODEL_OUTPUT_DIR",
         type=str,
-        help="Directory where model predictions and parameters will be saved",
+        help="Directory where model predictions and parameters will be saved.",
     )
     parser.add_argument(
         "--sample_ratio",
