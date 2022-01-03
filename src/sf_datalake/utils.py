@@ -28,8 +28,4 @@ def get_config(config_fname: str) -> dict:
 
     with pkg_resources.resource_stream("sf_datalake", f"config/{config_fname}") as f:
         config = json.load(f)
-
-    # config["TAC_VARIABLES"] = {
-    #     f"tac_1y_{v}" for v in config["MRV_VARIABLES"]
-    # }  # TODO TAC_VARIABLES never used AND MRV_VARIABLES does not exist anymore
     return config

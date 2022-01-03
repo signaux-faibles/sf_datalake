@@ -30,7 +30,7 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     # Parse a configuration file and possibly override parameters.
     args = vars(parsed_args)
     config = sf_datalake.utils.get_config(args.pop("config"))
-    for param, value in args.items():
+    for param, value in filter(lambda kv: kv[1] is not None, args.items()):
         config[param] = value
     _ = config.setdefault(
         "MODEL_OUTPUT_DIR",
@@ -58,7 +58,7 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
 
     logging.info(
         "Creating oversampled training set with positive examples ratio %.1f",
-        config["POSITIVE_OVERSAMPLING_RATIO"],
+        config["TARGET_OVERSAMPLING_RATIO"],
     )
     logging.info("Creating train between %s and %s.", *config["TRAIN_DATES"])
     logging.info("Creating test set between %s and %s.", *config["TEST_DATES"])
@@ -142,7 +142,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--oversampling",
-        dest="POSITIVE_OVERSAMPLING_RATIO",
+        dest="TARGET_OVERSAMPLING_RATIO",
         type=float,
         help="""
         Enforces the ratio of positive observations ("entreprises en défaillance") to be

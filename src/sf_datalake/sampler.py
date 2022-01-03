@@ -25,8 +25,8 @@ def sample_df(
 
     n_samples = df.count()
     n_failing = df.filter(will_fail_mask).count()
-    subset_size = int(n_failing / config["POSITIVE_OVERSAMPLING_RATIO"])
-    n_not_failing = int((1.0 - config["POSITIVE_OVERSAMPLING_RATIO"]) * subset_size)
+    subset_size = int(n_failing / config["TARGET_OVERSAMPLING_RATIO"])
+    n_not_failing = int((1.0 - config["TARGET_OVERSAMPLING_RATIO"]) * subset_size)
 
     failing_subset = df.filter(will_fail_mask)
     not_failing_subset = df.filter(~will_fail_mask).sample(
