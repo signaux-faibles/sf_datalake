@@ -7,12 +7,11 @@ variables:
   CACHE: "${CACHE_ROOT}/${CACHE_KEY}"
   PACKAGE: "python_packages.tar.gz"
   SCRIPT: "${CI_PROJECT_DIR}/src/sf_datalake/processing/logreg_model.py"
-  LAKE_WORKSPACE: "/projets/TSF"
-  LAKE_HOME: "${LAKE_WORKSPACE}/applicatifs"
-  LAKE_TARGET: "${LAKE_HOME}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
-  LAKE_ENTRYPOINT: "${LAKE_HOME}/main.py"
+  LAKE_HOME: "/projets/TSF"
+  LAKE_MODULES_DIR: "${LAKE_HOME}/applicatifs"
+  LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
+  LAKE_ENTRYPOINT: "${LAKE_MODULES_DIR}/main.py"
   BRANCH_TO_DEPLOY: "${CI_DEFAULT_BRANCH}"
-  #BRANCH_TO_DEPLOY: "feat/handle_model_after_success"
   MODEL_OUTPUT: "donnees/test"
 
 
@@ -53,18 +52,18 @@ prepare_pipeline_env:
   before_script:
     - echo "Nothing to do, but must exist to reset before_script instructions from .lake"
   script:
-    - echo "Prepare cache & conf in ${CACHE}."
+    - echo "Preparing cache & conf in ${CACHE}."
     - "[[ -d ${CACHE} ]] && rm -rf ${CACHE}"
     - mkdir -p ${CACHE}
     - mkdir -p ${CACHE}/trace
     - mkdir -p ${CACHE}/log
     - mkdir -p ${CACHE}/bin
     - mkdir -p ${CACHE}/results
-    - echo "prepare API"
+    - echo "Preparing maacdo API configuration."
     - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
     - git clone https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
     - cat ${CACHE}/ci_job.par
-    - echo "Clean older cached data."
+    - echo "Cleaning older CI cached data."
     # on ne garde que les 5 derniers
     - ls -1QAtd ${CACHE_ROOT}/* | tail -n+10 | xargs rm -rf
 
@@ -93,17 +92,17 @@ send_package_to_lake:
   needs:
     - job: build_package
   script:
-    - echo "Remove old package when possible."
+    - echo "Removing old packages archive if it exists."
     - ./api_maacdo.pl
         -a SuppressionFichier
-        -i ${LAKE_TARGET}
+        -i ${LAKE_PKG_TARGET}
         -c ${CACHE}/ci_job.par ||
-        echo "Fail removing ${LAKE_TARGET}. Maybe doesn't exist."
-    - echo "Send new python package."
+        echo "Failed removing ${LAKE_PKG_TARGET}. Maybe this file doesn't exist."
+    - echo "Sending new python packages archive to ${LAKE_PKG_TARGET}."
     - ./api_maacdo.pl
       -a EnvoyerFichier
       -l ${CACHE}/${PACKAGE}
-      -i ${LAKE_TARGET}
+      -i ${LAKE_PKG_TARGET}
       -c ${CACHE}/ci_job.par
 
 prepare_lake_workspace:
@@ -114,8 +113,8 @@ prepare_lake_workspace:
         -a SuppressionFichier
         -i ${LAKE_ENTRYPOINT}
         -c ${CACHE}/ci_job.par ||
-        echo "Fail removing file. Maybe doesn't exist."
-    - echo "Send new python script."
+        echo "Failed removing file ${LAKE_ENTRYPOINT}. Maybe this file doesn't exist."
+    - echo "Sending new python main script to ${LAKE_ENTRYPOINT}."
     - ./api_maacdo.pl
       -a EnvoyerFichier
       -l ${SCRIPT}
@@ -128,8 +127,8 @@ drop_old_results:
   stage: deploy
   extends: .lake
   script:
-    - echo "Clean entry point and models on the lake HDFS."
-    - ./api_maacdo.pl -a 'CreerRepertoire' -i ${LAKE_WORKSPACE}/${MODEL_OUTPUT} -c ${CACHE}/ci_job.par # pour eviter l'erreur ou le repertoire n'existe pas
+    - echo "Cleaning previous model outputs on the lake HDFS inside ${MODEL_OUTPUT}."
+    - ./api_maacdo.pl -a 'CreerRepertoire' -i ${LAKE_HOME}/${MODEL_OUTPUT} -c ${CACHE}/ci_job.par # pour eviter l'erreur ou le repertoire n'existe pas
     - bash rmRecursifHdfs.sh ${MODEL_OUTPUT} ${CACHE}/ci_job.par
   rules:
     - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
@@ -142,9 +141,9 @@ start_spark_task:
     - job: "drop_old_results"
     - job: "send_package_to_lake"
   script:
-    - echo "Launch spark job, getting livy ID."
+    - echo "Launching spark job, getting livy ID."
     - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${CACHE}/ci_job.par | grep ID |  cut -d: -f2)'
-    - echo "Spark task is started with id [$idLivy]"
+    - echo "Spark task has started. Livy id is [$idLivy]"
     - echo ${idLivy} | xargs > ${CACHE}/idLivy
   rules:
     - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
@@ -187,13 +186,13 @@ stop_spark_task:
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - export STATUS=$(cat ${CACHE}/status_${ID_LIVY})
-    - echo "Task ${ID_LIVY} has status ${STATUS}"
+    - echo "Task ${ID_LIVY} has status ${STATUS}."
     - |
       if [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]]
       then
         ./api_maacdo.pl -a ArretTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par
       else
-        echo "Nothing to do"
+        echo "Nothing to do."
       fi
   rules:
     - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
@@ -235,7 +234,7 @@ fetch_yarn_logs:
   - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
     when: on_failure
 
-fetch_model:
+fetch_model_outputs:
   stage: .post
   extends: .lake
   needs: ["wait_for_task_finishing"]
@@ -245,7 +244,8 @@ fetch_model:
     - |
       for file in ${CACHE}/results/*
       do
-        # on zippe le csv puis on le supprime en cas de succes
+        # Gather all csv outputs into a zip and delete the csv files
+        # if spark job has succeeded.
         zip ${file}.zip ${file} && rm ${file}
       done
   rules:
@@ -271,12 +271,12 @@ print-shell-env:
   script:
     - env | sort
     - whoami
-    - echo "Files on the nubo VM at $(pwd)"
+    - echo "Files on the nubo VM at $(pwd):"
     - ls -al
-    - echo "Files on the HDFS at ${LAKE_HOME}:"
+    - echo "Files on the HDFS at ${LAKE_MODULES_DIR}:"
     - ./api_maacdo.pl
       -a ListContenuRepertoire
-      -i ${LAKE_HOME}
+      -i ${LAKE_MODULES_DIR}
     - echo "Files in ${CACHE}:"
     - ls -al ${CACHE}
   when: manual
