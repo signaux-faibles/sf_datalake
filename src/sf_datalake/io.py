@@ -1,8 +1,9 @@
 """Utility functions for data handling."""
 
+import json
 import logging
 from os import path
-from typing import Dict
+from typing import Dict, Iterable, Optional
 
 import pyspark.sql
 from pyspark.sql import functions as F
@@ -109,3 +110,33 @@ def write_explanations(
         "Writing explanation macro scores data to directory %s", explanation_output_path
     )
     macro_scores_df.write.csv(path.join(explanation_output_path), header=True)
+
+
+def dump_configuration(config: dict, dump_keys: Optional[Iterable] = None):
+    """Dumps a subset of the configuration used during a prediction run.
+
+    Args:
+        config: Model configuration, as loaded by utils.get_config().
+        dump_keys: An Iterable of configuration parameters that should be dumped.
+          All elements of `dump_keys` must be part of `config`'s keys.
+
+    """
+    if dump_keys is None:
+        dump_keys = (
+            {
+                "FILL_MISSING_VALUES",
+                "TRAIN_TEST_SPLIT_RATIO",
+                "TARGET_OVERSAMPLING_RATIO",
+                "N_CONCERNING_MICRO",
+                "TRAIN_DATES",
+                "TEST_DATES",
+                "PREDICTION_DATE",
+                "MODEL",
+                "FEATURES",
+            },
+        )
+    with open(
+        path.join(config["MODEL_OUTPUT_DIR"], "parameters.json"), "w", encoding="utf-8"
+    ) as f:
+        sub_config = {k: v for k, v in config.items() if k in dump_keys}
+        json.dump(sub_config, f, indent=2)

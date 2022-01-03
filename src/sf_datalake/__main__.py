@@ -113,6 +113,9 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
         micro_scores,
     )
 
+    # Write some configuration.
+    sf_datalake.io.dump_configuration(config)
+
 
 if __name__ == "__main__":
     _ = sf_datalake.utils.instantiate_spark_session()
