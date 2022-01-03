@@ -112,8 +112,8 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     )
 
 
-def parse_args() -> argparse.Namespace:
-    """Returns CLI-fetched arguments for configuration and learning parameters."""
+if __name__ == "__main__":
+    _ = sf_datalake.utils.instantiate_spark_session()
     parser = argparse.ArgumentParser(
         description="""
         Run a 'Signaux Faibles' distributed prediction with the chosen set of
@@ -149,9 +149,4 @@ def parse_args() -> argparse.Namespace:
         the specified ratio.
         """,
     )
-    return parser
-
-
-if __name__ == "__main__":
-    _ = sf_datalake.utils.instantiate_spark_session()
-    main(parse_args())
+    main(parser.parse_args())
