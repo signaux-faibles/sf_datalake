@@ -1,5 +1,7 @@
 """Transformer utilities and classes. """
 
+from itertools import groupby
+from operator import itemgetter
 from typing import List
 
 import pyspark.ml
@@ -22,7 +24,11 @@ def generate_stages(config: dict) -> List[Transformer]:
     """
     stages = []
     transformed_features = []
-    for [features, transformer_name] in config["TRANSFORMERS"]:
+    features_by_transformer_name = {
+        transformer_name: [feature for feature, _ in temp]
+        for transformer_name, temp in groupby(config["TRANSFORMERS"], key=itemgetter(1))
+    }
+    for (transformer_name, features) in features_by_transformer_name.items():
         outputCol = f"features_to_transform_{transformer_name}"
         vector_assembler = VectorAssembler(
             inputCols=features,

@@ -79,16 +79,16 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
     )  # TODO: Create an array attribute in the config file that lists all the
     # parameters related to the model. Then adjust logging to be more generic.
 
-    stages = [
+    stages = (
         sf_datalake.transformer.generate_stages(config)
         + sf_datalake.model.generate_stages(config)
         + [sf_datalake.transformer.ProbabilityFormatter()]
-    ]
+    )
 
     pipeline = Pipeline(stages=stages)
     model_pipeline = pipeline.fit(train_data)
     _ = model_pipeline.transform(train_data)
-    model = model_pipeline.stages[-2]
+    model = model_pipeline.stages[-2]  # TODO more generic way
     logging.info(
         "Model weights: %.3f", model.coefficients
     )  # TODO: Find a more generic way, what if model is not parametric
