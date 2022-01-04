@@ -84,13 +84,7 @@ def write_predictions(
     ).write.csv(test_output_path, header=True)
 
     logging.info("Writing prediction data to file %s", prediction_output_path)
-    columns_to_drop = [
-        colname
-        for colname in prediction_data.columns
-        if colname.startswith("features_")
-    ]
-    columns_to_drop += ["features", "prediction", "rawPrediction", "failure_within_18m"]
-    prediction_data.drop(*columns_to_drop).write.csv(
+    prediction_data.select(["siren", "probability"]).write.csv(
         prediction_output_path, header=True
     )
 
@@ -112,10 +106,13 @@ def write_explanations(
     macro_scores_df.write.csv(path.join(explanation_output_path), header=True)
 
 
-def dump_configuration(config: dict, dump_keys: Optional[Iterable] = None):
+def dump_configuration(
+    output_file: str, config: dict, dump_keys: Optional[Iterable] = None
+):
     """Dumps a subset of the configuration used during a prediction run.
 
     Args:
+        output_file: The path and file name where configuration should be dumped.
         config: Model configuration, as loaded by utils.get_config().
         dump_keys: An Iterable of configuration parameters that should be dumped.
           All elements of `dump_keys` must be part of `config`'s keys.
@@ -124,6 +121,7 @@ def dump_configuration(config: dict, dump_keys: Optional[Iterable] = None):
     if dump_keys is None:
         dump_keys = (
             {
+                "VERSION",
                 "FILL_MISSING_VALUES",
                 "TRAIN_TEST_SPLIT_RATIO",
                 "TARGET_OVERSAMPLING_RATIO",
@@ -135,8 +133,6 @@ def dump_configuration(config: dict, dump_keys: Optional[Iterable] = None):
                 "FEATURES",
             },
         )
-    with open(
-        path.join(config["MODEL_OUTPUT_DIR"], "parameters.json"), "w", encoding="utf-8"
-    ) as f:
+    with open(path.join(output_file), "w", encoding="utf-8") as f:
         sub_config = {k: v for k, v in config.items() if k in dump_keys}
-        json.dump(sub_config, f, indent=2)
+        json.dump(sub_config, f, indent=4)
