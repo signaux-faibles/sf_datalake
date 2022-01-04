@@ -79,6 +79,9 @@ def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
         SirenAggregator(config),
         AvgDeltaDebtPerSizeColumnAdder(),
         DebtRatioColumnAdder(),
+        MissingValuesHandler(
+            config
+        ),  # necessary for new columns created in previous steps
         TargetVariableColumnAdder(),
         DatasetColumnSelector(config),
         DatasetFilter(),
