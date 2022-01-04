@@ -84,13 +84,7 @@ def write_predictions(
     ).write.csv(test_output_path, header=True)
 
     logging.info("Writing prediction data to file %s", prediction_output_path)
-    columns_to_drop = [
-        colname
-        for colname in prediction_data.columns
-        if colname.startswith("features_")
-    ]
-    columns_to_drop += ["features", "prediction", "rawPrediction", "failure_within_18m"]
-    prediction_data.drop(*columns_to_drop).write.csv(
+    prediction_data.select(["siren", "probability"]).write.csv(
         prediction_output_path, header=True
     )
 
