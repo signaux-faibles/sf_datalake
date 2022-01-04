@@ -82,9 +82,10 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     transformer_stages = sf_datalake.transformer.generate_stages(config)
     model_stages = sf_datalake.model.generate_stages(config)
     postprocessing_stages = [sf_datalake.transformer.ProbabilityFormatter()]
-    stages = [transformer_stages, model_stages, postprocessing_stages]
 
-    pipeline = Pipeline(stages)
+    pipeline = Pipeline(
+        stages=[transformer_stages, model_stages, postprocessing_stages]
+    )
     pipeline_model = pipeline.fit(train_data)
     _ = pipeline_model.transform(train_data)
     model = pipeline_model.getStages()[-2]
