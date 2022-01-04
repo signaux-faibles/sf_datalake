@@ -118,8 +118,6 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
             (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
             / dataset["effectif"],
         )
-        # TODO replace([np.nan, np.inf, -np.inf], 0)
-
         dataset = dataset.withColumn(
             "dette_par_effectif_past_3",
             (
@@ -128,7 +126,9 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
             )
             / dataset["effectif"],
         )
-        # TODO replace([np.nan, np.inf, -np.inf], 0)
+        dataset = dataset.na.fill(
+            {"dette_par_effectif": 0, "dette_par_effectif_past_3": 0}
+        )
 
         dataset = dataset.withColumn(
             "avg_delta_dette_par_effectif",
