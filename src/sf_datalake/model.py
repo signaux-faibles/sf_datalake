@@ -48,16 +48,16 @@ def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
 
 
 def explain(
-    config: dict, model: pyspark.ml.Model, df: pyspark.sql.DataFrame
+    config: dict, pipeline_model: pyspark.ml.PipelineModel, df: pyspark.sql.DataFrame
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
     """Computes the contribution of different features to the predicted output.
 
     May depend on used model type.
 
     Args:
-        config: model configuration, as loaded by utils.get_config().
-        model: the model fit in the pipeline.
-        df: prediction sample.
+        config: Model configuration, as loaded by utils.get_config().
+        pipeline_model: A fitted pipeline.
+        df: The prediction samples.
 
     Returns:
         A tuple consisting of:
@@ -65,12 +65,34 @@ def explain(
         - a DataFrame with the top 3 contributing features (micro).
 
     """
+    for stage in pipeline_model.getStages():
+        if config["MODEL_NAME"] in repr(stage):
+            model = stage
+            break
+    if model is None:
+        raise ValueError(
+            f"Model with name {config['MODEL_NAME']} could not be found in pipeline "
+            "stages."
+        )
+
+    features_lists = [
+        stage.getInputCols()
+        for stage in pipeline_model.stages
+        if isinstance(stage, pyspark.ml.feature.VectorAssembler)
+    ]
+    # We drop the last element of features_lists which is a stage where an assembler
+    # only concatenates previous assembled feature groups.
+    features = [feat for flist in features_lists[:-1] for feat in flist]
+
     factory = {"LogisticRegression": explain_logistic_regression}
-    return factory[config["MODEL"]["MODEL_NAME"]](config, model, df)
+    return factory[config["MODEL"]["MODEL_NAME"]](config, model, features, df)
 
 
 def explain_logistic_regression(
-    config: dict, model: pyspark.ml.Model, df: pyspark.sql.DataFrame
+    config: dict,
+    model: pyspark.ml.Model,
+    model_features: List[str],
+    df: pyspark.sql.DataFrame,
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
     """Computes the contribution of different features to the predicted output.
 
@@ -78,9 +100,10 @@ def explain_logistic_regression(
     scale (individual features).
 
     Args:
-        model: the LogisticRegression model fit in the pipeline.
-        df: the prediction sample.
         config: model configuration, as loaded by utils.get_config().
+        model: the LogisticRegression model fit in the pipeline.
+        model_features: the features used by the model.
+        df: the prediction samples.
 
     Returns:
         A tuple consisting of:
@@ -107,7 +130,7 @@ def explain_logistic_regression(
     explanation_df = (
         ep.transform(df)
         .rdd.map(lambda r: [r["siren"]] + [float(f) for f in r["eprod"]])
-        .toDF(["siren"] + config["FEATURES_TO_STANDARDSCALER"])
+        .toDF(["siren"] + model_features)
     )
     for group, features in config["MESO_URSSAF_GROUPS"].items():
         explanation_df = explanation_df.withColumn(
