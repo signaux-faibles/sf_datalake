@@ -1,6 +1,6 @@
 """Transformer utilities and classes. """
 
-from typing import List
+from typing import Dict, List
 
 import pyspark.ml
 import pyspark.sql.functions as F
@@ -19,27 +19,27 @@ def generate_stages(config: dict) -> List[Transformer]:
 
     Returns:
         List of prepared Transformers.
+
     """
-    stages = []
-    transformed_features = []
-    transformer_features = {}
-    for feature, transformer_name in config["TRANSFORMERS"]:
-        transformer_features.setdefault(transformer_name, []).append(feature)
-    for transformer_name, features in transformer_features.items():
+    stages: List[Transformer] = []
+    transformed_features: List[str] = []
+    transformer_features: Dict[str, List[str]] = {}
+    for feature, transformer in config["TRANSFORMERS"]:
+        transformer_features.setdefault(transformer, []).append(feature)
+    for transformer, features in transformer_features.items():
         outputCol = f"features_to_transform_{transformer}"
         vector_assembler = VectorAssembler(
             inputCols=features,
             outputCol=outputCol,  # TODO is it necessary or overwritting
             # the same name during stages works?
         )
-        transformer = get_transformer_from_str(transformer_name)
-        stages += [vector_assembler, transformer]
-        transformed_features += [outputCol]
+        stages += [vector_assembler, get_transformer_from_str(transformer)]
+        transformed_features.append(outputCol)
 
     vector_assembler = VectorAssembler(
         inputCols=transformed_features, outputCol="features"
     )
-    stages += [vector_assembler]
+    stages.append(vector_assembler)
     return stages
 
 
