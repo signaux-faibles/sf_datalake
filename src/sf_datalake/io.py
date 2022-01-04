@@ -106,10 +106,13 @@ def write_explanations(
     macro_scores_df.write.csv(path.join(explanation_output_path), header=True)
 
 
-def dump_configuration(config: dict, dump_keys: Optional[Iterable] = None):
+def dump_configuration(
+    output_file: str, config: dict, dump_keys: Optional[Iterable] = None
+):
     """Dumps a subset of the configuration used during a prediction run.
 
     Args:
+        output_file: The path and file name where configuration should be dumped.
         config: Model configuration, as loaded by utils.get_config().
         dump_keys: An Iterable of configuration parameters that should be dumped.
           All elements of `dump_keys` must be part of `config`'s keys.
@@ -130,8 +133,6 @@ def dump_configuration(config: dict, dump_keys: Optional[Iterable] = None):
                 "FEATURES",
             },
         )
-    with open(
-        path.join(config["MODEL_OUTPUT_DIR"], "parameters.json"), "w", encoding="utf-8"
-    ) as f:
+    with open(path.join(output_file), "w", encoding="utf-8") as f:
         sub_config = {k: v for k, v in config.items() if k in dump_keys}
         json.dump(sub_config, f, indent=4)

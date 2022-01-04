@@ -24,22 +24,22 @@ import sf_datalake.transformer
 import sf_datalake.utils
 
 
-def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
+def main(args: argparse.Namespace):  # pylint: disable=R0914
     """Processes datasets according to configuration to make predictions."""
 
     # Parse a configuration file and possibly override parameters.
-    args = vars(parsed_args)
-    config = sf_datalake.utils.get_config(args.pop("configuration"))
-    for param, value in filter(lambda kv: kv[1] is not None, args.items()):
+    config = sf_datalake.utils.get_config(args.configuration)
+    config_args = {k: v for k, v in vars(args).items() if k in config and v is not None}
+    for param, value in config_args.items():
         config[param] = value
-    _ = config.setdefault(
-        "MODEL_OUTPUT_DIR",
-        path.join(
+    if args.output_directory is None:
+        output_directory = path.join(
             config["OUTPUT_ROOT_DIR"],
             "sorties_modeles",
             datetime.date.today().isoformat(),
-        ),
-    )
+        )
+    else:
+        output_directory = args.output_directory
 
     # Prepare data.
     yearly_data = sf_datalake.io.load_data(
@@ -103,18 +103,20 @@ def main(parsed_args: argparse.Namespace):  # pylint: disable=R0914
 
     # Write outputs.
     sf_datalake.io.write_predictions(
-        config["MODEL_OUTPUT_DIR"],
+        output_directory,
         test_transformed,
         prediction_transformed,
     )
     sf_datalake.io.write_explanations(
-        config["MODEL_OUTPUT_DIR"],
+        output_directory,
         macro_scores,
         micro_scores,
     )
 
     # Write some configuration.
-    sf_datalake.io.dump_configuration(config)
+    sf_datalake.io.dump_configuration(
+        path.join(output_directory, "parameters.json"), config, args.dump_keys
+    )
 
 
 if __name__ == "__main__":
@@ -135,15 +137,34 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output_directory",
-        dest="MODEL_OUTPUT_DIR",
         type=str,
         help="Directory where model predictions and parameters will be saved.",
+    )
+    parser.add_argument(
+        "--train_dates",
+        dest="TRAIN_DATES",
+        type=str,
+        nargs=2,
+        help="The training set start and end dates (YYYY-MM-DD format).",
+    )
+    parser.add_argument(
+        "--test_dates",
+        dest="TEST_DATES",
+        type=str,
+        nargs=2,
+        help="The test set start and end dates (YYYY-MM-DD format).",
+    )
+    parser.add_argument(
+        "--prediction_date",
+        dest="PREDICTION_DATE",
+        type=str,
+        help="The date over which prediction should be made (YYYY-MM-DD format).",
     )
     parser.add_argument(
         "--sample_ratio",
         dest="SAMPLE_RATIO",
         type=float,
-        help="The sample size of the loaded data as a fraction of its complete size.",
+        help="The loaded data sample size as a fraction of its complete size.",
     )
     parser.add_argument(
         "--oversampling",
@@ -152,6 +173,25 @@ if __name__ == "__main__":
         help="""
         Enforces the ratio of positive observations ("entreprises en défaillance") to be
         the specified ratio.
+        """,
+    )
+    parser.add_argument(
+        "--drop_missing_values",
+        dest="FILL_MISSING_VALUES",
+        action="store_false",
+        help="""
+        If specified, missing values will be dropped instead of filling data with
+        default values.
+        """,
+    )
+    parser.add_argument(
+        "--dump_keys",
+        type=str,
+        nargs="+",
+        help="""
+        A sequence of configuration keys that should be dumped along with the prediction
+        results. If a key cannot be found inside the configuration, it will be silently
+        ignored.
         """,
     )
     main(parser.parse_args())
