@@ -73,7 +73,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     logging.info(
         "Training %s \
         %.3f and %d iterations (maximum).",
-        config["MODEL"]["MODEL_NAME"],
+        config["MODEL"]["NAME"],
         config["MODEL"]["REGULARIZATION_COEFF"],
         config["MODEL"]["MAX_ITER"],
     )  # TODO: Create an array attribute in the config file that lists all the

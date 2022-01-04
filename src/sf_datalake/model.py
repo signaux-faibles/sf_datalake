@@ -29,7 +29,7 @@ def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
 
     Args:
         model_config: The Model configuration. The dict contains parameters that
-          corresponds to some  pyspark.ml.Model arguments.
+          corresponds to some pyspark.ml.Model arguments.
 
     Returns:
         The selected Model instantiated using the input config parameters.
@@ -44,7 +44,7 @@ def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
             tol=model_config["TOL"],
         )
     }
-    return factory[model_config["MODEL_NAME"]]
+    return factory[model_config["NAME"]]
 
 
 def explain(
@@ -66,13 +66,13 @@ def explain(
 
     """
     for stage in pipeline_model.stages:
-        if config["MODEL_NAME"] in repr(stage):
+        if config["MODEL"]["NAME"] in repr(stage):
             model = stage
             break
     if model is None:
         raise ValueError(
-            f"Model with name {config['MODEL_NAME']} could not be found in pipeline "
-            "stages."
+            f"Model with name {config['MODEL']['NAME']} could not be found in "
+            "pipeline stages."
         )
 
     features_lists = [
@@ -85,7 +85,7 @@ def explain(
     features = [feat for flist in features_lists[:-1] for feat in flist]
 
     factory = {"LogisticRegression": explain_logistic_regression}
-    return factory[config["MODEL"]["MODEL_NAME"]](config, model, features, df)
+    return factory[config["MODEL"]["NAME"]](config, model, features, df)
 
 
 def explain_logistic_regression(
