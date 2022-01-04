@@ -133,6 +133,6 @@ def dump_configuration(
                 "FEATURES",
             },
         )
-    with open(path.join(output_file), "w", encoding="utf-8") as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         sub_config = {k: v for k, v in config.items() if k in dump_keys}
         json.dump(sub_config, f, indent=4)
