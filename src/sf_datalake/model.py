@@ -65,7 +65,7 @@ def explain(
         - a DataFrame with the top 3 contributing features (micro).
 
     """
-    for stage in pipeline_model.getStages():
+    for stage in pipeline_model.stages:
         if config["MODEL_NAME"] in repr(stage):
             model = stage
             break

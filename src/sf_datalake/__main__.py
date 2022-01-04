@@ -84,11 +84,11 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     postprocessing_stages = [sf_datalake.transformer.ProbabilityFormatter()]
 
     pipeline = Pipeline(
-        stages=[transformer_stages, model_stages, postprocessing_stages]
+        stages=transformer_stages + model_stages + postprocessing_stages
     )
     pipeline_model = pipeline.fit(train_data)
     _ = pipeline_model.transform(train_data)
-    model = pipeline_model.getStages()[-2]
+    model = pipeline_model.stages[-2]
     logging.info(
         "Model weights: %.3f", model.coefficients
     )  # TODO: Find a more generic way, what if model is not parametric
