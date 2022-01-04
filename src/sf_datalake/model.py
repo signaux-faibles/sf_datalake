@@ -159,15 +159,7 @@ def explain_logistic_regression(
             get_max_value_colname(F.array(meso_features), "3rd_concerning_val"),
         )
     )
-    micro_scores_columns = [
-        "1st_concerning_val",
-        "2nd_concerning_val",
-        "3rd_concerning_val",
-        "1st_concerning_feat",
-        "2nd_concerning_feat",
-        "3rd_concerning_feat",
-    ]
 
-    micro_scores_df = explanation_df.select(["siren"] + micro_scores_columns)
+    micro_scores_df = explanation_df.select(["siren"] + config["MICRO_SCORES_COLUMNS"])
     macro_scores_df = explanation_df.select(["siren"] + config["MACRO_SCORES_COLUMNS"])
     return macro_scores_df, micro_scores_df

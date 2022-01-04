@@ -124,6 +124,7 @@ def dump_configuration(config: dict, dump_keys: Optional[Iterable] = None):
     if dump_keys is None:
         dump_keys = (
             {
+                "VERSION",
                 "FILL_MISSING_VALUES",
                 "TRAIN_TEST_SPLIT_RATIO",
                 "TARGET_OVERSAMPLING_RATIO",
@@ -139,4 +140,4 @@ def dump_configuration(config: dict, dump_keys: Optional[Iterable] = None):
         path.join(config["MODEL_OUTPUT_DIR"], "parameters.json"), "w", encoding="utf-8"
     ) as f:
         sub_config = {k: v for k, v in config.items() if k in dump_keys}
-        json.dump(sub_config, f, indent=2)
+        json.dump(sub_config, f, indent=4)
