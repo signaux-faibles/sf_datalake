@@ -65,6 +65,7 @@ def explain(
         - a DataFrame with the top 3 contributing features (micro).
 
     """
+    model = None
     for stage in pipeline_model.stages:
         if config["MODEL"]["NAME"] in repr(stage):
             model = stage
