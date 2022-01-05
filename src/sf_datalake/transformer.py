@@ -29,9 +29,7 @@ def generate_stages(config: dict) -> List[Transformer]:
     for transformer, features in transformer_features.items():
         outputCol = f"features_to_transform_{transformer}"
         transformer_vector_assembler = VectorAssembler(
-            inputCols=features,
-            outputCol=outputCol,  # TODO is it necessary or overwritting
-            # the same name during stages works?
+            inputCols=features, outputCol=outputCol
         )
         stages += [transformer_vector_assembler, get_transformer_from_str(transformer)]
         transformed_features.append(outputCol)

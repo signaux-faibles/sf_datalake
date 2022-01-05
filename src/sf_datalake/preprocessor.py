@@ -300,19 +300,13 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             if (not feat in self.config["AGG_DICT"]) and (feat in dataset.columns)
         ]  # already at SIREN level
         groupby_colnames = self.config["BASE_FEATURES"] + no_agg_colnames
-        # TODO problem here: code_naf and time_til_failure are not unique for one
-        # SIREN: example for code_naf see siren 311403976, is it ok?
 
         dataset = dataset.groupBy(*(set(groupby_colnames))).agg(self.config["AGG_DICT"])
         for colname, func in self.config["AGG_DICT"].items():
             if func == "mean":
-                func = "avg"  # groupBy mean produces variables such as avg(colname)
+                func = "avg"  # 'groupBy mean' produces variables such as avg(colname)
             dataset = dataset.withColumnRenamed(f"{func}({colname})", colname)
 
-        ### TODO : ratio_dette_moyenne12m should be computed from the
-        ### aggregated ratio_dette variable.
-        # w = dataset.groupBy("siren", F.window(dataset.periode - 365
-        # days, "365 days")).avg("ratio_dette")
         return dataset
 
 

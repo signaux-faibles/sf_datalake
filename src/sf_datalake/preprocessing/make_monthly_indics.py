@@ -20,28 +20,26 @@ OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 data_paths = {
     "t_art": path.join(VUES_DIR, "pub_risq_oracle.t_art.orc"),
     "t_mvt": path.join(VUES_DIR, "pub_risq_oracle.t_mvt.orc"),
-    "t_mvr": path.join(VUES_DIR, "pub_risq_oracle.t_mvr.orc"),  # TODO: not used
-    "t_dar": path.join(VUES_DIR, "pub_risq_oracle.t_dar.orc"),  # TODO: not used
-    "t_dos": path.join(VUES_DIR, "pub_risq_oracle.t_dos.orc"),  # TODO: not used
-    "t_ech": path.join(VUES_DIR, "pub_risq_oracle.t_ech.orc"),  # TODO: not used
-    "af": path.join(
-        VUES_DIR, "etl_decla-declarations_af.orc"
-    ),  # TODO: not the right vue table ?
+    "t_mvr": path.join(VUES_DIR, "pub_risq_oracle.t_mvr.orc"),  # unused for now
+    "t_dar": path.join(VUES_DIR, "pub_risq_oracle.t_dar.orc"),  # unused for now
+    "t_dos": path.join(VUES_DIR, "pub_risq_oracle.t_dos.orc"),  # unused for now
+    "t_ech": path.join(VUES_DIR, "pub_risq_oracle.t_ech.orc"),  # unused for now
+    "af": path.join(VUES_DIR, "etl_decla-declarations_af.orc"),
     "t_ref_etablissements": path.join(
         VUES_DIR, "pub_refent-t_ref_etablissements.orc"
-    ),  # TODO: not used
+    ),  # unused for now
     "t_ref_entreprise": path.join(
         VUES_DIR, "pub_refent-t_ref_entreprise.orc"
-    ),  # TODO: not used
+    ),  # unused for now
     "t_ref_code_nace": path.join(
         VUES_DIR, "pub_refer-t_ref_code_nace_complet.orc"
-    ),  # TODO: not used
+    ),  # unused for now
     "liasse_tva_ca3": path.join(
         VUES_DIR, "etl_tva.liasse_tva_ca3_view.orc"
-    ),  # TODO: not used
+    ),  # unused for now
     "t_etablissement_annee": path.join(
         VUES_DIR, "etl_refent-T_ETABLISSEMENT_ANNEE.orc"
-    ),  # TODO: not used
+    ),  # unused for now
 }
 
 datasets = load_data(data_paths)

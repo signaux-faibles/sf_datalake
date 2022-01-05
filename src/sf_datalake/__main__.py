@@ -76,8 +76,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         config["MODEL"]["NAME"],
         config["MODEL"]["REGULARIZATION_COEFF"],
         config["MODEL"]["MAX_ITER"],
-    )  # TODO: Create an array attribute in the config file that lists all the
-    # parameters related to the model. Then adjust logging to be more generic.
+    )
 
     transformer_stages = sf_datalake.transformer.generate_stages(config)
     model_stages = sf_datalake.model.generate_stages(config)
@@ -89,12 +88,8 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     pipeline_model = pipeline.fit(train_data)
     _ = pipeline_model.transform(train_data)
     model = pipeline_model.stages[-2]
-    logging.info(
-        "Model weights: %.3f", model.coefficients
-    )  # TODO: Find a more generic way, what if model is not parametric
-    logging.info(
-        "Model intercept: %.3f", model.intercept
-    )  # TODO: Find a more generic way, what if model is not parametric
+    logging.info("Model weights: %.3f", model.coefficients)
+    logging.info("Model intercept: %.3f", model.intercept)
     test_transformed = pipeline_model.transform(test_data)
     prediction_transformed = pipeline_model.transform(prediction_data)
     macro_scores, micro_scores = sf_datalake.model.explain(

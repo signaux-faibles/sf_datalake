@@ -120,10 +120,7 @@ def explain_logistic_regression(
     ]
 
     # Get individual features contribution
-    ep = (
-        pyspark.ml.feature.ElementwiseProduct()
-    )  # TODO Will need some adjustments because this line needs a SparkContext
-    # initialized, assert?
+    ep = pyspark.ml.feature.ElementwiseProduct()
     ep.setScalingVec(model.coefficients)
     ep.setInputCol("features")
     ep.setOutputCol("eprod")
