@@ -1,5 +1,5 @@
 {
-    "VERSION": "202201.1",
+    "VERSION": "202110.1",
     "OUTPUT_ROOT_DIR": "/projets/TSF/donnees",
     "DATA_ROOT_DIR": "/projets/TSF/sources",
     "FILL_MISSING_VALUES": true,
