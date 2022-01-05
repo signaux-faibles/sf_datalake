@@ -5,10 +5,11 @@ This follows MRV's process, originally written in SAS: `21_indicateurs.sas`
 
 from os import path
 
-import pyspark.sql.functions as F  # pylint: disable=E0401
+import pyspark.sql.functions as F
 
-from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR, feature_engineering
-from sf_datalake.utils import load_data
+from sf_datalake.io import load_data
+from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
+from sf_datalake.preprocessor import parse_date, process_payment
 
 OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 
@@ -19,28 +20,26 @@ OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
 data_paths = {
     "t_art": path.join(VUES_DIR, "pub_risq_oracle.t_art.orc"),
     "t_mvt": path.join(VUES_DIR, "pub_risq_oracle.t_mvt.orc"),
-    "t_mvr": path.join(VUES_DIR, "pub_risq_oracle.t_mvr.orc"),  # TODO: not used
-    "t_dar": path.join(VUES_DIR, "pub_risq_oracle.t_dar.orc"),  # TODO: not used
-    "t_dos": path.join(VUES_DIR, "pub_risq_oracle.t_dos.orc"),  # TODO: not used
-    "t_ech": path.join(VUES_DIR, "pub_risq_oracle.t_ech.orc"),  # TODO: not used
-    "af": path.join(
-        VUES_DIR, "etl_decla-declarations_af.orc"
-    ),  # TODO: not the right vue table ?
+    "t_mvr": path.join(VUES_DIR, "pub_risq_oracle.t_mvr.orc"),  # unused for now
+    "t_dar": path.join(VUES_DIR, "pub_risq_oracle.t_dar.orc"),  # unused for now
+    "t_dos": path.join(VUES_DIR, "pub_risq_oracle.t_dos.orc"),  # unused for now
+    "t_ech": path.join(VUES_DIR, "pub_risq_oracle.t_ech.orc"),  # unused for now
+    "af": path.join(VUES_DIR, "etl_decla-declarations_af.orc"),
     "t_ref_etablissements": path.join(
         VUES_DIR, "pub_refent-t_ref_etablissements.orc"
-    ),  # TODO: not used
+    ),  # unused for now
     "t_ref_entreprise": path.join(
         VUES_DIR, "pub_refent-t_ref_entreprise.orc"
-    ),  # TODO: not used
+    ),  # unused for now
     "t_ref_code_nace": path.join(
         VUES_DIR, "pub_refer-t_ref_code_nace_complet.orc"
-    ),  # TODO: not used
+    ),  # unused for now
     "liasse_tva_ca3": path.join(
         VUES_DIR, "etl_tva.liasse_tva_ca3_view.orc"
-    ),  # TODO: not used
+    ),  # unused for now
     "t_etablissement_annee": path.join(
         VUES_DIR, "etl_refent-T_ETABLISSEMENT_ANNEE.orc"
-    ),  # TODO: not used
+    ),  # unused for now
 }
 
 datasets = load_data(data_paths)
@@ -51,12 +50,12 @@ datasets = load_data(data_paths)
 
 # Convert to dates
 
-t_art = feature_engineering.parse_date(
+t_art = parse_date(
     datasets["t_art"], ["art_disc", "art_didr", "art_datedcf", "art_dori"]
 )
 t_art = t_art.orderBy(["frp", "art_cleart"])  # useless on spark a priori ?
 
-t_mvt = feature_engineering.parse_date(datasets["t_mvt"], ["mvt_djc", "mvt_deff"])
+t_mvt = parse_date(datasets["t_mvt"], ["mvt_djc", "mvt_deff"])
 t_mvt = t_mvt.orderBy(["frp", "art_cleart"])  # useless on spark a priori ?
 
 corresp_siren_frp2 = datasets["t_etablissement_annee"].withColumn(
@@ -79,11 +78,11 @@ mvt_montant_creance = t_mvt.join(
 # Eventuellement faire un join car on perd des colonnes en faisant
 # l'aggrégation. À voir.
 mvt_paiement = t_mvt.filter("mvt_nacrd == 0 OR mvt_nacrd == 1")
-mvt_paiement = feature_engineering.process_payment(mvt_paiement)
+mvt_paiement = process_payment(mvt_paiement)
 
 # Paiements autres
 mvt_paiement_autre = t_mvt.filter("mvt_nacrd != 0 AND mvt_nacrd != 1")
-mvt_paiement_autre = feature_engineering.process_payment(mvt_paiement_autre)
+mvt_paiement_autre = process_payment(mvt_paiement_autre)
 
 # Join all tables
 creances = t_art.join(mvt_montant_creance, on=["frp", "art_cleart"], how="left")

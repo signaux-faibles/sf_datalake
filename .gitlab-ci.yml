@@ -6,7 +6,7 @@ variables:
   CACHE_KEY: "${CI_PIPELINE_ID}"
   CACHE: "${CACHE_ROOT}/${CACHE_KEY}"
   PACKAGE: "python_packages.tar.gz"
-  SCRIPT: "${CI_PROJECT_DIR}/src/sf_datalake/processing/logreg_model.py"
+  SCRIPT: "${CI_PROJECT_DIR}/src/sf_datalake/__main__.py"
   LAKE_HOME: "/projets/TSF"
   LAKE_MODULES_DIR: "${LAKE_HOME}/applicatifs"
   LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"

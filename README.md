@@ -1,4 +1,4 @@
-[![pipeline status](https://forge.dgfip.finances.rie.gouv.fr/raphaelventura/sf_datalake/badges/main/pipeline.svg)](https://forge.dgfip.finances.rie.gouv.fr/raphaelventura/sf_datalake/-/commits/main) 
+[![pipeline status](https://forge.dgfip.finances.rie.gouv.fr/raphaelventura/sf_datalake/badges/main/pipeline.svg)](https://forge.dgfip.finances.rie.gouv.fr/raphaelventura/sf_datalake/-/commits/main)
 
 This is the python codebase for the "Signaux Faibles" project's failure prediction algorithms on the DGFiP-hosted datalake.
 

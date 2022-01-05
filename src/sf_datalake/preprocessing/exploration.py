@@ -3,8 +3,8 @@
 
 from typing import Iterable, Tuple
 
-import pyspark  # pylint: disable=E0401
-import pyspark.sql.functions as F  # pylint: disable=E0401
+import pyspark
+import pyspark.sql.functions as F
 
 
 def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -109,31 +109,3 @@ def accounting_duration(
         .count()
         .orderBy("datediff_floored")
     )
-
-
-def oversample_df(
-    df: pyspark.sql.DataFrame, label_colname: str
-) -> pyspark.sql.DataFrame:
-    """Implements dataset oversampling using duplication.
-
-    Args:
-        df: The input DataFrame.
-        label_colname: The name of the column holding binary 0/1 target labels. It is
-           assumed that samples with labels 1 are the ones that should be oversampled.
-
-    Returns:
-        The oversampled dataset.
-
-    """
-    major_df = df.filter(df[label_colname] == 0)
-    minor_df = df.filter(df[label_colname] == 1)
-    ratio = int(major_df.count() / minor_df.count())
-
-    # Duplicate the minority rows
-    oversampled_df = minor_df.withColumn(
-        "dummy", F.explode(F.array([F.lit(x) for x in range(ratio)]))
-    ).drop("dummy")
-
-    # Combine both oversampled minority rows and previous majority rows
-    combined_df = major_df.unionAll(oversampled_df)
-    return combined_df
