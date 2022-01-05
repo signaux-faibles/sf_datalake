@@ -1,6 +1,5 @@
 """Utility functions for data handling."""
 
-import json
 import logging
 from os import path
 from typing import Dict, Iterable, Optional
@@ -118,21 +117,22 @@ def dump_configuration(
           All elements of `dump_keys` must be part of `config`'s keys.
 
     """
-    if dump_keys is None:
-        dump_keys = (
-            {
-                "VERSION",
-                "FILL_MISSING_VALUES",
-                "TRAIN_TEST_SPLIT_RATIO",
-                "TARGET_OVERSAMPLING_RATIO",
-                "N_CONCERNING_MICRO",
-                "TRAIN_DATES",
-                "TEST_DATES",
-                "PREDICTION_DATE",
-                "MODEL",
-                "FEATURES",
-            },
-        )
-    with open(output_file, "w", encoding="utf-8") as f:
-        sub_config = {k: v for k, v in config.items() if k in dump_keys}
-        json.dump(sub_config, f, indent=4)
+    raise NotImplementedError
+    # if dump_keys is None:
+    #     dump_keys = (
+    #         {
+    #             "VERSION",
+    #             "FILL_MISSING_VALUES",
+    #             "TRAIN_TEST_SPLIT_RATIO",
+    #             "TARGET_OVERSAMPLING_RATIO",
+    #             "N_CONCERNING_MICRO",
+    #             "TRAIN_DATES",
+    #             "TEST_DATES",
+    #             "PREDICTION_DATE",
+    #             "MODEL",
+    #             "FEATURES",
+    #         },
+    #     )
+    # with open(output_file, "w", encoding="utf-8") as f:
+    #     sub_config = {k: v for k, v in config.items() if k in dump_keys}
+    #     json.dump(sub_config, f, indent=4)
