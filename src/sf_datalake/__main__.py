@@ -4,6 +4,7 @@ import argparse
 import datetime
 import logging
 import os
+import random
 import sys
 from os import path
 
@@ -40,6 +41,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         )
     else:
         output_directory = args.output_directory
+    config["SEED"] = random.randint(0, 10000) if args.SEED is None else args.SEED
 
     # Prepare data.
     yearly_data = sf_datalake.io.load_data(
@@ -49,6 +51,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
             ),
         },
         spl_ratio=config["SAMPLE_RATIO"],
+        seed=config["SEED"],
     )["yearly_data"]
 
     pipeline_preprocessor = Pipeline(
@@ -172,6 +175,14 @@ if __name__ == "__main__":
         help="""
         If specified, missing values will be dropped instead of filling data with
         default values.
+        """,
+    )
+    parser.add_argument(
+        "--seed",
+        dest="SEED",
+        type=int,
+        help="""
+        If specified, the seed used in all calls of the following functions: pyspark.sql.DataFrame.sample(), pyspark.sql.DataFrame.randomSplit(). If not specified, a random value is used.
         """,
     )
     parser.add_argument(

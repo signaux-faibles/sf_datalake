@@ -37,7 +37,7 @@ def train_test_predict_split(
 
     failing_subset = df.filter(will_fail_mask)
     not_failing_subset = df.filter(~will_fail_mask).sample(
-        n_not_failing / (n_samples - n_failing)
+        n_not_failing / (n_samples - n_failing), seed=config["SEED"]
     )
     oversampled_subset = failing_subset.union(not_failing_subset)
 
@@ -46,22 +46,22 @@ def train_test_predict_split(
         df.select("siren")
         .distinct()
         .randomSplit(
-            [config["TRAIN_TEST_SPLIT_RATIO"], 1 - config["TRAIN_TEST_SPLIT_RATIO"]]
+            [config["TRAIN_TEST_SPLIT_RATIO"], 1 - config["TRAIN_TEST_SPLIT_RATIO"]],
+            seed=config["SEED"],
         )
     )
 
     train = (
         oversampled_subset.filter(
-            oversampled_subset["siren"].isin(siren_train["siren"])
+            oversampled_subset["periode"] > config["TRAIN_DATES"][0]
         )
-        .filter(oversampled_subset["periode"] > config["TRAIN_DATES"][0])
         .filter(oversampled_subset["periode"] < config["TRAIN_DATES"][1])
+        .join(siren_train, how="inner", on="siren")
     )
-
     test = (
-        df.filter(df["siren"].isin(siren_test["siren"]))
-        .filter(df["periode"] > config["TEST_DATES"][0])
+        df.filter(df["periode"] > config["TEST_DATES"][0])
         .filter(df["periode"] < config["TEST_DATES"][1])
+        .join(siren_test, how="inner", on="siren")
     )
 
     prediction = df.filter(F.to_date(df["periode"]) == config["PREDICTION_DATE"])
