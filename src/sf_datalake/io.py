@@ -11,7 +11,7 @@ from sf_datalake.utils import instantiate_spark_session
 
 
 def load_data(
-    data_paths: Dict[str, str], spl_ratio: float = None
+    data_paths: Dict[str, str], spl_ratio: float = None, seed: int = 1234
 ) -> Dict[str, pyspark.sql.DataFrame]:
     """Loads one or more orc-stored datasets and returns them in a dict.
 
@@ -32,7 +32,7 @@ def load_data(
     for name, file_path in data_paths.items():
         df = spark.read.orc(file_path)
         if spl_ratio is not None:
-            df = df.sample(spl_ratio)
+            df = df.sample(spl_ratio, seed=seed)
         datasets[name] = df
     return datasets
 
