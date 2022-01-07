@@ -9,10 +9,9 @@
 * ``io.py`` - I/O functions.
 * ``__main__.py`` - Main entry point script, which can be used to launch end-to-end
   predictions.
-* ``model.py`` -
-* ``preprocessor.py`` -
-* ``sampler.py`` -
-* ``transformer.py`` -
+* ``model.py`` - Model utilities and classes.
+* ``sampler.py`` - Data sampling functions.
+* ``transform.py`` - Utilities and classes for handling and transforming datasets.
 * ``utils.py`` - Utility functions for spark session and data handling.
 """
 

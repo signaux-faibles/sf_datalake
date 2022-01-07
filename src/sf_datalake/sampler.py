@@ -1,4 +1,4 @@
-"""Sampling functions. """
+"""Sampling functions."""
 
 from typing import Tuple
 
