@@ -1,0 +1,10 @@
+{
+    "maacdo": {
+        "default": {
+            "version": "v0.0.1"
+        },
+        "test-able-to-choose-maacdo-version": {
+            "version": "test_branch"
+        }
+    }
+}
