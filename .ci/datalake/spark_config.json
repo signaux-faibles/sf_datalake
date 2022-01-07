@@ -1,0 +1,40 @@
+{
+    "prod": {
+        "sparkTask": {
+            "file": "$LAKE_MODULES_DIR/main.py",
+            "executorMemory": "8g",
+            "executorCores": 5,
+            "numExecutors": 5,
+            "driverMemory": "10g",
+            "driverCores": 2,
+            "queue": "TSF",
+            "archives": [
+                "$LAKE_PKG_TARGET#venv"
+            ],
+            "args": [
+                "--output_directory",
+                "${LAKE_HOME}/donnees/sorties_modele/${CI_PIPELINE_ID}"
+            ]
+        }
+    },
+    "feat": {
+        "sparkTask": {
+            "file": "$LAKE_MODULES_DIR/main.py",
+            "executorMemory": "2g",
+            "executorCores": 2,
+            "numExecutors": 2,
+            "driverMemory": "3g",
+            "driverCores": 2,
+            "queue": "TSF",
+            "archives": [
+                "$LAKE_PKG_TARGET#venv"
+            ],
+            "args": [
+                "--sample_ratio",
+                "0.001",
+                "--output_directory",
+                "${LAKE_HOME}/donnees/test/${CI_PIPELINE_ID}"
+            ]
+        }
+    }
+}

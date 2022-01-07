@@ -11,15 +11,18 @@ variables:
   LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
   LAKE_ENTRYPOINT: "${LAKE_MODULES_DIR}/main.py"
   DEPLOYMENT_TYPE: "null"
+  RUN_SPARK_TASK: "no"
 
 workflow:
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
       variables:
         DEPLOYMENT_TYPE: "prod"
+        RUN_SPARK_TASK: "yes"
     - if: $CI_COMMIT_REF_NAME =~ /feat/
       variables:
         DEPLOYMENT_TYPE: "feat"
+        RUN_SPARK_TASK: "yes"
     - when: always
 
 # Pip's cache doesn't store the python packages
@@ -75,7 +78,12 @@ prepare_new_working_directory:
     - mkdir -p ${CACHE}/log
     - mkdir -p ${CACHE}/bin
     - mkdir -p ${CACHE}/results
-    - git clone https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
+    - echo "Fetching spark configuration to ${CACHE}/spark_config.json (maybe null)"
+    - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/spark_config.json | envsubst > ${CACHE}/spark_config.json
+    - cat ${CACHE}/spark_config.json
+    - MAACDO_VERSION=$(jq --raw-output --arg GROUP "${DEPLOYMENT_TYPE}" --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$GROUP] + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
+    - echo "Getting MaacDo version ${MAACDO_VERSION} "
+    - git clone --depth 1 --branch $MAACDO_VERSION https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
 
 prepare_maacdo_configuration:
   stage: .pre
@@ -83,12 +91,11 @@ prepare_maacdo_configuration:
   needs:
     - job: prepare_new_working_directory
   script:
-    - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/config.json | envsubst > ${CACHE}/deploy_config.json
-    - SPARK_CONFIG=$(jq  --compact-output '.sparkTask' ${CACHE}/deploy_config.json)
+    - SPARK_CONFIG=$(jq  --compact-output '.sparkTask' ${CACHE}/spark_config.json)
     - >
      [[ -z ${SPARK_CONFIG} ]]
      && [[ ${DEPLOYMENT_TYPE} != "null" ]]
-     && { echo "Error: no config for Spark tasks was provided."; exit 1; }
+     && { echo "no config for Spark tasks"; exit 1; }
     - export SPARK_CONFIG=${SPARK_CONFIG}
     - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
     - cat ${CACHE}/ci_job.par
@@ -151,7 +158,7 @@ send_entrypoint_to_lake:
       -i ${LAKE_ENTRYPOINT}
       -c ${CACHE}/ci_job.par
   rules:
-    - if: $DEPLOYMENT_TYPE != "null"
+    - if: $RUN_SPARK_TASK == "yes"
 
 start_spark_task:
   stage: deploy
@@ -164,9 +171,9 @@ start_spark_task:
     - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${CACHE}/ci_job.par | grep ID |  cut -d: -f2)'
     - echo "Spark task has started. Livy id is [$idLivy]."
     - echo ${idLivy} | xargs > ${CACHE}/idLivy
-    - echo "To get yarns logs even in case of success, run -> ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${idLivy} -c ${CACHE}/ci_job.par"
+    - echo "to get yarns logs even in success case, run -> ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${idLivy} -c ${CACHE}/ci_job.par"
   rules:
-    - if: $DEPLOYMENT_TYPE != "null"
+    - if: $RUN_SPARK_TASK == "yes"
 
 wait_for_task_finishing:
   stage: deploy
@@ -198,7 +205,7 @@ wait_for_task_finishing:
         sleep 60
       done
   rules:
-    - if: $DEPLOYMENT_TYPE != "null"
+    - if: $RUN_SPARK_TASK == "yes"
 
 stop_spark_task:
   stage: deploy
@@ -216,7 +223,7 @@ stop_spark_task:
         echo "Nothing to do."
       fi
   rules:
-    - if: $DEPLOYMENT_TYPE != "null"
+    - if: $RUN_SPARK_TASK == "yes"
       when: manual
 
 pages:
@@ -252,7 +259,7 @@ fetch_yarn_logs:
         echo " --------------- "
       done
   rules:
-    - if: $DEPLOYMENT_TYPE != "null"
+    - if: $RUN_SPARK_TASK == "yes"
       when: on_failure
 
 fetch_model_outputs:
@@ -262,8 +269,8 @@ fetch_model_outputs:
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - |
-      MODEL_OUTPUT=$(jq --raw-output '[.sparkTask.args as $m | range(0; $m | length; 2) | {($m[.]): $m[(. + 1)]} ] | add | .["--output_directory"]' ${CACHE}/deploy_config.json)
-      echo "Fetching results from ${MODEL_OUTPUT}."
+      MODEL_OUTPUT=$(jq --raw-output '[.sparkTask.args as $m | range(0; $m | length; 2) | {($m[.]): $m[(. + 1)]} ] | add | .["--output_directory"]' ${CACHE}/spark_config.json)
+      echo "Fetching results from ${MODEL_OUTPUT}"
       [[ -z ${MODEL_OUTPUT} ]] && exit 1
     - bash recup_folder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
     - |
@@ -274,7 +281,7 @@ fetch_model_outputs:
         zip ${file}.zip ${file} && rm ${file}
       done
   rules:
-    - if: $DEPLOYMENT_TYPE != "null"
+    - if: $RUN_SPARK_TASK == "yes"
 
 #
 # END of PIPELINE
