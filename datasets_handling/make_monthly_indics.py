@@ -7,8 +7,8 @@ from os import path
 
 import pyspark.sql.functions as F
 
+from sf_datalake import DATA_ROOT_DIR, VUES_DIR
 from sf_datalake.io import load_data
-from sf_datalake.preprocessing import DATA_ROOT_DIR, VUES_DIR
 from sf_datalake.preprocessor import parse_date, process_payment
 
 OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
