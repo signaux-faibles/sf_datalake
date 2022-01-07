@@ -1,13 +1,19 @@
 """
 "Signaux Faibles" project package for failure prediction computations.
 
-The package contains several sub-packages associated with the different computations
-steps:
-* ``config`` - Configuration and model parameters that will be used during execution.
-* ``preprocessing`` - Production of datasets from raw data. Datasets loading and
-handling, exploration and feature engineering utilities.
-* ``processing`` - Data processing and models execution.
-* ``postprocessing`` - Scores computations, plotting and analysis tools.
+* ``config/`` - Configuration and model parameters that will be used during execution.
+* ``processing/`` - Data processing and models execution.
+* ``evaluation.py`` - Scores computations.
+* ``exploration.py ``- Data exploration-dedicated functions.
+* ``__init__.py`` - Some data-related variables definitions.
+* ``io.py`` - I/O functions.
+* ``__main__.py`` - Main entry point script, which can be used to launch end-to-end
+  predictions.
+* ``model.py`` -
+* ``preprocessor.py`` -
+* ``sampler.py`` -
+* ``transformer.py`` -
+* ``utils.py`` - Utility functions for spark session and data handling.
 """
 
 DATA_ROOT_DIR = (
