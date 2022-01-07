@@ -4,7 +4,7 @@ mdpconx=${API_MAACDO_PWD}
 trace=0
 dumptrace=0
 aide=0
-reptrdplg=/tmp/
+reptrdplg=/dev/null
 
 [ArretTacheSpark]
 #logout=${CACHE}/log/ArretTacheSpark_
@@ -13,8 +13,7 @@ reptrdplg=/tmp/
 #logout=${CACHE}/log/CreerRepertoire_
 
 [DemarrageTacheSpark]
-data={  "file": "$LAKE_HOME/main.py",  "executorMemory":"2g",  "executorCores": 2, "numExecutors": 2, "driverMemory": "5g", "driverCores": 2, "queue":"TSF", "archives": ["$LAKE_TARGET#venv"]}
-#data={  "file": "$LAKE_HOME/main.py",  "executorMemory":"8g", "executorCores": 5, "numExecutors": 5, "driverMemory": "10g", "driverCores": 2, "queue":"TSF", "archives": ["$LAKE_TARGET#venv"]}
+data=${SPARK_CONFIG}
 #logout=${CACHE}/log/DemarrageTacheSpark_
 
 [EnvoyerFichier]

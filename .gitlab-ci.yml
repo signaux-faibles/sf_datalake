@@ -6,14 +6,21 @@ variables:
   CACHE_KEY: "${CI_PIPELINE_ID}"
   CACHE: "${CACHE_ROOT}/${CACHE_KEY}"
   PACKAGE: "python_packages.tar.gz"
-  SCRIPT: "${CI_PROJECT_DIR}/src/sf_datalake/__main__.py"
   LAKE_HOME: "/projets/TSF"
   LAKE_MODULES_DIR: "${LAKE_HOME}/applicatifs"
   LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
   LAKE_ENTRYPOINT: "${LAKE_MODULES_DIR}/main.py"
-  BRANCH_TO_DEPLOY: "${CI_DEFAULT_BRANCH}"
-  MODEL_OUTPUT: "donnees/test"
+  DEPLOYMENT_TYPE: "null"
 
+workflow:
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+      variables:
+        DEPLOYMENT_TYPE: "prod"
+    - if: $CI_COMMIT_REF_NAME =~ /feat/
+      variables:
+        DEPLOYMENT_TYPE: "feat"
+    - when: always
 
 # Pip's cache doesn't store the python packages
 # https://pip.pypa.io/en/stable/reference/pip_install/#caching
@@ -46,11 +53,20 @@ cache:
 #  PIPELINE STARTS HERE  #
 ##########################
 
-prepare_pipeline_env:
+
+remove_older_working_directories:
   stage: .pre
-  extends: .lake
-  before_script:
-    - echo "Nothing to do, but must exist to reset before_script instructions from .lake"
+  tags:
+    - datalake
+  script:
+    - echo "Cleaning older CI cached data."
+    # on ne garde que les 5 derniers
+    - ls -1QAtd ${CACHE_ROOT}/* | tail -n+10 | xargs rm -rf
+
+prepare_new_working_directory:
+  stage: .pre
+  tags:
+    - datalake
   script:
     - echo "Preparing cache & conf in ${CACHE}."
     - "[[ -d ${CACHE} ]] && rm -rf ${CACHE}"
@@ -59,13 +75,23 @@ prepare_pipeline_env:
     - mkdir -p ${CACHE}/log
     - mkdir -p ${CACHE}/bin
     - mkdir -p ${CACHE}/results
-    - echo "Preparing maacdo API configuration."
-    - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
     - git clone https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
+
+prepare_maacdo_configuration:
+  stage: .pre
+  extends: .lake
+  needs:
+    - job: prepare_new_working_directory
+  script:
+    - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/config.json | envsubst > ${CACHE}/deploy_config.json
+    - SPARK_CONFIG=$(jq  --compact-output '.sparkTask' ${CACHE}/deploy_config.json)
+    - >
+     [[ -z ${SPARK_CONFIG} ]]
+     && [[ ${DEPLOYMENT_TYPE} != "null" ]]
+     && { echo "Error: no config for Spark tasks was provided."; exit 1; }
+    - export SPARK_CONFIG=${SPARK_CONFIG}
+    - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
     - cat ${CACHE}/ci_job.par
-    - echo "Cleaning older CI cached data."
-    # on ne garde que les 5 derniers
-    - ls -1QAtd ${CACHE_ROOT}/* | tail -n+10 | xargs rm -rf
 
 pylint:
   stage: test
@@ -81,7 +107,7 @@ build_package:
   stage: build
   extends: .python
   needs:
-    - job: prepare_pipeline_env
+    - job: prepare_new_working_directory
   script:
     - pip install -v .
     - venv-pack -o /packages/${CACHE_KEY}/${PACKAGE}
@@ -91,6 +117,7 @@ send_package_to_lake:
   extends: .lake
   needs:
     - job: build_package
+    - job: prepare_maacdo_configuration
   script:
     - echo "Removing old packages archive if it exists."
     - ./api_maacdo.pl
@@ -105,53 +132,47 @@ send_package_to_lake:
       -i ${LAKE_PKG_TARGET}
       -c ${CACHE}/ci_job.par
 
-prepare_lake_workspace:
+send_entrypoint_to_lake:
   stage: deploy
   extends: .lake
+  needs:
+    - job: prepare_maacdo_configuration
   script:
     - ./api_maacdo.pl
         -a SuppressionFichier
         -i ${LAKE_ENTRYPOINT}
         -c ${CACHE}/ci_job.par ||
         echo "Failed removing file ${LAKE_ENTRYPOINT}. Maybe this file doesn't exist."
-    - echo "Sending new python main script to ${LAKE_ENTRYPOINT}."
+    - SCRIPT="${CI_PROJECT_DIR}/src/sf_datalake/__main__.py"
+    - echo "Sending new python main script ${SCRIPT} to ${LAKE_ENTRYPOINT}."
     - ./api_maacdo.pl
       -a EnvoyerFichier
       -l ${SCRIPT}
       -i ${LAKE_ENTRYPOINT}
       -c ${CACHE}/ci_job.par
   rules:
-    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-
-drop_old_results:
-  stage: deploy
-  extends: .lake
-  script:
-    - echo "Cleaning previous model outputs on the lake HDFS inside ${MODEL_OUTPUT}."
-    - ./api_maacdo.pl -a 'CreerRepertoire' -i ${LAKE_HOME}/${MODEL_OUTPUT} -c ${CACHE}/ci_job.par # pour eviter l'erreur ou le repertoire n'existe pas
-    - bash rmRecursifHdfs.sh ${MODEL_OUTPUT} ${CACHE}/ci_job.par
-  rules:
-    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+    - if: $DEPLOYMENT_TYPE != "null"
 
 start_spark_task:
   stage: deploy
   extends: .lake
   needs:
-    - job: "prepare_lake_workspace"
-    - job: "drop_old_results"
+    - job: "send_entrypoint_to_lake"
     - job: "send_package_to_lake"
   script:
     - echo "Launching spark job, getting livy ID."
     - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${CACHE}/ci_job.par | grep ID |  cut -d: -f2)'
-    - echo "Spark task has started. Livy id is [$idLivy]"
+    - echo "Spark task has started. Livy id is [$idLivy]."
     - echo ${idLivy} | xargs > ${CACHE}/idLivy
+    - echo "To get yarns logs even in case of success, run -> ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${idLivy} -c ${CACHE}/ci_job.par"
   rules:
-    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+    - if: $DEPLOYMENT_TYPE != "null"
 
 wait_for_task_finishing:
   stage: deploy
   extends: .lake
-  needs: ["start_spark_task"]
+  needs:
+    - job: "start_spark_task"
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - |
@@ -177,7 +198,7 @@ wait_for_task_finishing:
         sleep 60
       done
   rules:
-    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+    - if: $DEPLOYMENT_TYPE != "null"
 
 stop_spark_task:
   stage: deploy
@@ -195,7 +216,7 @@ stop_spark_task:
         echo "Nothing to do."
       fi
   rules:
-    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+    - if: $DEPLOYMENT_TYPE != "null"
       when: manual
 
 pages:
@@ -212,7 +233,7 @@ pages:
 #    paths:
 #      - public
   rules:
-    - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes:
         - src/sf_datalake/*
 
@@ -231,8 +252,8 @@ fetch_yarn_logs:
         echo " --------------- "
       done
   rules:
-  - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
-    when: on_failure
+    - if: $DEPLOYMENT_TYPE != "null"
+      when: on_failure
 
 fetch_model_outputs:
   stage: .post
@@ -240,6 +261,10 @@ fetch_model_outputs:
   needs: ["wait_for_task_finishing"]
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
+    - |
+      MODEL_OUTPUT=$(jq --raw-output '[.sparkTask.args as $m | range(0; $m | length; 2) | {($m[.]): $m[(. + 1)]} ] | add | .["--output_directory"]' ${CACHE}/deploy_config.json)
+      echo "Fetching results from ${MODEL_OUTPUT}."
+      [[ -z ${MODEL_OUTPUT} ]] && exit 1
     - bash recup_folder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
     - |
       for file in ${CACHE}/results/*
@@ -249,7 +274,7 @@ fetch_model_outputs:
         zip ${file}.zip ${file} && rm ${file}
       done
   rules:
-  - if: $CI_COMMIT_BRANCH == $BRANCH_TO_DEPLOY
+    - if: $DEPLOYMENT_TYPE != "null"
 
 #
 # END of PIPELINE
