@@ -2,13 +2,12 @@
 "Signaux Faibles" project package for failure prediction computations.
 
 * ``config/`` - Configuration and model parameters that will be used during execution.
-* ``processing/`` - Data processing and models execution.
-* ``evaluation.py`` - Scores computations.
-* ``exploration.py ``- Data exploration-dedicated functions.
 * ``__init__.py`` - Some data-related variables definitions.
-* ``io.py`` - I/O functions.
 * ``__main__.py`` - Main entry point script, which can be used to launch end-to-end
   predictions.
+* ``evaluation.py`` - Scores computations.
+* ``exploration.py ``- Data exploration-dedicated functions.
+* ``io.py`` - I/O functions.
 * ``model.py`` - Model utilities and classes.
 * ``sampler.py`` - Data sampling functions.
 * ``transform.py`` - Utilities and classes for handling and transforming datasets.
