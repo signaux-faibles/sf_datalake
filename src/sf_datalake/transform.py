@@ -1,20 +1,21 @@
-"""Preprocessor utilities and classes."""
+"""Utilities and classes for handling and transforming datasets."""
 
 from functools import reduce
-from typing import Iterable, List
+from typing import Dict, Iterable, List
 
 import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
 from pyspark.ml import Transformer
-from pyspark.sql.types import StringType
+from pyspark.ml.feature import StandardScaler, VectorAssembler
+from pyspark.sql.types import FloatType, StringType
 from pyspark.sql.window import Window
 
 
 def parse_date(
     df: pyspark.sql.DataFrame, colnames: Iterable[str]
 ) -> pyspark.sql.DataFrame:
-    """Parse multiple columns of a pyspark.sql.DataFrame as date.
+    """Parses multiple columns of a pyspark.sql.DataFrame as date.
 
     Args:
         df: A DataFrame with dates represented as "yyyyMMdd" strings or integers.
@@ -30,7 +31,7 @@ def parse_date(
 
 
 def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Compute the number of payments.
+    """Computes the number of payments.
 
     Args:
         df: A DataFrame containing payment data.
@@ -65,7 +66,59 @@ def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     return df
 
 
-def generate_stages(config: dict) -> List[pyspark.ml.Transformer]:
+def get_scaler_from_str(s: str) -> Transformer:
+    """Get a Transformer from its name.
+
+    Args:
+        s: Name of the Transformer
+
+    Returns:
+        The selected Transformer with prepared parameters
+    """
+    factory = {
+        "StandardScaler": StandardScaler(
+            withMean=True,
+            withStd=True,
+            inputCol="features_to_transform_StandardScaler",
+            outputCol="features_transformed_StandardScaler",
+        )
+    }
+    return factory[s]
+
+
+def generate_scaling_stages(config: dict) -> List[Transformer]:
+    """Generates all stages related to Transformer objects.
+
+    The stages are ready to be included in a pyspark.ml.Pipeline.
+
+    Args:
+        config: model configuration, as loaded by utils.get_config().
+
+    Returns:
+        List of prepared Transformers.
+
+    """
+    stages: List[Transformer] = []
+    transformed_features: List[str] = []
+    transformer_features: Dict[str, List[str]] = {}
+    for feature, transformer in config["TRANSFORMERS"]:
+        transformer_features.setdefault(transformer, []).append(feature)
+    for transformer, features in transformer_features.items():
+        outputCol = f"features_to_transform_{transformer}"
+        transformer_vector_assembler = VectorAssembler(
+            inputCols=features, outputCol=outputCol
+        )
+        stages += [transformer_vector_assembler, get_scaler_from_str(transformer)]
+        transformed_features.append(outputCol)
+
+    concat_vector_assembler = VectorAssembler(
+        inputCols=transformed_features, outputCol="features"
+    )
+    stages.append(concat_vector_assembler)
+    return stages
+
+
+def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     """Generates stages for preprocessing pipeline construction.
 
     Args:
@@ -383,3 +436,20 @@ class DatasetFilter(Transformer):  # pylint: disable=R0903
         assert {"effectif", "code_naf"} <= set(dataset.columns)
 
         return dataset.filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
+
+
+class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
+    """A transformer to format the probability column in output of a model."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Extract the positive probability and cast it as float.
+
+        Args:
+            dataset: DataFrame to transform
+
+        Returns:
+            Transformed DataFrame with casted probability data.
+
+        """
+        transform_udf = F.udf(lambda v: float(v[1]), FloatType())
+        return dataset.withColumn("probability", transform_udf("probability"))
