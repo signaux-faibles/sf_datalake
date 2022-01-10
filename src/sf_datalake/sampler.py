@@ -37,7 +37,7 @@ def train_test_predict_split(
 
     failing_subset = df.filter(will_fail_mask)
     not_failing_subset = df.filter(~will_fail_mask).sample(
-        n_not_failing / (n_samples - n_failing), seed=config["SEED"]
+        fraction=n_not_failing / (n_samples - n_failing), seed=config["SEED"]
     )
     oversampled_subset = failing_subset.union(not_failing_subset)
 

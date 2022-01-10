@@ -32,7 +32,7 @@ def load_data(
     for name, file_path in data_paths.items():
         df = spark.read.orc(file_path)
         if spl_ratio is not None:
-            df = df.sample(spl_ratio, seed=seed)
+            df = df.sample(fraction=spl_ratio, seed=seed)
         datasets[name] = df
     return datasets
 
