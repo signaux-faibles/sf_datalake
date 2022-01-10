@@ -20,11 +20,11 @@ sys.path.insert(0, os.path.abspath("../src/sf_datalake/"))
 # -- Project information -----------------------------------------------------
 
 project = "sf_datalake"
-copyright = "2021, Signaux Faibles contributors"
+copyright = "2022, Signaux Faibles contributors"
 author = "Signaux Faibles contributors"
 
 # The full version, including alpha/beta/rc tags
-release = "202110.1"
+release = "dev"
 
 
 # -- General configuration ---------------------------------------------------
