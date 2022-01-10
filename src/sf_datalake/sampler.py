@@ -2,6 +2,7 @@
 
 from typing import Tuple
 
+import pyspark
 import pyspark.sql
 from pyspark.sql import functions as F
 
@@ -58,11 +59,16 @@ def train_test_predict_split(
         .filter(oversampled_subset["periode"] < config["TRAIN_DATES"][1])
         .join(siren_train, how="inner", on="siren")
     )
+    train = train.persist(pyspark.StorageLevel.MEMORY_AND_DISK)
+
     test = (
         df.filter(df["periode"] > config["TEST_DATES"][0])
         .filter(df["periode"] < config["TEST_DATES"][1])
         .join(siren_test, how="inner", on="siren")
     )
+    test = test.persist(pyspark.StorageLevel.MEMORY_AND_DISK)
 
     prediction = df.filter(F.to_date(df["periode"]) == config["PREDICTION_DATE"])
+    prediction = prediction.persist(pyspark.StorageLevel.MEMORY_AND_DISK)
+
     return train, test, prediction
