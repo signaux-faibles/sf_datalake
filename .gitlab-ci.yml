@@ -13,6 +13,8 @@ variables:
   DEPLOYMENT_TYPE: "null"
   RUN_SPARK_TASK: "no"
 
+### Workflow: defines when branch and merge request pipelines should run.
+
 workflow:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
@@ -82,18 +84,18 @@ prepare_new_working_directory:
     - mkdir -p ${CACHE}/log
     - mkdir -p ${CACHE}/bin
     - mkdir -p ${CACHE}/results
-    - echo "Fetching spark configuration to ${CACHE}/spark_config.json (maybe null)"
+    - echo "Preparing spark configuration inside ${CACHE}/spark_config.json (will be 'null' if no prediction should be run afterwards)."
     - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/spark_config.json | envsubst > ${CACHE}/spark_config.json
     - cat ${CACHE}/spark_config.json
     - MAACDO_VERSION=$(jq --raw-output --arg GROUP "${DEPLOYMENT_TYPE}" --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$GROUP] + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
-    - echo "Getting MaacDo version ${MAACDO_VERSION} "
+    - echo "Getting MaacDo version ${MAACDO_VERSION}."
     - git clone --depth 1 --branch $MAACDO_VERSION https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
 
 prepare_maacdo_configuration:
   stage: .pre
   extends: .lake
   needs:
-    - job: prepare_new_working_directory
+    - job: "prepare_new_working_directory"
   script:
     - SPARK_CONFIG=$(jq  --compact-output '.sparkTask' ${CACHE}/spark_config.json)
     - >
@@ -118,7 +120,7 @@ build_package:
   stage: build
   extends: .python
   needs:
-    - job: prepare_new_working_directory
+    - job: "prepare_new_working_directory"
   script:
     - pip install -v .
     - venv-pack -o /packages/${CACHE_KEY}/${PACKAGE}
@@ -127,8 +129,8 @@ send_package_to_lake:
   stage: deploy
   extends: .lake
   needs:
-    - job: build_package
-    - job: prepare_maacdo_configuration
+    - job: "build_package"
+    - job: "prepare_maacdo_configuration"
   script:
     - echo "Removing old packages archive if it exists."
     - ./api_maacdo.pl
@@ -147,7 +149,7 @@ send_entrypoint_to_lake:
   stage: deploy
   extends: .lake
   needs:
-    - job: prepare_maacdo_configuration
+    - job: "prepare_maacdo_configuration"
   script:
     - ./api_maacdo.pl
         -a SuppressionFichier
@@ -164,6 +166,8 @@ send_entrypoint_to_lake:
   rules:
     - if: $RUN_SPARK_TASK == "yes"
 
+### Spark jobs handling
+
 start_spark_task:
   stage: deploy
   extends: .lake
@@ -175,9 +179,9 @@ start_spark_task:
     - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${CACHE}/ci_job.par | grep ID |  cut -d: -f2)'
     - echo "Spark task has started. Livy id is [$idLivy]."
     - echo ${idLivy} | xargs > ${CACHE}/idLivy
-    - echo "to get yarns logs even in success case ->"
+    - echo "To get yarns logs even in success case, execute the following from the server running the gitlab runner process:"
     - echo "    ./api_maacdo.pl -a YarnLogsTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
-    - echo "to stop Spark task, if job is cancelled ->"
+    - echo "To stop the spark task, execute the following from the server running the gitlab runner process:"
     - echo "    ./api_maacdo.pl -a ArretTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
   rules:
     - if: $RUN_SPARK_TASK == "yes"
@@ -219,6 +223,7 @@ stop_spark_task:
   extends: .lake
   needs:
     - job: "start_spark_task"
+      optional: true
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - export STATUS=$(cat ${CACHE}/status_${ID_LIVY})
@@ -231,6 +236,8 @@ stop_spark_task:
         echo "Nothing to do."
       fi
   when: manual
+
+### Post-processing
 
 pages:
   stage: deploy
@@ -253,7 +260,8 @@ pages:
 fetch_yarn_logs:
   stage: .post
   extends: .lake
-  needs: ["wait_for_task_finishing"]
+  needs:
+    - job: "wait_for_task_finishing"
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${ID_LIVY} -c ${CACHE}/ci_job.par
@@ -271,7 +279,8 @@ fetch_yarn_logs:
 fetch_model_outputs:
   stage: .post
   extends: .lake
-  needs: ["wait_for_task_finishing"]
+  needs:
+    - job: "wait_for_task_finishing"
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - |
@@ -289,9 +298,10 @@ fetch_model_outputs:
   rules:
     - if: $RUN_SPARK_TASK == "yes"
 
-#
-# END of PIPELINE
-#
+######################
+# PIPELINE ENDS HERE #
+######################
+
 
 print-docker-env:
   stage: .pre
@@ -311,10 +321,6 @@ print-shell-env:
     - whoami
     - echo "Files on the nubo VM at $(pwd):"
     - ls -al
-    - echo "Files on the HDFS at ${LAKE_MODULES_DIR}:"
-    - ./api_maacdo.pl
-      -a ListContenuRepertoire
-      -i ${LAKE_MODULES_DIR}
     - echo "Files in ${CACHE}:"
     - ls -al ${CACHE}
   when: manual
