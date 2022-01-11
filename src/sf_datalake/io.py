@@ -122,21 +122,19 @@ def dump_configuration(
 
     config["VERSION"] = pkg_resources.get_distribution("sf_datalake").version
     if dump_keys is None:
-        dump_keys = (
-            {
-                "SEED",
-                "VERSION",
-                "FILL_MISSING_VALUES",
-                "TRAIN_TEST_SPLIT_RATIO",
-                "TARGET_OVERSAMPLING_RATIO",
-                "N_CONCERNING_MICRO",
-                "TRAIN_DATES",
-                "TEST_DATES",
-                "PREDICTION_DATE",
-                "MODEL",
-                "FEATURES",
-            },
-        )
+        dump_keys = {
+            "SEED",
+            "VERSION",
+            "FILL_MISSING_VALUES",
+            "TRAIN_TEST_SPLIT_RATIO",
+            "TARGET_OVERSAMPLING_RATIO",
+            "N_CONCERNING_MICRO",
+            "TRAIN_DATES",
+            "TEST_DATES",
+            "PREDICTION_DATE",
+            "MODEL",
+            "FEATURES",
+        }
     sub_config = {k: v for k, v in config.items() if k in dump_keys}
 
     config_df = spark.createDataFrame(pyspark.sql.Row(sub_config))
