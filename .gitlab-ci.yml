@@ -19,7 +19,7 @@ workflow:
       variables:
         DEPLOYMENT_TYPE: "prod"
         RUN_SPARK_TASK: "yes"
-    - if: $CI_COMMIT_REF_NAME =~ /feat/
+    - if: $CI_COMMIT_REF_NAME =~ /^feat/
       variables:
         DEPLOYMENT_TYPE: "feat"
         RUN_SPARK_TASK: "yes"
@@ -51,6 +51,8 @@ cache:
     - datalake
   before_script:
     - cd ${CACHE}/bin && pwd
+  after_script:
+    - pwd
 
 ##########################
 #  PIPELINE STARTS HERE  #
@@ -108,7 +110,7 @@ pylint:
   - pylint --rcfile=.pylintrc src/sf_datalake/
   rules:
     - changes:
-        - src/sf_datalake/*
+      - src/sf_datalake/*
 
 build_package:
   stage: build
@@ -171,7 +173,10 @@ start_spark_task:
     - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${CACHE}/ci_job.par | grep ID |  cut -d: -f2)'
     - echo "Spark task has started. Livy id is [$idLivy]."
     - echo ${idLivy} | xargs > ${CACHE}/idLivy
-    - echo "to get yarns logs even in success case, run -> ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${idLivy} -c ${CACHE}/ci_job.par"
+    - echo "to get yarns logs even in success case ->"
+    - echo "    ./api_maacdo.pl -a YarnLogsTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
+    - echo "to stop Spark task, if job is cancelled ->"
+    - echo "    ./api_maacdo.pl -a ArretTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
   rules:
     - if: $RUN_SPARK_TASK == "yes"
 
@@ -210,7 +215,8 @@ wait_for_task_finishing:
 stop_spark_task:
   stage: deploy
   extends: .lake
-  needs: ["start_spark_task"]
+  needs:
+    - job: "start_spark_task"
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - export STATUS=$(cat ${CACHE}/status_${ID_LIVY})
@@ -222,9 +228,7 @@ stop_spark_task:
       else
         echo "Nothing to do."
       fi
-  rules:
-    - if: $RUN_SPARK_TASK == "yes"
-      when: manual
+  when: manual
 
 pages:
   stage: deploy
