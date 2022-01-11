@@ -75,8 +75,8 @@ def write_predictions(
     prediction_data: pyspark.sql.DataFrame,
 ):
     """Writes the results of a prediction to CSV files."""
-    test_output_path = path.join(output_dir, "test_data")
-    prediction_output_path = path.join(output_dir, "prediction_data")
+    test_output_path = path.join(output_dir, "test_data.csv")
+    prediction_output_path = path.join(output_dir, "prediction_data.csv")
 
     logging.info("Writing test data to file %s", test_output_path)
     test_data.select(
@@ -95,8 +95,8 @@ def write_explanations(
     micro_scores_df: pyspark.sql.DataFrame,
 ):
     """Writes the explanations of a prediction to CSV files."""
-    concerning_output_path = path.join(output_dir, "concerning_values")
-    explanation_output_path = path.join(output_dir, "explanation_data")
+    concerning_output_path = path.join(output_dir, "concerning_values.csv")
+    explanation_output_path = path.join(output_dir, "explanation_data.csv")
     logging.info("Writing concerning features to file %s", concerning_output_path)
     micro_scores_df.write.csv(concerning_output_path, header=True)
 
@@ -139,4 +139,4 @@ def dump_configuration(
     sub_config = {k: v for k, v in config.items() if k in dump_keys}
 
     config_df = spark.createDataFrame(pyspark.sql.Row(sub_config))
-    config_df.repartition(1).write.json(output_dir)
+    config_df.repartition(1).write.json(path.join(output_dir, "run_configuration.json"))
