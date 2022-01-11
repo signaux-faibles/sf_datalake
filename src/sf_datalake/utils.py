@@ -6,7 +6,7 @@ import pkg_resources
 from pyspark.sql import SparkSession
 
 
-def instantiate_spark_session():
+def get_spark_session():
     """Creates or gets a SparkSession object."""
     spark = SparkSession.builder.getOrCreate()
     spark.conf.set("spark.shuffle.blockTransferService", "nio")

@@ -107,10 +107,11 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         macro_scores,
         micro_scores,
     )
+    sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
 
 
 if __name__ == "__main__":
-    _ = sf_datalake.utils.instantiate_spark_session()
+    _ = sf_datalake.utils.get_spark_session()
     parser = argparse.ArgumentParser(
         description="""
         Run a 'Signaux Faibles' distributed prediction with the chosen set of

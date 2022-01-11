@@ -4,10 +4,11 @@ import logging
 from os import path
 from typing import Dict, Iterable, Optional
 
+import pkg_resources
 import pyspark.sql
 from pyspark.sql import functions as F
 
-from sf_datalake.utils import instantiate_spark_session
+import sf_datalake.utils
 
 
 def load_data(
@@ -28,7 +29,7 @@ def load_data(
     """
     datasets = {}
 
-    spark = instantiate_spark_session()
+    spark = sf_datalake.utils.get_spark_session()
     for name, file_path in data_paths.items():
         df = spark.read.orc(file_path)
         if spl_ratio is not None:
@@ -45,7 +46,7 @@ def csv_to_orc(input_filename: str, output_filename: str):
         output_filename: Path to write the output orc file to.
 
     """
-    spark = instantiate_spark_session()
+    spark = sf_datalake.utils.get_spark_session()
     df = spark.read.options(inferSchema="True", header="True", delimiter="|").csv(
         path.join(input_filename)
     )
@@ -106,33 +107,36 @@ def write_explanations(
 
 
 def dump_configuration(
-    output_file: str, config: dict, dump_keys: Optional[Iterable] = None
+    output_dir: str, config: dict, dump_keys: Optional[Iterable] = None
 ):
     """Dumps a subset of the configuration used during a prediction run.
 
     Args:
-        output_file: The path and file name where configuration should be dumped.
+        output_dir: The path where configuration should be dumped.
         config: Model configuration, as loaded by utils.get_config().
         dump_keys: An Iterable of configuration parameters that should be dumped.
           All elements of `dump_keys` must be part of `config`'s keys.
 
     """
-    raise NotImplementedError
-    # if dump_keys is None:
-    #     dump_keys = (
-    #         {
-    #             "VERSION",
-    #             "FILL_MISSING_VALUES",
-    #             "TRAIN_TEST_SPLIT_RATIO",
-    #             "TARGET_OVERSAMPLING_RATIO",
-    #             "N_CONCERNING_MICRO",
-    #             "TRAIN_DATES",
-    #             "TEST_DATES",
-    #             "PREDICTION_DATE",
-    #             "MODEL",
-    #             "FEATURES",
-    #         },
-    #     )
-    # with open(output_file, "w", encoding="utf-8") as f:
-    #     sub_config = {k: v for k, v in config.items() if k in dump_keys}
-    #     json.dump(sub_config, f, indent=4)
+    spark = sf_datalake.utils.get_spark_session()
+
+    config["VERSION"] = pkg_resources.get_distribution("sf_datalake").version
+    if dump_keys is None:
+        dump_keys = (
+            {
+                "VERSION",
+                "FILL_MISSING_VALUES",
+                "TRAIN_TEST_SPLIT_RATIO",
+                "TARGET_OVERSAMPLING_RATIO",
+                "N_CONCERNING_MICRO",
+                "TRAIN_DATES",
+                "TEST_DATES",
+                "PREDICTION_DATE",
+                "MODEL",
+                "FEATURES",
+            },
+        )
+    sub_config = {k: v for k, v in config.items() if k in dump_keys}
+
+    config_df = spark.createDataFrame(pyspark.sql.Row(sub_config))
+    config_df.repartition(1).write.json(output_dir)
