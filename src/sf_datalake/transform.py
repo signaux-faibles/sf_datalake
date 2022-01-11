@@ -104,12 +104,13 @@ def generate_scaling_stages(config: dict) -> List[Transformer]:
     for feature, transformer in config["TRANSFORMERS"]:
         transformer_features.setdefault(transformer, []).append(feature)
     for transformer, features in transformer_features.items():
-        outputCol = f"features_to_transform_{transformer}"
+        outputColAssembler = f"features_to_transform_{transformer}"
+        outputColScaler = f"features_transformed_{transformer}"
         transformer_vector_assembler = VectorAssembler(
-            inputCols=features, outputCol=outputCol
+            inputCols=features, outputCol=outputColAssembler
         )
         stages += [transformer_vector_assembler, get_scaler_from_str(transformer)]
-        transformed_features.append(outputCol)
+        transformed_features.append(outputColScaler)
 
     concat_vector_assembler = VectorAssembler(
         inputCols=transformed_features, outputCol="features"
