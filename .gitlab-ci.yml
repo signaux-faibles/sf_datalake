@@ -25,6 +25,10 @@ workflow:
       variables:
         DEPLOYMENT_TYPE: "small"
         RUN_SPARK_TASK: "yes"
+    - if: '$CI_COMMIT_REF_NAME =~ /pipe/' # to keep while there are many improvments on pipelines
+      variables:
+        DEPLOYMENT_TYPE: "small"
+        RUN_SPARK_TASK: "yes"
     - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "develop"'
@@ -68,8 +72,8 @@ remove_older_working_directories:
   tags:
     - datalake
   script:
-    - echo "Cleaning older CI cached data."
-    # on ne garde que les 5 derniers
+    - echo "Cleaning older CI cached data. (Keep only last 10 directory in ${CACHE_ROOT})"
+    # on ne garde que les 10 derniers répertoires de cache
     - ls -1QAtd ${CACHE_ROOT}/* | tail -n+10 | xargs rm -rf
 
 prepare_new_working_directory:
@@ -87,8 +91,10 @@ prepare_new_working_directory:
     - echo "Preparing spark configuration inside ${CACHE}/spark_config.json (will be 'null' if no prediction should be run afterwards)."
     - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/spark_config.json | envsubst > ${CACHE}/spark_config.json
     - cat ${CACHE}/spark_config.json
+    - echo "Getting MaacDo version from default or ${DEPLOYMENT_TYPE} or ${CI_COMMIT_REF_SLUG} from .ci/datalake/maacdo_version.json "
     - MAACDO_VERSION=$(jq --raw-output --arg GROUP "${DEPLOYMENT_TYPE}" --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$GROUP] + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
-    - echo "Getting MaacDo version ${MAACDO_VERSION}."
+    - echo "${MAACDO_VERSION} > ${CACHE}/.maacdo_version"
+    - echo "Got MaacDo version as ${MAACDO_VERSION} "
     - git clone --depth 1 --branch $MAACDO_VERSION https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
 
 prepare_maacdo_configuration:
@@ -151,6 +157,7 @@ send_entrypoint_to_lake:
   needs:
     - job: "prepare_maacdo_configuration"
   script:
+    - echo "Deleting old configuration when possible"
     - ./api_maacdo.pl
         -a SuppressionFichier
         -i ${LAKE_ENTRYPOINT}
@@ -223,7 +230,6 @@ stop_spark_task:
   extends: .lake
   needs:
     - job: "start_spark_task"
-      optional: true
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - export STATUS=$(cat ${CACHE}/status_${ID_LIVY})
@@ -231,11 +237,14 @@ stop_spark_task:
     - |
       if [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]]
       then
-        ./api_maacdo.pl -a ArretTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par
+        ./api_maacdo.pl -a ArretTacheSpark -j ${ID_LIVY} -c ${CACHE}/ci_job.par
       else
         echo "Nothing to do."
       fi
-  when: manual
+  rules:
+    - if: $RUN_SPARK_TASK == "yes"
+      when: manual
+      allow_failure: true
 
 ### Post-processing
 
@@ -284,8 +293,10 @@ fetch_model_outputs:
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - |
+      echo "Parsing ${CACHE}/spark_config.json, to find '--output_directory' "
+      cat ${CACHE}/spark_config.json
       MODEL_OUTPUT=$(jq --raw-output '[.sparkTask.args as $m | range(0; $m | length; 2) | {($m[.]): $m[(. + 1)]} ] | add | .["--output_directory"]' ${CACHE}/spark_config.json)
-      echo "Fetching results from ${MODEL_OUTPUT}"
+      echo "Found '--output_directory'=${MODEL_OUTPUT}"
       [[ -z ${MODEL_OUTPUT} ]] && exit 1
     - bash recup_folder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
     - |
@@ -319,8 +330,12 @@ print-shell-env:
   script:
     - env | sort
     - whoami
-    - echo "Files on the nubo VM at $(pwd):"
-    - ls -al
-    - echo "Files in ${CACHE}:"
-    - ls -al ${CACHE}
+    - pwd
+    - echo "ID_LIVY = $(cat ${CACHE}/idLivy)"
+    - echo "status ID_LIVY = $(cat ${CACHE}/status_${ID_LIVY})"
+    - echo "Spark config"
+    - cat ${CACHE}/spark_config.json
+    - echo "MaacDo version = $(cat ${CACHE}/.maacdo_version"
+    - echo "MaacDo configuration"
+    - cat ${CACHE}/ci_job.par
   when: manual
