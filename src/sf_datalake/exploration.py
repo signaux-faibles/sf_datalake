@@ -1,10 +1,12 @@
 """Utility functions for data exploration using spark DataFrame objects.
 """
 
-from typing import Iterable, Tuple
+from typing import Iterable, List, Tuple
 
 import pyspark
+import pyspark.sql
 import pyspark.sql.functions as F
+from pyspark.sql.types import ArrayType, FloatType
 
 
 def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -109,3 +111,35 @@ def accounting_duration(
         .count()
         .orderBy("datediff_floored")
     )
+
+
+def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
+    """Check if a DataFrame has a `features` column with centered individual variables.
+    `features` column is the result of at least a `VectorAssembler()`.
+
+    Args:
+        df : Input DataFrame.
+        tol :  a tolerance for the zero equality test.
+
+    Returns:
+        Tuple[bool, List]: True if variables are centered else False. A list of the
+                            mean of each variable.
+
+    Example:
+        is_centered(train_transformed.select(["features"]), tol = 1E-8)
+    """
+    assert "features" in df.columns, "Input DataFrame doesn't have a 'features' column."
+
+    dense_to_array_udf = F.udf(lambda v: [float(x) for x in v], ArrayType(FloatType()))
+
+    df = df.withColumn("features_array", dense_to_array_udf("features"))
+    n_features = len(df.first()["features"])
+
+    df_agg = df.agg(
+        F.array(*[F.avg(F.col("features_array")[i]) for i in range(n_features)]).alias(
+            "mean"
+        )
+    )
+    all_col_means = df_agg.select(F.col("mean")).collect()[0]["mean"]
+
+    return (all(x < tol for x in all_col_means), all_col_means)
