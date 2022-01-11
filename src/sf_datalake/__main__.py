@@ -41,6 +41,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     else:
         output_directory = args.output_directory
     config["SEED"] = random.randint(0, 10000) if args.SEED is None else args.SEED
+    sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
 
     # Prepare data.
     yearly_data = sf_datalake.io.load_data(
@@ -107,7 +108,6 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         macro_scores,
         micro_scores,
     )
-    sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
 
 
 if __name__ == "__main__":

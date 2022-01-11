@@ -124,6 +124,7 @@ def dump_configuration(
     if dump_keys is None:
         dump_keys = (
             {
+                "SEED",
                 "VERSION",
                 "FILL_MISSING_VALUES",
                 "TRAIN_TEST_SPLIT_RATIO",
