@@ -15,15 +15,17 @@ variables:
 
 workflow:
   rules:
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
       variables:
         DEPLOYMENT_TYPE: "prod"
         RUN_SPARK_TASK: "yes"
-    - if: $CI_COMMIT_REF_NAME =~ /^feat/
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"'
       variables:
-        DEPLOYMENT_TYPE: "feat"
+        DEPLOYMENT_TYPE: "small"
         RUN_SPARK_TASK: "yes"
-    - when: always
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "develop"'
 
 # Pip's cache doesn't store the python packages
 # https://pip.pypa.io/en/stable/reference/pip_install/#caching
@@ -97,7 +99,7 @@ prepare_maacdo_configuration:
     - >
      [[ -z ${SPARK_CONFIG} ]]
      && [[ ${DEPLOYMENT_TYPE} != "null" ]]
-     && { echo "no config for Spark tasks"; exit 1; }
+     && { echo "Error: no config for Spark task excecution was provided."; exit 1; }
     - export SPARK_CONFIG=${SPARK_CONFIG}
     - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
     - cat ${CACHE}/ci_job.par
