@@ -3,7 +3,8 @@ variables:
   # gitlab docker runner has a mounted volume HOST:/home/cloudadm/.ci-python_packages/ = CONTAINER:/packages
   # todo : modifier le point de montage en fonction de la configuration du fichier de config
   CACHE_ROOT: "/home/cloudadm/.ci-python_packages"
-  CACHE: "${CACHE_ROOT}/${CI_PIPELINE_ID}"
+  CACHE_KEY: "${CI_PIPELINE_ID}"
+  CACHE: "${CACHE_ROOT}/${CACHE_KEY}"
   PACKAGE: "python_packages.tar.gz"
   LAKE_HOME: "/projets/TSF"
   LAKE_MODULES_DIR: "${LAKE_HOME}/applicatifs"
@@ -128,7 +129,7 @@ build_package:
     - job: "prepare_new_working_directory"
   script:
     - pip install -v .
-    - venv-pack -o /packages/${CI_PIPELINE_ID}/${PACKAGE}
+    - venv-pack -o /packages/${CACHE_KEY}/${PACKAGE}
 
 send_package_to_lake:
   stage: deploy
