@@ -43,6 +43,9 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     config["SEED"] = random.randint(0, 10000) if args.SEED is None else args.SEED
     sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
 
+    # Adding erroneous call on purpose to test .post pipeline.
+    _ = args.dumpkeys + 7
+
     # Prepare data.
     yearly_data = sf_datalake.io.load_data(
         {
