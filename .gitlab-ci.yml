@@ -187,9 +187,9 @@ start_spark_task:
     - echo "Spark task has started. Livy id is [$idLivy]."
     - echo ${idLivy} | xargs > ${CACHE}/idLivy
     - echo "To get yarns logs even in success case, execute the following from the server running the gitlab runner process:"
-    - echo "    ./api_maacdo.pl -a YarnLogsTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
+    - echo "--> ./api_maacdo.pl -a YarnLogsTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
     - echo "To stop the spark task, execute the following from the server running the gitlab runner process:"
-    - echo "    ./api_maacdo.pl -a ArretTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
+    - echo "--> ./api_maacdo.pl -a ArretTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
   rules:
     - if: $RUN_SPARK_TASK == "yes"
 
@@ -203,13 +203,13 @@ wait_for_task_finishing:
     - |
       LAST=""
       while true; do
-        TACHE_SPARK=$(./api_maacdo.pl -a EtatTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
+        TACHE_SPARK=$(./api_maacdo.pl -a EtatTacheSpark -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
         STATUS=$(echo ${TACHE_SPARK} | awk '{print $NF}' | tr -dc '[:alnum:]\r\n' | tr '[:lower:]' '[:upper:]')
         echo "${STATUS}" > ${CACHE}/status_${ID_LIVY}
         echo "Status of task ${ID_LIVY} is '${STATUS}'"
         [[ ${STATUS} == 'DEAD' ]] && exit 111
         [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]] || break
-        LOGS=$(./api_maacdo.pl -a LogsTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
+        LOGS=$(./api_maacdo.pl -a LogsTacheSpark -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
         CURRENT=$(printf '%s' "${LOGS}" | md5sum)
         if [[ ${LAST} == ${CURRENT} ]]
         then
@@ -273,14 +273,8 @@ fetch_yarn_logs:
     - job: "wait_for_task_finishing"
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
-    - ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${ID_LIVY} -c ${CACHE}/ci_job.par
-    - |
-      for file in $(ls ${CACHE}/log/YarnLogsTacheSpark_*)
-      do
-        echo " --- log file -> ${file} --- "
-        tail -n 100 ${file}
-        echo " --------------- "
-      done
+    - ./api_maacdo.pl -a YarnLogsTacheSpark -j ${ID_LIVY} -c ${CACHE}/ci_job.par
+    - find ${CACHE}/log/ -type f -name 'YarnLogsTacheSpark_*' -execdir cat '{}' + | grep -v 'OnOutOfMemoryError' | grep 'Error' -B 20
   rules:
     - if: $RUN_SPARK_TASK == "yes"
       when: on_failure
@@ -293,19 +287,15 @@ fetch_model_outputs:
   script:
     - export ID_LIVY=$(cat ${CACHE}/idLivy)
     - |
-      echo "Parsing ${CACHE}/spark_config.json, to find '--output_directory' "
+      echo "Parsing ${CACHE}/spark_config.json looking for '--output_directory' argument."
       cat ${CACHE}/spark_config.json
       MODEL_OUTPUT=$(jq --raw-output '[.sparkTask.args as $m | range(0; $m | length; 2) | {($m[.]): $m[(. + 1)]} ] | add | .["--output_directory"]' ${CACHE}/spark_config.json)
       echo "Found '--output_directory'=${MODEL_OUTPUT}"
       [[ -z ${MODEL_OUTPUT} ]] && exit 1
     - bash recup_folder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
-    - |
-      for file in ${CACHE}/results/*
-      do
-        # Gather all csv outputs into a zip and delete the csv files
-        # if spark job has succeeded.
-        zip ${file}.zip ${file} && rm ${file}
-      done
+    - echo "Gathering fetched outputs into ${CACHE}/results.zip"
+    - zip ${CACHE}/results.zip ${CACHE}/results/*
+    - rm -r ${CACHE}/results/
   rules:
     - if: $RUN_SPARK_TASK == "yes"
 
