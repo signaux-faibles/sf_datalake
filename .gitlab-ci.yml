@@ -190,6 +190,8 @@ start_spark_task:
     - echo "--> ./api_maacdo.pl -a YarnLogsTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
     - echo "To stop the spark task, execute the following from the server running the gitlab runner process:"
     - echo "--> ./api_maacdo.pl -a ArretTacheSpark -j ${idLivy} -c ${CACHE}/ci_job.par"
+  rules:
+    - if: $RUN_SPARK_TASK == "yes"
 
 wait_for_task_finishing:
   stage: deploy
@@ -220,6 +222,8 @@ wait_for_task_finishing:
         fi
         sleep 60
       done
+  rules:
+    - if: $RUN_SPARK_TASK == "yes"
 
 stop_spark_task:
   stage: deploy
@@ -238,7 +242,8 @@ stop_spark_task:
         echo "Nothing to do."
       fi
   rules:
-    - when: manual
+    - if: $RUN_SPARK_TASK == "yes"
+      when: manual
       allow_failure: true
 
 ### Post-processing
@@ -271,7 +276,8 @@ fetch_yarn_logs:
     - ./api_maacdo.pl -a YarnLogsTacheSpark -j ${ID_LIVY} -c ${CACHE}/ci_job.par
     - find ${CACHE}/log/ -type f -name 'YarnLogsTacheSpark_*' -execdir cat '{}' + | grep -v 'OnOutOfMemoryError' | grep 'Error' -B 20
   rules:
-    - when: on_failure
+    - if: $RUN_SPARK_TASK == "yes"
+      when: on_failure
 
 fetch_run_outputs:
   stage: .post
@@ -290,8 +296,9 @@ fetch_run_outputs:
     - echo "Gathering fetched outputs into ${CACHE}/results.zip"
     - zip -j ${CACHE}/results.zip ${CACHE}/results/*
     - rm -r ${CACHE}/results/
-  when: always
-
+  rules:
+    - if: $RUN_SPARK_TASK == "yes"
+      when: always
 
 ######################
 # PIPELINE ENDS HERE #
