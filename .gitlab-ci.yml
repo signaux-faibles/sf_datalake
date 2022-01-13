@@ -279,7 +279,7 @@ fetch_yarn_logs:
     - if: $RUN_SPARK_TASK == "yes"
       when: on_failure
 
-fetch_model_outputs:
+fetch_run_outputs:
   stage: .post
   extends: .lake
   needs:
@@ -294,10 +294,11 @@ fetch_model_outputs:
       [[ -z ${MODEL_OUTPUT} ]] && exit 1
     - bash recup_folder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
     - echo "Gathering fetched outputs into ${CACHE}/results.zip"
-    - zip ${CACHE}/results.zip ${CACHE}/results/*
+    - zip -j ${CACHE}/results.zip ${CACHE}/results/*
     - rm -r ${CACHE}/results/
   rules:
     - if: $RUN_SPARK_TASK == "yes"
+      when: always
 
 ######################
 # PIPELINE ENDS HERE #
