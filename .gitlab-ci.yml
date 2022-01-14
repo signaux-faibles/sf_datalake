@@ -25,7 +25,7 @@ workflow:
       variables:
         DEPLOYMENT_TYPE: "small"
         RUN_SPARK_TASK: "yes"
-    - if: '$CI_COMMIT_REF_NAME =~ /pipe/' # to keep while there are many improvments on pipelines
+    - if: '$CI_COMMIT_REF_NAME =~ /^pipe/' # to keep while there are many improvments on pipelines
       variables:
         DEPLOYMENT_TYPE: "small"
         RUN_SPARK_TASK: "yes"

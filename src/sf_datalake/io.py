@@ -73,6 +73,7 @@ def write_predictions(
     output_dir: str,
     test_data: pyspark.sql.DataFrame,
     prediction_data: pyspark.sql.DataFrame,
+    n_rep: int = 5,
 ):
     """Writes the results of a prediction to CSV files."""
     test_output_path = path.join(output_dir, "test_data.csv")
@@ -81,10 +82,10 @@ def write_predictions(
     logging.info("Writing test data to file %s", test_output_path)
     test_data.select(
         ["siren", "time_til_failure", "failure_within_18m", "probability"]
-    ).write.csv(test_output_path, header=True)
+    ).repartition(n_rep).write.csv(test_output_path, header=True)
 
     logging.info("Writing prediction data to file %s", prediction_output_path)
-    prediction_data.select(["siren", "probability"]).write.csv(
+    prediction_data.select(["siren", "probability"]).repartition(n_rep).write.csv(
         prediction_output_path, header=True
     )
 
@@ -93,17 +94,20 @@ def write_explanations(
     output_dir: str,
     macro_scores_df: pyspark.sql.DataFrame,
     micro_scores_df: pyspark.sql.DataFrame,
+    n_rep: int = 5,
 ):
     """Writes the explanations of a prediction to CSV files."""
     concerning_output_path = path.join(output_dir, "concerning_values.csv")
     explanation_output_path = path.join(output_dir, "explanation_data.csv")
     logging.info("Writing concerning features to file %s", concerning_output_path)
-    micro_scores_df.write.csv(concerning_output_path, header=True)
+    micro_scores_df.repartition(n_rep).write.csv(concerning_output_path, header=True)
 
     logging.info(
         "Writing explanation macro scores data to directory %s", explanation_output_path
     )
-    macro_scores_df.write.csv(path.join(explanation_output_path), header=True)
+    macro_scores_df.repartition(n_rep).write.csv(
+        path.join(explanation_output_path), header=True
+    )
 
 
 def dump_configuration(
