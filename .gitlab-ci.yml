@@ -1,10 +1,10 @@
 variables:
-  PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.cache/pip"
   # gitlab docker runner has a mounted volume HOST:/home/cloudadm/.ci-python_packages/ = CONTAINER:/packages
   # todo : modifier le point de montage en fonction de la configuration du fichier de config
   CACHE_ROOT: "/home/cloudadm/.ci-python_packages"
   CACHE_KEY: "${CI_PIPELINE_ID}"
   CACHE: "${CACHE_ROOT}/${CACHE_KEY}"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   PACKAGE: "python_packages.tar.gz"
   LAKE_HOME: "/projets/TSF"
   LAKE_MODULES_DIR: "${LAKE_HOME}/applicatifs"
@@ -33,26 +33,6 @@ workflow:
       when: never
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "develop"'
 
-# Pip's cache doesn't store the python packages
-# https://pip.pypa.io/en/stable/reference/pip_install/#caching
-#
-# If you want to also cache the installed packages, you have to install
-# them in a virtualenv and cache it as well.
-cache:
-  paths:
-    - .cache/pip
-    - venv/
-
-.python:
-  tags:
-    - ci
-  image: python:3.6.8
-  before_script:
-    - python -V  # Print out python version for debugging
-    - pip install -U pip
-    - pip install virtualenv
-    - virtualenv venv
-    - source venv/bin/activate
 
 .lake:
   tags:
@@ -61,6 +41,19 @@ cache:
     - cd ${CACHE}/bin && pwd
   after_script:
     - pwd
+
+.python:
+  tags:
+    - ci
+  image: python:3.6.8
+  before_script:
+    - source venv/bin/activate
+  cache:
+    key: $CI_COMMIT_REF_SLUG
+    paths:
+      - .cache/pip
+      - venv/
+
 
 ##########################
 #  PIPELINE STARTS HERE  #
@@ -72,9 +65,18 @@ remove_older_working_directories:
   tags:
     - datalake
   script:
-    - echo "Cleaning older CI cached data. (Keep only last 10 directory in ${CACHE_ROOT})"
-    # on ne garde que les 10 derniers répertoires de cache
+    - echo "Cleaning older CI cached data for python archive (Keep only last 10 directories in ${CACHE_ROOT})."
     - ls -1QAtd ${CACHE_ROOT}/* | tail -n+10 | xargs rm -rf
+
+prepare_python_venv:
+  stage: .pre
+  extends: .python
+  before_script: null
+  script:
+    - python -V  # Print out python version for debugging
+    - pip install -U pip
+    - pip install virtualenv
+    - virtualenv venv
 
 prepare_new_working_directory:
   stage: .pre
@@ -112,24 +114,27 @@ prepare_maacdo_configuration:
     - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
     - cat ${CACHE}/ci_job.par
 
-pylint:
-  stage: test
-  extends: .python
-  script:
-  - pip install pylint
-  - pylint --rcfile=.pylintrc src/sf_datalake/
-  rules:
-    - changes:
-      - src/sf_datalake/*
-
 build_package:
   stage: build
   extends: .python
   needs:
     - job: "prepare_new_working_directory"
+    - job: "prepare_python_venv"
   script:
     - pip install -v .
     - venv-pack -o /packages/${CACHE_KEY}/${PACKAGE}
+
+pylint:
+  stage: test
+  extends: .python
+  needs:
+    - job: "build_package"
+  script:
+    - pip install pylint
+    - pylint --rcfile=.pylintrc src/sf_datalake/
+  rules:
+    - changes:
+      - src/sf_datalake/*
 
 send_package_to_lake:
   stage: deploy
@@ -251,20 +256,18 @@ stop_spark_task:
 pages:
   stage: deploy
   extends: .python
+  needs:
+    - job: "prepare_python_venv"
   script:
-    - pwd
     - pip install sphinx sphinx-rtd-theme
     - cd docs/
     - sphinx-apidoc -f -o source/ ../src/
     - make html
     - mv build/html/ ../public/
+  when: manual
 #  artifacts:
 #    paths:
 #      - public
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - src/sf_datalake/*
 
 fetch_yarn_logs:
   stage: .post
@@ -308,7 +311,7 @@ fetch_run_outputs_from_HDFS:
 ######################
 
 
-print-docker-env:
+print-python-env:
   stage: .pre
   extends: .python
   script:
