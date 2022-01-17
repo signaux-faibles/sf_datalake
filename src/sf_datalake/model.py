@@ -60,17 +60,20 @@ def get_model_from_pipeline_model(
         ValueError: If the model has not been found.
 
     Returns:
-        pyspark.ml.Model: The model extracted.
+        The extracted model.
+
     """
     model = None
     for stage in pipeline_model.stages:
         if model_name in repr(stage):
             model = stage
             break
+
     if model is None:
         raise ValueError(
-            f"Model with name {model_name} could not be found in " "pipeline stages."
+            f"Model with name {model_name} could not be found in pipeline stages."
         )
+
     return model
 
 
