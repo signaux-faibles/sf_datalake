@@ -88,7 +88,9 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     pipeline = Pipeline(stages=scaling_stages + model_stages + postprocessing_stages)
     pipeline_model = pipeline.fit(train_data)
     _ = pipeline_model.transform(train_data)
-    model = pipeline_model.stages[-2]
+    model = sf_datalake.model.get_model_from_pipeline_model(
+        pipeline_model, config["MODEL"]["NAME"]
+    )
     logging.info("Model weights: %.3f", model.coefficients)
     logging.info("Model intercept: %.3f", model.intercept)
     test_transformed = pipeline_model.transform(test_data)
