@@ -6,7 +6,8 @@ from typing import Iterable, List, Tuple
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
-from pyspark.sql.types import ArrayType, FloatType
+import scipy.stats
+from pyspark.sql.types import ArrayType, DoubleType, FloatType
 
 
 def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -163,3 +164,55 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     all_col_means = df_agg.select(F.col("mean")).collect()[0]["mean"]
 
     return (all(x < tol for x in all_col_means), all_col_means)
+
+
+def one_way_anova(
+    df: pyspark.sql.DataFrame, categorical_var: str, continuous_var: str
+) -> dict:
+    """Compute the one-way ANOVA using the given categorical and continuous variables.
+
+    Args:
+        df : Input DataFrame.
+        categorical_var : Name of the grouping feature. It has to be a column of
+            boolean as integer.
+        continuous_var : Name of the feature to analyze.
+
+    Returns:
+        F statistic, p-value, sum of squares within groups, sum of squares between
+        groups, degrees of freedom within groups, degrees of freedom between groups.
+    """
+    df_groups = df.groupby(categorical_var).agg(
+        F.avg(continuous_var).alias("group_avg"),
+        F.stddev(continuous_var).alias("group_sse"),
+        F.count("*").alias("nobs_per_group"),
+    )
+
+    global_avg = df.select(F.avg(continuous_var)).take(1)[0][0]
+    df_groups = df_groups.withColumn("global_avg", F.lit(global_avg))
+
+    udf_squared_diff = F.udf(lambda x: x[0] * (x[1] - x[2]) ** 2, DoubleType())
+    df_squared_diff = df_groups.withColumn(
+        "squared_diff",
+        udf_squared_diff(F.struct("nobs_per_group", "global_avg", "group_avg")),
+    )
+    ssbg = df_squared_diff.select(F.sum("squared_diff")).take(1)[0][0]
+
+    udf_within_ss = F.udf(lambda x: (x[0] - 1) * x[1] ** 2, DoubleType())
+    df_squared_diff = df_groups.withColumn(
+        "squared_within", udf_within_ss(F.struct("nobs_per_group", "group_sse"))
+    )
+    sswg = df_squared_diff.select(F.sum("squared_within")).take(1)[0][0]
+
+    df_bg = df_groups.count() - 1
+    df_wg = df.count() - df_groups.count() - 1
+
+    f_statistic = (ssbg / df_bg) / (sswg / df_wg)
+    p_value = 1 - scipy.stats.f.cdf(f_statistic, df_bg, df_wg)
+    return {
+        "f_statistic": f_statistic,
+        "p_value": p_value,
+        "sswg": sswg,
+        "ssbg": ssbg,
+        "df_wg": df_wg,
+        "df_bg": df_bg,
+    }
