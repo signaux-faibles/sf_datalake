@@ -131,11 +131,11 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     stages = [
         MissingValuesHandler(config),
         SirenAggregator(config),
+        DatasetFilter(),
         AvgDeltaDebtPerSizeColumnAdder(config),
         DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
         DatasetColumnSelector(config),
-        DatasetFilter(),
     ]
     return stages
 
