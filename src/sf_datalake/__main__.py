@@ -58,14 +58,9 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         stages=sf_datalake.transform.generate_preprocessing_stages(config)
     )
     yearly_data = pipeline_preprocessor.fit(yearly_data).transform(yearly_data)
+    assert yearly_data.dropna().count() == yearly_data.count()
 
-    logging.info(
-        "Creating oversampled training set with positive examples ratio %.1f",
-        config["TARGET_OVERSAMPLING_RATIO"],
-    )
-    logging.info("Creating train between %s and %s.", *config["TRAIN_DATES"])
-    logging.info("Creating test set between %s and %s.", *config["TEST_DATES"])
-    logging.info("Creating a prediction set on %s.", config["PREDICTION_DATE"])
+    # Split the dataset into train, test, predict subsets.
     (
         train_data,
         test_data,

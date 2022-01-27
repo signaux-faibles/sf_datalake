@@ -125,16 +125,14 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
         config: model configuration, as loaded by utils.get_config().
 
     Returns:
-        List of the preprocessing stages.
+        A list of the preprocessing stages.
+
     """
     stages = [
         MissingValuesHandler(config),
         SirenAggregator(config),
-        AvgDeltaDebtPerSizeColumnAdder(),
-        DebtRatioColumnAdder(),
-        MissingValuesHandler(
-            config
-        ),  # necessary for new columns created in previous steps
+        AvgDeltaDebtPerSizeColumnAdder(config),
+        DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
         DatasetColumnSelector(config),
         DatasetFilter(),
@@ -144,6 +142,10 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
 
 class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
     """A transformer to compute the average change in social debt / nb of employees."""
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Computes the average change in social debt / nb of employees.
@@ -179,21 +181,32 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
             )
             / dataset["effectif"],
         )
-        dataset = dataset.na.fill(
-            {"dette_par_effectif": 0, "dette_par_effectif_past_3": 0}
-        )
-
         dataset = dataset.withColumn(
             "avg_delta_dette_par_effectif",
             (dataset["dette_par_effectif"] - dataset["dette_par_effectif_past_3"]) / 3,
         )
-
         drop_columns = ["dette_par_effectif", "dette_par_effectif_past_3"]
+
+        if self.config["FILL_MISSING_VALUES"]:
+            dataset = dataset.fillna(
+                {
+                    "avg_delta_dette_par_effectif": self.config["DEFAULT_VALUES"][
+                        "avg_delta_dette_par_effectif"
+                    ]
+                }
+            )
+        else:
+            dataset = dataset.dropna(subset=["avg_delta_dette_par_effectif"])
+
         return dataset.drop(*drop_columns)
 
 
 class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
     """A transformer to compute the debt ratio."""
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Computes the debt ratio.
@@ -205,6 +218,7 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with an extra `ratio_dette` column.
 
         """
+
         assert {
             "montant_part_ouvriere",
             "montant_part_patronale",
@@ -216,6 +230,13 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
             (dataset.montant_part_ouvriere + dataset.montant_part_patronale)
             / dataset.cotisation_moy12m,
         )
+        if self.config["FILL_MISSING_VALUES"]:
+            dataset = dataset.fillna(
+                {"ratio_dette": self.config["DEFAULT_VALUES"]["ratio_dette"]}
+            )
+        else:
+            dataset = dataset.dropna(subset=["ratio_dette"])
+
         return dataset
 
 
@@ -308,7 +329,7 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
                 }
             )
             dataset = dataset.dropna(
-                subset=tuple(x for x in self.config["FEATURES"] if x in dataset.columns)
+                subset=[x for x in self.config["FEATURES"] if x in dataset.columns]
             )
         return dataset
 
