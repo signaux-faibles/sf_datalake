@@ -365,11 +365,8 @@ class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
         assert "time_til_failure" in dataset.columns
 
         dataset = dataset.withColumn(
-            "failure_within_18m", dataset["time_til_failure"] <= 18
-        )
-        dataset = dataset.withColumn(
-            "failure_within_18m", dataset.failure_within_18m.astype("integer")
-        )  # Needed  for models
+            "failure_within_18m", (dataset["time_til_failure"] <= 18).cast("integer")
+        )  # Models except int / floating labels.
         return dataset
 
 
