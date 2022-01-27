@@ -1,6 +1,5 @@
 """Utilities and classes for handling and transforming datasets."""
 
-from functools import reduce
 from typing import Dict, Iterable, List
 
 import pyspark.ml
@@ -278,36 +277,23 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
         self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Fills missing values using the variable's median predefined values.
+        """Fills or drop entries containing missing values.
 
-        The predefined values are defined inside the `"DEFAULT_VALUES"` config field.
+        If `FILL_MISSING_VALUES` config field is true, missing data is filled with
+        predefined values from the `DEFAULT_VALUES` config field.
 
         Args:
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-            Transformed DataFrame with missing values completed.
+            DataFrame where previously missing values are filled, or corresponding
+              entries are dropped.
 
         """
         assert {"FEATURES", "FILL_MISSING_VALUES", "DEFAULT_VALUES"} <= set(self.config)
         assert "time_til_failure" in dataset.columns
 
-        ratio_variables = list(
-            filter(lambda x: x[:3] == "RTO", self.config["FEATURES"])
-        )
-        if ratio_variables:
-            ratio_default_values = {}
-            data_medians = reduce(
-                lambda x, y: x + y, dataset.approxQuantile(ratio_variables, [0.5], 0.05)
-            )
-            for var, med in zip(ratio_variables, data_medians):
-                ratio_default_values[var] = med
-
-            default_data_values = dict(
-                **ratio_default_values, **self.config["DEFAULT_VALUES"]
-            )
-        else:
-            default_data_values = self.config["DEFAULT_VALUES"]
+        default_data_values = self.config["DEFAULT_VALUES"]
 
         if self.config["FILL_MISSING_VALUES"]:
             dataset = dataset.fillna(
@@ -321,10 +307,9 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
                     ],
                 }
             )
-            variables_to_dropna = [
-                x for x in self.config["FEATURES"] if x in dataset.columns
-            ]
-            dataset = dataset.dropna(subset=tuple(variables_to_dropna))
+            dataset = dataset.dropna(
+                subset=tuple(x for x in self.config["FEATURES"] if x in dataset.columns)
+            )
         return dataset
 
 

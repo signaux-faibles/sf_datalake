@@ -96,7 +96,6 @@
         "cotisation_moy12m": 0.0,
         "ratio_dette": 0.0,
         "ratio_dette_moy12m": 0.0,
-        "apart_heures_autorisees": 0.0,
         "apart_heures_consommees_cumulees": 0.0,
         "apart_heures_consommees": 0.0,
         "avg_delta_dette_par_effectif": 0.0,
@@ -106,7 +105,11 @@
         "MNT_AF_BFONC_TRESORERIE": 0.0,
         "MNT_AF_BFONC_FRNG": 0.0,
         "MNT_AF_CA": 0.0,
-        "MNT_AF_SIG_EBE_RET": 0.0
+        "MNT_AF_SIG_EBE_RET": 0.0,
+        "RTO_AF_RATIO_RENT_MBE": 0.0,
+        "RTO_AF_RENT_ECO": 0.0,
+        "RTO_AF_SOLIDITE_FINANCIERE": 0.0,
+        "RTO_INVEST_CA": 0.0
     },
     "TARGET_FEATURE": [
         "failure_within_18m"
