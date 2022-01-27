@@ -314,11 +314,13 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
         assert {"FEATURES", "FILL_MISSING_VALUES", "DEFAULT_VALUES"} <= set(self.config)
         assert "time_til_failure" in dataset.columns
 
-        default_data_values = self.config["DEFAULT_VALUES"]
-
         if self.config["FILL_MISSING_VALUES"]:
             dataset = dataset.fillna(
-                {k: v for (k, v) in default_data_values.items() if k in dataset.columns}
+                {
+                    k: v
+                    for (k, v) in self.config["DEFAULT_VALUES"].items()
+                    if k in dataset.columns
+                }
             )
         else:
             dataset = dataset.fillna(
@@ -331,6 +333,7 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
             dataset = dataset.dropna(
                 subset=[x for x in self.config["FEATURES"] if x in dataset.columns]
             )
+
         return dataset
 
 
@@ -351,7 +354,7 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             Transformed DataFrame at a SIREN level.
 
         """
-        assert {"BASE_FEATURES", "FEATURES", "AGG_DICT"} <= set(self.config)
+        assert {"IDENTIFIERS", "FEATURES", "AGG_DICT"} <= set(self.config)
         assert {"siren", "periode"} <= set(dataset.columns)
 
         no_agg_colnames = [
@@ -359,13 +362,12 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             for feat in self.config["FEATURES"]
             if (not feat in self.config["AGG_DICT"]) and (feat in dataset.columns)
         ]  # already at SIREN level
-        groupby_colnames = self.config["BASE_FEATURES"] + no_agg_colnames
+        groupby_colnames = self.config["IDENTIFIERS"] + no_agg_colnames
 
         dataset = dataset.groupBy(*(set(groupby_colnames))).agg(self.config["AGG_DICT"])
         for colname, func in self.config["AGG_DICT"].items():
-            if func == "mean":
-                func = "avg"  # 'groupBy mean' produces variables such as avg(colname)
-            dataset = dataset.withColumnRenamed(f"{func}({colname})", colname)
+            if func == "avg":
+                dataset = dataset.withColumnRenamed(f"avg({colname})", colname)
 
         return dataset
 
@@ -408,14 +410,14 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
             Transformed DataFrame.
 
         """
-        assert {"BASE_FEATURES", "FEATURES", "TARGET_FEATURE"} <= set(self.config)
+        assert {"IDENTIFIERS", "FEATURES", "TARGET"} <= set(self.config)
 
         dataset = dataset.select(
             *(
                 set(
-                    self.config["BASE_FEATURES"]
+                    self.config["IDENTIFIERS"]
                     + self.config["FEATURES"]
-                    + self.config["TARGET_FEATURE"]
+                    + self.config["TARGET"]
                 )
             )
         )

@@ -21,7 +21,7 @@
         "MAX_ITER": 50,
         "TOL": 1e-05
     },
-    "BASE_FEATURES": [
+    "IDENTIFIERS": [
         "periode",
         "siren",
         "code_naf",
@@ -76,7 +76,7 @@
         "effectif": "sum",
         "apart_heures_consommees_cumulees": "sum",
         "apart_heures_consommees": "sum",
-        "ratio_dette_moy12m": "mean"
+        "ratio_dette_moy12m": "avg"
     },
     "DEFAULT_VALUES": {
         "time_til_failure": 9999,
@@ -100,7 +100,6 @@
         "apart_heures_consommees": 0.0,
         "avg_delta_dette_par_effectif": 0.0,
         "effectif": 0,
-        "effectif_ent": 0,
         "MNT_AF_BFONC_BFR": 0.0,
         "MNT_AF_BFONC_TRESORERIE": 0.0,
         "MNT_AF_BFONC_FRNG": 0.0,
@@ -111,7 +110,7 @@
         "RTO_AF_SOLIDITE_FINANCIERE": 0.0,
         "RTO_INVEST_CA": 0.0
     },
-    "TARGET_FEATURE": [
+    "TARGET": [
         "failure_within_18m"
     ],
     "TRANSFORMERS": [
