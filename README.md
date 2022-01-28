@@ -104,3 +104,19 @@ Documentation is generated based on the `.rst` files contained inside `docs/sour
 ``` shell
 sphinx-apidoc -fP -o source/ ../sf_datalake
 ```
+# Pipeline
+
+- This gitlab instance has no registry. So it's not possible to use `artifacts` instruction.
+  The pipeline uses 2 gitlab runners, a `shell` runner and a `docker` runner.
+  As we can't user `artifacts` instructionTo, we need a folder to be able to share files between both runners.
+  So, gitlab docker runner has a mounted volume `HOST:/home/cloudadm/.ci-python_packages/ = CONTAINER:/packages`.
+  By example, when a docker job push a file on `/packages`, this file is available on `~/.ci-python_packages/` by shell jobs.
+
+- On each job, a _cache_ folder is created in `/home/cloudadm/.ci-python_packages/#pipelineId`.  In this folder :
+    - `maacdo` is checkouted and configured (we can't use `artifact`)
+    - we store results from lake computing in success case or yarn logs otherwise
+
+- This pipeline needs 3 files :
+    - `.ci/datalake/maacdo_version.json` to configure wich `maacdo` version using
+    - `.ci/datalake/spark_config.json` to configure how the Spark task will be launch and to add some parameters to `python` scripts.
+    - `.ci/datalake/datalake_config_template.par` the file to configure `maacdo` calls.
