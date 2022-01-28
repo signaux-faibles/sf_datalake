@@ -357,17 +357,16 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
         assert {"IDENTIFIERS", "FEATURES", "AGG_DICT"} <= set(self.config)
         assert {"siren", "periode"} <= set(dataset.columns)
 
-        no_agg_colnames = [
+        siren_lvl_colnames = [
             feat
             for feat in self.config["FEATURES"]
-            if (not feat in self.config["AGG_DICT"]) and (feat in dataset.columns)
-        ]  # already at SIREN level
-        groupby_colnames = self.config["IDENTIFIERS"] + no_agg_colnames
+            if (feat not in self.config["AGG_DICT"]) and (feat in dataset.columns)
+        ]
+        gb_colnames = self.config["IDENTIFIERS"] + siren_lvl_colnames
 
-        dataset = dataset.groupBy(*(set(groupby_colnames))).agg(self.config["AGG_DICT"])
+        dataset = dataset.groupBy(gb_colnames).agg(self.config["AGG_DICT"])
         for colname, func in self.config["AGG_DICT"].items():
-            if func == "avg":
-                dataset = dataset.withColumnRenamed(f"avg({colname})", colname)
+            dataset = dataset.withColumnRenamed(f"{func}({colname})", colname)
 
         return dataset
 
@@ -389,7 +388,7 @@ class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
 
         dataset = dataset.withColumn(
             "failure_within_18m", (dataset["time_til_failure"] <= 18).cast("integer")
-        )  # Models except int / floating labels.
+        )  # Models except integer or floating labels.
         return dataset
 
 
