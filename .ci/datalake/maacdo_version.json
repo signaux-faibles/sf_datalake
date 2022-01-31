@@ -3,8 +3,8 @@
         "default": {
             "version": "v1.0.0"
         },
-        "a-CI_COMMIT_REF_SLUG-to-select-specific_maacdo-version": {
-            "version": "a-branch-or-tag-from-gitlab-repository"
+        "refacto-use-new-maacdo-script-names": {
+            "version": "c2f3f17ffa37801a531f1d64204c2324a0e111c4"
         }
     }
 }
