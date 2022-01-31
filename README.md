@@ -164,6 +164,6 @@ Caches may have to be cleared manually, see [this](https://docs.gitlab.com/ee/ci
 
 ## Variables
 
-Some extra variables are defined in this CI/CD to configure proxy and access to the (maac-do)[https://forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do/] utility and scripts repository. See the `Variables` section in the (CI/CD settings)[https://forge.dgfip.finances.rie.gouv.fr/raphaelventura/sf_datalake/-/settings/ci_cd] page. In order to access the `maac-do` code, an `Active Deploy Token` has been created in the `maac-do` repository with scope `read_repository`.
+Some extra variables are defined in this CI/CD to configure proxy and access to the [maac-do](https://forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do/) utility and scripts repository. See the `Variables` section in the [CI/CD settings](https://forge.dgfip.finances.rie.gouv.fr/raphaelventura/sf_datalake/-/settings/ci_cd) page. In order to access the `maac-do` code, an `Active Deploy Token` has been created in the `maac-do` repository with scope `read_repository`.
 
-Learn more about (variables in Gitlab)[https://forge.dgfip.finances.rie.gouv.fr/help/ci/variables/index].
+Learn more about [variables](https://forge.dgfip.finances.rie.gouv.fr/help/ci/variables/index) in Gitlab.
