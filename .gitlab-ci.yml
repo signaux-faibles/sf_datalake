@@ -296,12 +296,12 @@ fetch_run_outputs_from_HDFS:
     - echo "Found '--output_directory'=${MODEL_OUTPUT}"
     - > # if MODEL_OUTPUT is not found, exit
       [[ -z ${MODEL_OUTPUT} ]] && exit 1
-    - bash recupFolder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
+    - bash getFolder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
     - echo "Gathering fetched outputs into ${CACHE}/results.zip"
     - zip -j ${CACHE}/results.zip ${CACHE}/results/*
     - rm -r ${CACHE}/results/
     - echo "Removing remote results in ${MODEL_OUTPUT}"
-    - bash rmRecursifHdfs.sh ${MODEL_OUTPUT} ${CACHE}/ci_job.par
+    - bash rmRecursiveHdfs.sh ${MODEL_OUTPUT} ${CACHE}/ci_job.par
   rules:
     - if: $RUN_SPARK_TASK == "yes"
       when: always
