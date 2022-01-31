@@ -6,7 +6,7 @@
 * ``__main__.py`` - Main entry point script, which can be used to launch end-to-end
   predictions.
 * ``evaluation.py`` - Scores computations.
-* ``exploration.py ``- Data exploration-dedicated functions.
+* ``exploration.py`` - Data exploration-dedicated functions.
 * ``io.py`` - I/O functions.
 * ``model.py`` - Model utilities and classes.
 * ``sampler.py`` - Data sampling functions.

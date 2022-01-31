@@ -79,7 +79,6 @@ This will install git hooks that should enforce a set of properties before commi
 - `.pylintrc` - Configuration file for the python linter.
 - `pyproject.toml` and `setup.cfg` are configuration files for this package's setup.
 - `README.md` - This file.
-- `setup.cfg` - Configuration file for this package's setup by pip.
 
 # Documentation
 
@@ -104,19 +103,61 @@ Documentation is generated based on the `.rst` files contained inside `docs/sour
 ``` shell
 sphinx-apidoc -fP -o source/ ../sf_datalake
 ```
-# Pipeline
+# Continuous integration (CI), pipelines
 
-- This gitlab instance has no registry. So it's not possible to use `artifacts` instruction.
-  The pipeline uses 2 gitlab runners, a `shell` runner and a `docker` runner.
-  As we can't user `artifacts` instructionTo, we need a folder to be able to share files between both runners.
-  So, gitlab docker runner has a mounted volume `HOST:/home/cloudadm/.ci-python_packages/ = CONTAINER:/packages`.
-  By example, when a docker job push a file on `/packages`, this file is available on `~/.ci-python_packages/` by shell jobs.
+Gitlab embedded CI/CD tools are used in order to test and automate various operations, especially cumbersome operations related to the `maacdo` APIs. Jobs are defined and associated with 4 main stages:
+- `.pre`
+- `test`
+- `deploy`
+- `.pre`
 
-- On each job, a _cache_ folder is created in `/home/cloudadm/.ci-python_packages/#pipelineId`.  In this folder :
-    - `maacdo` is checkouted and configured (we can't use `artifact`)
-    - we store results from lake computing in success case or yarn logs otherwise
+Each job may depend on one or more earlier jobs, some may be run only on failure / manually… For more info, see the gitlab CI/CD [documentation](https://docs.gitlab.com/ee/ci/).
 
-- This pipeline needs 3 files :
-    - `.ci/datalake/maacdo_version.json` to configure wich `maacdo` version using
-    - `.ci/datalake/spark_config.json` to configure how the Spark task will be launch and to add some parameters to `python` scripts.
-    - `.ci/datalake/datalake_config_template.par` the file to configure `maacdo` calls.
+## Configuration
+
+CI pipelines use the following configuration files:
+- `.gitlab-ci.yml`: the main configuration file. It describes jobs, stages, dependencies, caches, etc.
+- `.ci/datalake/maacdo_version.json` configures which `maacdo` version to use.
+- `.ci/datalake/spark_config.json` specifies Spark configuration (computation specifications) to be passed to [`spark-submit`](https://spark.apache.org/docs/2.3.2/submitting-applications.html) and command line parameters to be passed to the executed `python` script.
+- `.ci/datalake/datalake_config_template.par` is the configuration file passed to all `maacdo` calls.
+
+## Gitlab runners
+
+Runners are installed on a virtual machine dedicated to the "signaux faibles" project.
+
+Pipelines leverage 2 different types gitlab runners:
+- A `docker` runner, which is assigned to python-related tasks: we use a specific python image in order to install packages through `pip` and be able to export archives that will be compatible with the  lake python installation.
+- The `shell` runner mainly takes care of calls to the `maacdo` APIs.
+
+This gitlab instance does not allow the use of registry, so it's not possible to use the `artifacts` instruction. We need a folder that will allow both runners to share data. The docker gitlab runner has a mounted volume at `HOST:$HOME/.ci-python_packages/ = CONTAINER:/packages`. This is configured through the runners [configuration file](https://docs.gitlab.com/runner/configuration/advanced-configuration.html).
+
+For example, when a docker job pushes a file to `/packages`, this file is available in `~/.ci-python_packages/` for subsequent shell jobs. These folders are cleaned on a regular basis (only the last 10 are kept.)
+
+A folder associated with every pipeline is created at `$HOME/.ci-python_packages/#pipelineId`. Inside this folder:
+- The `maacdo` repository is checked out and configured.
+- Results (in case of success) / yarn logs (in case of failure) are downloaded and stored.
+
+### Docker images
+
+Docker images are stored on the vm, but will not be deleted automatically. This can saturate the available disk space. Images can be listed using:
+
+```sh
+docker image ls
+```
+
+Then, a given image can be deleted using:
+
+``` shell
+docker image rm <tag>
+```
+
+To remove all images, including not dangling ones, use:
+```sh
+docker image prune -a
+```
+
+### Clearing the cache
+
+Runners caches are used inside python-related jobs. As soon as a branch is created, a cache is associated with it. It is used to keep downloaded sources for pip and packages installed inside the created virtual environments.
+
+Caches may have to be cleared manually, see [this](https://docs.gitlab.com/ee/ci/caching/index.html#clearing-the-cache) page.
