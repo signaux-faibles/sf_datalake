@@ -116,8 +116,8 @@ build_package:
   stage: build
   extends: .python
   needs:
+    - job: "pylint"
     - job: "prepare_new_working_directory"
-    - job: "prepare_python_venv"
   script:
     - pip install -v .
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
@@ -126,7 +126,8 @@ pylint:
   stage: test
   extends: .python
   needs:
-    - job: "build_package"
+    - job: "prepare_python_venv"
+      optional: true
   script:
     - pip install pylint
     - pylint --rcfile=.pylintrc src/sf_datalake/
