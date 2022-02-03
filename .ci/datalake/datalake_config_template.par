@@ -7,37 +7,37 @@ aide=0
 reptrdplg=/dev/null
 
 [ArretTacheSpark]
-#logout=${CACHE}/log/ArretTacheSpark_
+#logout=${REGISTRY}/log/ArretTacheSpark_
 
 [CreerRepertoire]
-#logout=${CACHE}/log/CreerRepertoire_
+#logout=${REGISTRY}/log/CreerRepertoire_
 
 [DemarrageTacheSpark]
 data=${SPARK_CONFIG}
-#logout=${CACHE}/log/DemarrageTacheSpark_
+#logout=${REGISTRY}/log/DemarrageTacheSpark_
 
 [EnvoyerFichier]
 # in this case, must precise an existing file
-#logout=${CACHE}/log/EnvoyerFichier_
+#logout=${REGISTRY}/log/EnvoyerFichier_
 
 [EtatTacheSpark]
-#logout=${CACHE}/log/EtatTacheSpark_
+#logout=${REGISTRY}/log/EtatTacheSpark_
 
 [ListContenuRepertoire]
 # nothing to override, but must be declared
 
 [LogsTacheSpark]
-#logout=${CACHE}/log/LogsTacheSpark_
+#logout=${REGISTRY}/log/LogsTacheSpark_
 
 [RecuperationFichier]
-#logout=${CACHE}/log/RecuperationFichier_
+#logout=${REGISTRY}/log/RecuperationFichier_
 
 [SuiviTacheSpark]
-#logout=${CACHE}/log/SuiviTacheSpark_
+#logout=${REGISTRY}/log/SuiviTacheSpark_
 
 [SuppressionFichier]
-#logout=${CACHE}/log/SuppressionFichier_
+#logout=${REGISTRY}/log/SuppressionFichier_
 
 [YarnLogsTacheSpark]
 # CAUTION this variable is used in in gitlab-ci.yml
-logout=${CACHE}/log/YarnLogsTacheSpark_
+logout=${REGISTRY}/log/YarnLogsTacheSpark_
