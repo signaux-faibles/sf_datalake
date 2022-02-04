@@ -103,11 +103,13 @@ sphinx-apidoc -fP -o source/ ../sf_datalake
 ```
 # Continuous integration (CI), pipelines
 
-Gitlab embedded CI/CD tools are used in order to test and automate various operations, especially cumbersome operations related to the `maacdo` APIs. Jobs are defined and associated with 4 main stages:
-- `.pre`
+Gitlab embedded CI/CD tools are used in order to test and automate various operations, especially cumbersome operations related to the `maacdo` APIs. Jobs are defined and associated with 3 main stages:
+
 - `test`
+- `build`
 - `deploy`
-- `.pre`
+
+`.pre` (resp. `.post`) stage correspond to environment setup for subsequent stages (resp. fetching of results / logs, environments info dump, etc.)
 
 Each job may depend on one or more earlier jobs, some may be run only on failure / manually… For more info, see the gitlab CI/CD [documentation](https://docs.gitlab.com/ee/ci/).
 
