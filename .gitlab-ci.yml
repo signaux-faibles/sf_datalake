@@ -117,6 +117,7 @@ build_package:
   extends: .python
   needs:
     - job: "pylint"
+      optional: true
     - job: "prepare_new_working_directory"
   script:
     - pip install -v .
@@ -127,7 +128,6 @@ pylint:
   extends: .python
   needs:
     - job: "prepare_python_venv"
-      optional: true
   script:
     - pip install pylint
     - pylint --rcfile=.pylintrc src/sf_datalake/
