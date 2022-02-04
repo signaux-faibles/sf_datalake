@@ -57,6 +57,12 @@ workflow:
 #  PIPELINE STARTS HERE  #
 ##########################
 
+stages:
+  - .pre
+  - test
+  - build
+  - deploy
+  - .post
 
 remove_older_working_directories:
   stage: .pre
@@ -119,6 +125,7 @@ build_package:
     - job: "pylint"
       optional: true
     - job: "prepare_new_working_directory"
+    - job: "prepare_python_venv"
   script:
     - pip install -v .
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
