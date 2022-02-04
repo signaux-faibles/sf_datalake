@@ -1,6 +1,5 @@
 """Utilities and classes for handling and transforming datasets."""
 
-from functools import reduce
 from typing import Dict, Iterable, List
 
 import pyspark.ml
@@ -126,25 +125,27 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
         config: model configuration, as loaded by utils.get_config().
 
     Returns:
-        List of the preprocessing stages.
+        A list of the preprocessing stages.
+
     """
     stages = [
         MissingValuesHandler(config),
         SirenAggregator(config),
-        AvgDeltaDebtPerSizeColumnAdder(),
-        DebtRatioColumnAdder(),
-        MissingValuesHandler(
-            config
-        ),  # necessary for new columns created in previous steps
+        DatasetFilter(),
+        AvgDeltaDebtPerSizeColumnAdder(config),
+        DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
         DatasetColumnSelector(config),
-        DatasetFilter(),
     ]
     return stages
 
 
 class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
     """A transformer to compute the average change in social debt / nb of employees."""
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Computes the average change in social debt / nb of employees.
@@ -180,21 +181,32 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
             )
             / dataset["effectif"],
         )
-        dataset = dataset.na.fill(
-            {"dette_par_effectif": 0, "dette_par_effectif_past_3": 0}
-        )
-
         dataset = dataset.withColumn(
             "avg_delta_dette_par_effectif",
             (dataset["dette_par_effectif"] - dataset["dette_par_effectif_past_3"]) / 3,
         )
-
         drop_columns = ["dette_par_effectif", "dette_par_effectif_past_3"]
+
+        if self.config["FILL_MISSING_VALUES"]:
+            dataset = dataset.fillna(
+                {
+                    "avg_delta_dette_par_effectif": self.config["DEFAULT_VALUES"][
+                        "avg_delta_dette_par_effectif"
+                    ]
+                }
+            )
+        else:
+            dataset = dataset.dropna(subset=["avg_delta_dette_par_effectif"])
+
         return dataset.drop(*drop_columns)
 
 
 class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
     """A transformer to compute the debt ratio."""
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Computes the debt ratio.
@@ -206,6 +218,7 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with an extra `ratio_dette` column.
 
         """
+
         assert {
             "montant_part_ouvriere",
             "montant_part_patronale",
@@ -217,6 +230,13 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
             (dataset.montant_part_ouvriere + dataset.montant_part_patronale)
             / dataset.cotisation_moy12m,
         )
+        if self.config["FILL_MISSING_VALUES"]:
+            dataset = dataset.fillna(
+                {"ratio_dette": self.config["DEFAULT_VALUES"]["ratio_dette"]}
+            )
+        else:
+            dataset = dataset.dropna(subset=["ratio_dette"])
+
         return dataset
 
 
@@ -278,40 +298,29 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
         self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Fills missing values using the variable's median predefined values.
+        """Fills or drop entries containing missing values.
 
-        The predefined values are defined inside the `"DEFAULT_VALUES"` config field.
+        If `FILL_MISSING_VALUES` config field is true, missing data is filled with
+        predefined values from the `DEFAULT_VALUES` config field.
 
         Args:
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-            Transformed DataFrame with missing values completed.
+            DataFrame where previously missing values are filled, or corresponding
+              entries are dropped.
 
         """
         assert {"FEATURES", "FILL_MISSING_VALUES", "DEFAULT_VALUES"} <= set(self.config)
         assert "time_til_failure" in dataset.columns
 
-        ratio_variables = list(
-            filter(lambda x: x[:3] == "RTO", self.config["FEATURES"])
-        )
-        if ratio_variables:
-            ratio_default_values = {}
-            data_medians = reduce(
-                lambda x, y: x + y, dataset.approxQuantile(ratio_variables, [0.5], 0.05)
-            )
-            for var, med in zip(ratio_variables, data_medians):
-                ratio_default_values[var] = med
-
-            default_data_values = dict(
-                **ratio_default_values, **self.config["DEFAULT_VALUES"]
-            )
-        else:
-            default_data_values = self.config["DEFAULT_VALUES"]
-
         if self.config["FILL_MISSING_VALUES"]:
             dataset = dataset.fillna(
-                {k: v for (k, v) in default_data_values.items() if k in dataset.columns}
+                {
+                    k: v
+                    for (k, v) in self.config["DEFAULT_VALUES"].items()
+                    if k in dataset.columns
+                }
             )
         else:
             dataset = dataset.fillna(
@@ -321,10 +330,10 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
                     ],
                 }
             )
-            variables_to_dropna = [
-                x for x in self.config["FEATURES"] if x in dataset.columns
-            ]
-            dataset = dataset.dropna(subset=tuple(variables_to_dropna))
+            dataset = dataset.dropna(
+                subset=[x for x in self.config["FEATURES"] if x in dataset.columns]
+            )
+
         return dataset
 
 
@@ -345,20 +354,18 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             Transformed DataFrame at a SIREN level.
 
         """
-        assert {"BASE_FEATURES", "FEATURES", "AGG_DICT"} <= set(self.config)
+        assert {"IDENTIFIERS", "FEATURES", "AGG_DICT"} <= set(self.config)
         assert {"siren", "periode"} <= set(dataset.columns)
 
-        no_agg_colnames = [
+        siren_lvl_colnames = [
             feat
             for feat in self.config["FEATURES"]
-            if (not feat in self.config["AGG_DICT"]) and (feat in dataset.columns)
-        ]  # already at SIREN level
-        groupby_colnames = self.config["BASE_FEATURES"] + no_agg_colnames
+            if (feat not in self.config["AGG_DICT"]) and (feat in dataset.columns)
+        ]
+        gb_colnames = self.config["IDENTIFIERS"] + siren_lvl_colnames
 
-        dataset = dataset.groupBy(*(set(groupby_colnames))).agg(self.config["AGG_DICT"])
+        dataset = dataset.groupBy(gb_colnames).agg(self.config["AGG_DICT"])
         for colname, func in self.config["AGG_DICT"].items():
-            if func == "mean":
-                func = "avg"  # 'groupBy mean' produces variables such as avg(colname)
             dataset = dataset.withColumnRenamed(f"{func}({colname})", colname)
 
         return dataset
@@ -380,11 +387,8 @@ class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
         assert "time_til_failure" in dataset.columns
 
         dataset = dataset.withColumn(
-            "failure_within_18m", dataset["time_til_failure"] <= 18
-        )
-        dataset = dataset.withColumn(
-            "failure_within_18m", dataset.failure_within_18m.astype("integer")
-        )  # Needed  for models
+            "failure_within_18m", (dataset["time_til_failure"] <= 18).cast("integer")
+        )  # Models except integer or floating labels.
         return dataset
 
 
@@ -405,14 +409,14 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
             Transformed DataFrame.
 
         """
-        assert {"BASE_FEATURES", "FEATURES", "TARGET_FEATURE"} <= set(self.config)
+        assert {"IDENTIFIERS", "FEATURES", "TARGET"} <= set(self.config)
 
         dataset = dataset.select(
             *(
                 set(
-                    self.config["BASE_FEATURES"]
+                    self.config["IDENTIFIERS"]
                     + self.config["FEATURES"]
-                    + self.config["TARGET_FEATURE"]
+                    + self.config["TARGET"]
                 )
             )
         )
