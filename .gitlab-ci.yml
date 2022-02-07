@@ -59,8 +59,8 @@ workflow:
 
 stages:
   - .pre
-  - test
   - build
+  - test
   - deploy
   - .post
 
@@ -122,8 +122,6 @@ build_package:
   stage: build
   extends: .python
   needs:
-    - job: "pylint"
-      optional: true
     - job: "prepare_new_working_directory"
     - job: "prepare_python_venv"
   script:
@@ -134,7 +132,7 @@ pylint:
   stage: test
   extends: .python
   needs:
-    - job: "prepare_python_venv"
+    - job: "build_package"
   script:
     - pip install pylint
     - pylint --rcfile=.pylintrc src/sf_datalake/
@@ -148,6 +146,8 @@ send_package_to_lake:
   needs:
     - job: "build_package"
     - job: "prepare_maacdo_configuration"
+    - job: "pylint"
+      optional: true
   script:
     - echo "Deleting old packages archive (if it exists) on the lake HDFS."
     - ./api_maacdo.pl
@@ -167,6 +167,8 @@ send_entrypoint_to_lake:
   extends: .lake
   needs:
     - job: "prepare_maacdo_configuration"
+    - job: "pylint"
+      optional: true
   script:
     - echo "Deleting previous entry point (if it exists) on the lake HDFS."
     - ./api_maacdo.pl
