@@ -128,6 +128,7 @@ venv_pack:
   extends: .python
   needs:
     - job: "install_package"
+  script:
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
 
 pylint:
