@@ -134,8 +134,6 @@ venv_pack:
 pylint:
   stage: test
   extends: .python
-  needs:
-    - job: "install_package"
   script:
     - pip install pylint
     - pylint --rcfile=.pylintrc src/sf_datalake/

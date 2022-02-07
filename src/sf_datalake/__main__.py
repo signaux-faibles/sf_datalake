@@ -27,6 +27,8 @@ import sf_datalake.utils
 def main(args: argparse.Namespace):  # pylint: disable=R0914
     """Processes datasets according to configuration to make predictions."""
 
+    print("Hello world!")
+
     # Parse a configuration file and possibly override parameters.
     config = sf_datalake.utils.get_config(args.configuration)
     config_args = {k: v for k, v in vars(args).items() if k in config and v is not None}
