@@ -114,7 +114,7 @@ prepare_maacdo_configuration:
     - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${REGISTRY}/ci_job.par
     - cat ${REGISTRY}/ci_job.par
 
-build_package:
+install_package:
   stage: build
   extends: .python
   needs:
@@ -122,13 +122,19 @@ build_package:
     - job: "prepare_python_venv"
   script:
     - pip install -v .
+
+venv_pack:
+  stage: build
+  extends: .python
+  needs:
+    - job: "install_package"
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
 
 pylint:
   stage: test
   extends: .python
   needs:
-    - job: "build_package"
+    - job: "install_package"
   script:
     - pip install pylint
     - pylint --rcfile=.pylintrc src/sf_datalake/
@@ -140,7 +146,7 @@ send_package_to_lake:
   stage: deploy
   extends: .lake
   needs:
-    - job: "build_package"
+    - job: "venv_pack"
     - job: "prepare_maacdo_configuration"
     - job: "pylint"
       optional: true
