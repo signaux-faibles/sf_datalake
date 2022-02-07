@@ -56,7 +56,9 @@
         "apart_heures_consommees",
         "ratio_dette_moy12m",
         "ratio_dette",
-        "avg_delta_dette_par_effectif"
+        "avg_delta_dette_par_effectif",
+        "paydex_nb_jours",
+        "paydex_yoy"
     ],
     "AGG_DICT": {
         "cotisation": "sum",
@@ -80,6 +82,10 @@
     },
     "DEFAULT_VALUES": {
         "time_til_failure": 9999,
+        "paydex_nb_jours": 0,
+        "paydex_nb_jours_past_12": 0,
+        "paydex_bin": 0.0,
+        "paydex_yoy": 0,
         "montant_part_ouvriere_past_12": 0.0,
         "montant_part_patronale_past_12": 0.0,
         "montant_part_ouvriere_past_6": 0.0,
@@ -110,6 +116,13 @@
         "RTO_AF_SOLIDITE_FINANCIERE": 0.0,
         "RTO_INVEST_CA": 0.0
     },
+    "PAYDEX_SPLITS": [
+        0,
+        15,
+        30,
+        60,
+        90
+    ],
     "TARGET": [
         "failure_within_18m"
     ],
@@ -228,6 +241,14 @@
         ],
         [
             "avg_delta_dette_par_effectif",
+            "StandardScaler"
+        ],
+        [
+            "paydex_nb_jours",
+            "StandardScaler"
+        ],
+        [
+            "paydex_yoy",
             "StandardScaler"
         ]
     ],

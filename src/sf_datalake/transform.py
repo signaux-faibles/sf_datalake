@@ -73,14 +73,15 @@ def get_scaler_from_str(s: str) -> Transformer:
 
     Returns:
         The selected Transformer with prepared parameters
+
     """
     factory = {
         "StandardScaler": StandardScaler(
             withMean=True,
             withStd=True,
-            inputCol="features_to_transform_StandardScaler",
-            outputCol="features_transformed_StandardScaler",
-        )
+            inputCol="to_StandardScaler",
+            outputCol="from_StandardScaler",
+        ),
     }
     return factory[s]
 
@@ -103,8 +104,8 @@ def generate_scaling_stages(config: dict) -> List[Transformer]:
     for feature, transformer in config["TRANSFORMERS"]:
         transformer_features.setdefault(transformer, []).append(feature)
     for transformer, features in transformer_features.items():
-        outputColAssembler = f"features_to_transform_{transformer}"
-        outputColScaler = f"features_transformed_{transformer}"
+        outputColAssembler = f"to_{transformer}"
+        outputColScaler = f"from_{transformer}"
         transformer_vector_assembler = VectorAssembler(
             inputCols=features, outputCol=outputColAssembler
         )
@@ -115,6 +116,7 @@ def generate_scaling_stages(config: dict) -> List[Transformer]:
         inputCols=transformed_features, outputCol="features"
     )
     stages.append(concat_vector_assembler)
+
     return stages
 
 
@@ -130,6 +132,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     """
     stages = [
         MissingValuesHandler(config),
+        PaydexColumnsAdder(config),
         SirenAggregator(config),
         DatasetFilter(),
         AvgDeltaDebtPerSizeColumnAdder(config),
@@ -240,54 +243,50 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
         return dataset
 
 
-class PaydexYoyColumnAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to compute the year over year values with Paydex data."""
+class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
+    """A transformer to compute features associated with Paydex data."""
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Computes the year over year values with Paydex data.
+        """Computes the yearly variation and quantile bin of payment delay (in days).
+
+        DataFrame to transform containing "paydex_nb_jours"self.
 
         Args:
-            dataset: DataFrame to transform containing "paydex_nb_jours" and
-                     "paydex_nb_jours_past_12" columns.
+            dataset: DataFrame to transform.
 
         Returns:
-            Transformed DataFrame with an extra `paydex_yoy` column.
+            Transformed DataFrame with extra `paydex_yoy` and `paydex_bins` columns.
 
         """
         assert {"paydex_nb_jours", "paydex_nb_jours_past_12"} <= set(dataset.columns)
 
-        return dataset.withColumn(
+        dataset = dataset.withColumn(
             "paydex_yoy",
             dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
         )
 
-
-class PaydexGroupColumnAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to cut paydex number of days data into quantile bins."""
-
-    def __init__(self, num_buckets) -> None:
-        super().__init__()
-        self.num_buckets = num_buckets
-
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Cuts paydex number of days data into quantile bins.
-
-        Args:
-            dataset: DataFrame to transform containing "paydex_nb_jours".
-
-        Returns:
-            Transformed DataFrame with an extra `paydex_bins` column.
-
-        """
-        assert "paydex_nb_jours" in dataset.columns
-
-        qds = pyspark.ml.feature.QuantileDiscretizer(
-            inputCol="paydex_nb_jours",
-            outputCol="paydex_bins",
+        days_splits = [float("-inf")] + self.config["PAYDEX_SPLITS"] + [float("inf")]
+        bucketizer = pyspark.ml.feature.Bucketizer(
+            splits=days_splits,
             handleInvalid="error",
-            numBuckets=self.num_buckets,
+            inputCol="paydex_nb_jours",
+            outputCol="paydex_bin",
         )
-        return qds.fit(dataset).transform(dataset)
+        dataset = bucketizer.transform(dataset)
+        if self.config["FILL_MISSING_VALUES"]:
+            dataset = dataset.fillna(
+                {
+                    "paydex_bin": self.config["DEFAULT_VALUES"]["paydex_bin"],
+                    "paydex_yoy": self.config["DEFAULT_VALUES"]["paydex_yoy"],
+                }
+            )
+        else:
+            dataset = dataset.dropna(subset=["paydex_bin", "paydex_yoy"])
+        return dataset
 
 
 class MissingValuesHandler(Transformer):  # pylint: disable=R0903
