@@ -264,6 +264,7 @@
         "sante_financiere_macro_score",
         "dette_urssaf_macro_score",
         "activite_partielle_macro_score",
+        "retards_paiement_macro_score",
         "misc_macro_score"
     ],
     "MESO_URSSAF_GROUPS": {
@@ -314,6 +315,10 @@
             "part_ouvriere",
             "part_patronale",
             "dette"
+        ],
+        "retards_paiement": [
+            "paydex_nb_jours",
+            "paydex_yoy"
         ],
         "misc": [
             "effectif"
