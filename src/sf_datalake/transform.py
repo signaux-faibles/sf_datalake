@@ -6,7 +6,7 @@ import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
 from pyspark.ml import Transformer
-from pyspark.ml.feature import StandardScaler, VectorAssembler
+from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.sql.types import FloatType, StringType
 from pyspark.sql.window import Window
 
@@ -65,14 +65,14 @@ def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     return df
 
 
-def get_scaler_from_str(s: str) -> Transformer:
-    """Get a Transformer from its name.
+def get_transformer_from_str(name: str) -> Transformer:
+    """Get a pre-configured Transformer object by specifying its name.
 
     Args:
-        s: Name of the Transformer
+        name: Transformer's name
 
     Returns:
-        The selected Transformer with prepared parameters
+        The selected Transformer with prepared parameters.
 
     """
     factory = {
@@ -82,12 +82,28 @@ def get_scaler_from_str(s: str) -> Transformer:
             inputCol="to_StandardScaler",
             outputCol="from_StandardScaler",
         ),
+        "OneHotEncoder": OneHotEncoder(
+            inputCol="to_OneHotEncoder", outputCol="from_OneHotEncoder", dropLast=False
+        ),
     }
-    return factory[s]
+    return factory[name]
 
 
-def generate_scaling_stages(config: dict) -> List[Transformer]:
-    """Generates all stages related to Transformer objects.
+# def generate_column_indexer(config: dict) -> List:
+#     """Generates an index associated with the features matrix columns.
+
+#     This index is used to keep track of the position of each features during the
+#     explanation section.
+
+#     Args:
+#         config: model configuration, as loaded by utils.get_config().
+
+#     """
+#     pass
+
+
+def generate_transforming_stages(config: dict) -> List[Transformer]:
+    """Generates all stages related to feature transformation.
 
     The stages are ready to be included in a pyspark.ml.Pipeline.
 
@@ -109,7 +125,7 @@ def generate_scaling_stages(config: dict) -> List[Transformer]:
         transformer_vector_assembler = VectorAssembler(
             inputCols=features, outputCol=outputColAssembler
         )
-        stages += [transformer_vector_assembler, get_scaler_from_str(transformer)]
+        stages += [transformer_vector_assembler, get_transformer_from_str(transformer)]
         transformed_features.append(outputColScaler)
 
     concat_vector_assembler = VectorAssembler(
@@ -121,7 +137,10 @@ def generate_scaling_stages(config: dict) -> List[Transformer]:
 
 
 def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
-    """Generates stages for preprocessing pipeline construction.
+    """Generates preprocessing stages.
+
+    These stages are ready to be included in a pyspark.ml.Pipeline object for data
+    preprocessing and feature engineering.
 
     Args:
         config: model configuration, as loaded by utils.get_config().
@@ -414,7 +433,7 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
             *(
                 set(
                     self.config["IDENTIFIERS"]
-                    + self.config["FEATURES"]
+                    + list(self.config["FEATURES"])
                     + self.config["TARGET"]
                 )
             )

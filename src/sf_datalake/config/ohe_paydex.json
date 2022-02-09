@@ -57,6 +57,8 @@
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
         "avg_delta_dette_par_effectif": "StandardScaler",
+        "paydex_bin": "OneHotEncoder",
+        "paydex_yoy": "StandardScaler"
     ],
     "AGG_DICT": {
         "cotisation": "sum",
@@ -80,6 +82,10 @@
     },
     "DEFAULT_VALUES": {
         "time_til_failure": 9999,
+        "paydex_nb_jours": 0,
+        "paydex_nb_jours_past_12": 0,
+        "paydex_bin": 0.0,
+        "paydex_yoy": 0,
         "montant_part_ouvriere_past_12": 0.0,
         "montant_part_patronale_past_12": 0.0,
         "montant_part_ouvriere_past_6": 0.0,
@@ -110,6 +116,13 @@
         "RTO_AF_SOLIDITE_FINANCIERE": 0.0,
         "RTO_INVEST_CA": 0.0
     },
+    "PAYDEX_SPLITS": [
+        0,
+        15,
+        30,
+        60,
+        90
+    ],
     "TARGET": [
         "failure_within_18m"
     ],
@@ -125,6 +138,7 @@
         "sante_financiere_macro_score",
         "dette_urssaf_macro_score",
         "activite_partielle_macro_score",
+        "retards_paiement_macro_score",
         "misc_macro_score"
     ],
     "MESO_URSSAF_GROUPS": {
@@ -175,6 +189,10 @@
             "part_ouvriere",
             "part_patronale",
             "dette"
+        ],
+        "retards_paiement": [
+            "paydex_bin",
+            "paydex_yoy"
         ],
         "misc": [
             "effectif"
