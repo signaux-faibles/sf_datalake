@@ -25,11 +25,7 @@ repos:
   - id: pylint
     name: pylint
     entry: pylint
-    args:
-      [
-      "--rcfile=.pylintrc",
-      "src/sf_datalake/"
-      ]
+    args: ["--rcfile=.pylintrc"]
     language: system
     types: [python]
     require_serial: true
