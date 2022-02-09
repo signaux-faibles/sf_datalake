@@ -2,7 +2,7 @@ default_language_version:
     python: python3.6
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.0.1
+  rev: v4.1.0
   hooks:
   - id: trailing-whitespace
   - id: end-of-file-fixer
@@ -11,12 +11,12 @@ repos:
   - id: check-added-large-files
   - id: detect-private-key
 - repo: https://github.com/psf/black
-  rev: 21.10b0
+  rev: 22.1.0
   hooks:
   - id: black
   - id: black-jupyter
 - repo: https://github.com/PyCQA/isort
-  rev: 5.10.0
+  rev: 5.10.1
   hooks:
   - id: isort
     args: ["--profile", "black"]
@@ -24,7 +24,12 @@ repos:
   hooks:
   - id: pylint
     name: pylint
-    entry: pylint --rcfile=.pylintrc src/sf_datalake/
+    entry: pylint
+    args:
+      [
+      "--rcfile=.pylintrc",
+      "src/sf_datalake/"
+      ]
     language: system
     types: [python]
     require_serial: true
