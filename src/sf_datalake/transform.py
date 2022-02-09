@@ -29,6 +29,22 @@ def parse_date(
     return df
 
 
+def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+    """Normalizes the input DataFrame "siren" entries.
+
+    Args:
+        df: A DataFrame with a "siren" column, whose type can be cast to string.
+
+    Returns:
+        A DataFrame with zeros-left-padded SIREN data, as string type.
+
+    """
+    assert "siren" in df.columns, "Input DataFrame doesn't have a 'siren' column."
+    df = df.withColumn("siren", df["siren"].cast("string"))
+    df = df.withColumn("siren", F.lpad(df["siren"], 9, "0"))
+    return df
+
+
 def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     """Computes the number of payments.
 

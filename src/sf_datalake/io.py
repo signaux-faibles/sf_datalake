@@ -6,7 +6,6 @@ from typing import Dict, Iterable, Optional
 
 import pkg_resources
 import pyspark.sql
-from pyspark.sql import functions as F
 
 import sf_datalake.utils
 
@@ -51,22 +50,6 @@ def csv_to_orc(input_filename: str, output_filename: str):
         path.join(input_filename)
     )
     df.write.format("orc").save(output_filename)
-
-
-def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Normalizes the input DataFrame "siren" entries.
-
-    Args:
-        df: A DataFrame with a "siren" column, whose type can be cast to string.
-
-    Returns:
-        A DataFrame with zeros-left-padded SIREN data, as string type.
-
-    """
-    assert "siren" in df.columns, "Input DataFrame doesn't have a 'siren' column."
-    df = df.withColumn("siren", df["siren"].cast("string"))
-    df = df.withColumn("siren", F.lpad(df["siren"], 9, "0"))
-    return df
 
 
 def write_predictions(
