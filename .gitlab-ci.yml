@@ -139,7 +139,7 @@ pylint:
     - pylint --rcfile=.pylintrc src/sf_datalake/
   rules:
     - changes:
-      - src/sf_datalake/*
+      - src/sf_datalake/**/*.py
 
 send_package_to_lake:
   stage: deploy
