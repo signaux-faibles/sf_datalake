@@ -305,7 +305,7 @@ def convert_projections_to_dataframe(
     return rdd.toDF(["siren", "periode", "cp1", "cp2"])
 
 
-def project_observation_on_eigenspace_over_time(
+def project_observations_on_eigenspace_over_time(
     df: pyspark.sql.DataFrame, start: str, end: str, features: List[str]
 ) -> pyspark.sql.DataFrame:
     """Build an eigenspace from the first period `start` and project the
