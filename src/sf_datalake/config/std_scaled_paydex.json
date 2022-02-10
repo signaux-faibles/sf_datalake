@@ -134,7 +134,7 @@
         "retards_paiement_macro_score",
         "misc_macro_score"
     ],
-    "MESO_URSSAF_GROUPS": {
+    "MESO_GROUPS": {
         "cotisation_urssaf": [
             "cotisation",
             "cotisation_moy12m"

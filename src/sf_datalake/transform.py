@@ -88,38 +88,6 @@ def get_transformer(name: str) -> Transformer:
     return factory[name]
 
 
-def feature_index(config: dict) -> List[str]:
-    """Generates an index associated with the features matrix columns.
-
-    This index is used to keep track of the position of each features, which comes in
-    handy in the explanation stage.
-
-    Args:
-        config: model configuration, as loaded by utils.get_config().
-
-    Returns:
-        A list of features ordered as they are inside the features matrix.
-
-    """
-    indexer: List[str] = []
-    for transformer, features in config["TRANSFORMER_FEATURES"].items():
-        if transformer == "StandardScaler":
-            indexer.extend(features)
-        elif transformer == "OneHotEncoder":
-            for feature in features:
-                indexer.extend(
-                    [
-                        f"{feature}_i"
-                        for i in range(len(config["ONE_HOT_CATEGORIES"][feature]))
-                    ]
-                )
-        else:
-            raise NotImplementedError(
-                f"Indexing for transformer {transformer} is not implemented yet."
-            )
-    return indexer
-
-
 def generate_transforming_stages(config: dict) -> List[Transformer]:
     """Generates all stages related to feature transformation.
 
@@ -332,6 +300,14 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             outputCol="paydex_bin",
         )
         dataset = bucketizer.transform(dataset)
+
+        ## Add corresponding 'meso' column names to the configuration.
+        self.config["MESO_GROUPS"]["paydex_bin"] = [
+            f"paydex_bin_ohcat{i}"
+            for i in range(len(self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]))
+        ]
+
+        ## Fill missing values
         if self.config["FILL_MISSING_VALUES"]:
             dataset = dataset.fillna(
                 {
