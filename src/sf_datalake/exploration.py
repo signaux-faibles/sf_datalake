@@ -367,8 +367,8 @@ def convert_features_projection_to_dataframe(
 
     Args:
         U: eigenvectors
-        features: Names of the features in the same order as in the DataFrame
-            used in build_eigenspace()
+        features: Names of the features in the same order as in the argument
+            features used in build_eigenspace()
         period: period of the projection
 
     Returns:
@@ -383,7 +383,7 @@ def convert_features_projection_to_dataframe(
     ]
     spark = sf_datalake.utils.get_spark_session()
     rdd = spark.sparkContext.parallelize(data)
-    return rdd.toDF(["siren", "periode", "cp1", "cp2"])
+    return rdd.toDF(["feature", "periode", "cp1", "cp2"])
 
 
 def project_features_on_eigenspace_over_time(
@@ -406,6 +406,7 @@ def project_features_on_eigenspace_over_time(
         df.filter(df.periode >= start)
         .filter(df.periode < end)
         .orderBy(["periode", "siren"])
+        .select(features + ["periode", "siren"])
     )
     periods = df_pca.select("periode").distinct().rdd.flatMap(lambda x: x).collect()
 
