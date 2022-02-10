@@ -279,8 +279,8 @@ def convert_projections_to_dataframe(
     U: List[List[float]], df: pyspark.sql.DataFrame, period: datetime
 ) -> pyspark.sql.DataFrame:
     """Convert projections as a List[List[float]] into a DataFrame.
-    This function is internally used by build_obs_trajectories(). It
-    is limited to eigenvectors of dimension 2.
+    This function is internally used by project_on_eigenspace_over_time().
+    It is limited to eigenvectors of dimension 2.
 
     Args:
         U: eigenvectors
@@ -305,7 +305,7 @@ def convert_projections_to_dataframe(
     return rdd.toDF(["siren", "periode", "cp1", "cp2"])
 
 
-def project_on_eigenspace_over_time(
+def project_observation_on_eigenspace_over_time(
     df: pyspark.sql.DataFrame, start: str, end: str, features: List[str]
 ) -> pyspark.sql.DataFrame:
     """Build an eigenspace from the first period `start` and project the
@@ -356,3 +356,81 @@ def project_on_eigenspace_over_time(
         obs_trajectories = obs_trajectories.union(df_period_eigenspace)
 
     return obs_trajectories
+
+
+def convert_features_projection_to_dataframe(
+    V: List[List[float]], features: List[str], period: datetime
+) -> pyspark.sql.DataFrame:
+    """Convert projections as a List[List[float]] into a DataFrame.
+    This function is internally used by build_features_on_eigenspace_over_time().
+    It is limited to eigenvectors of dimension 2.
+
+    Args:
+        U: eigenvectors
+        features: Names of the features in the same order as in the DataFrame
+            used in build_eigenspace()
+        period: period of the projection
+
+    Returns:
+        A DataFrame where features are represented in an eigenspace.
+    """
+    V = [[float(y) for y in x] for x in V]
+    V_on_cp1 = [x[0] for x in V]
+    V_on_cp2 = [x[1] for x in V]
+
+    data = [
+        (feat, period, cp1, cp2) for feat, cp1, cp2 in zip(features, V_on_cp1, V_on_cp2)
+    ]
+    spark = sf_datalake.utils.get_spark_session()
+    rdd = spark.sparkContext.parallelize(data)
+    return rdd.toDF(["siren", "periode", "cp1", "cp2"])
+
+
+def project_features_on_eigenspace_over_time(
+    df: pyspark.sql.DataFrame, start: str, end: str, features: List[str]
+) -> pyspark.sql.DataFrame:
+    """Build features projections on eigenspace for each period.
+
+    Args:
+        df: input DataFrame
+        start: start of the period as 'yyyy-mm-dd'
+        end: end of the period as 'yyyy-mm-dd'
+        features: names of the features used
+
+    Returns:
+        Features over time projected on the eigenspace for each period.
+    """
+    assert set(["siren", "periode"] + features) <= set(df.columns)
+
+    df_pca = (
+        df.filter(df.periode >= start)
+        .filter(df.periode < end)
+        .orderBy(["periode", "siren"])
+    )
+    periods = df_pca.select("periode").distinct().rdd.flatMap(lambda x: x).collect()
+
+    spark = sf_datalake.utils.get_spark_session()
+
+    schema = T.StructType(
+        [
+            T.StructField("feature", T.StringType(), True),
+            T.StructField("periode", T.TimestampType(), True),
+            T.StructField("cp1", T.DoubleType(), True),
+            T.StructField("cp2", T.DoubleType(), True),
+        ]
+    )
+    features_trajectories = spark.createDataFrame(
+        data=spark.sparkContext.emptyRDD(), schema=schema
+    )
+
+    for period in periods:  # groupBy() to optimize?
+        eigenspace = build_eigenspace(
+            df_pca.filter(df_pca.periode == period), features, 2
+        )
+        V_period = eigenspace["V"]
+        df_period_eigenspace = convert_features_projection_to_dataframe(
+            V_period, features, period
+        )
+        features_trajectories = features_trajectories.union(df_period_eigenspace)
+
+    return features_trajectories
