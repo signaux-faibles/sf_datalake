@@ -59,7 +59,7 @@
         "avg_delta_dette_par_effectif": "StandardScaler",
         "paydex_bin": "OneHotEncoder",
         "paydex_yoy": "StandardScaler"
-    ],
+    },
     "AGG_DICT": {
         "cotisation": "sum",
         "cotisation_moy12m": "sum",
