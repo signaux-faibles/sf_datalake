@@ -247,7 +247,7 @@ def build_eigenspace(df: pyspark.sql.DataFrame, features: List[str], k: int) -> 
         "s": svd.s[0:k],
         "explained_variance": np.cumsum(s_squared / sum(s_squared))[k - 1],
         "s_inverse": np.diag([1 / x for x in svd.s[0:k]]),
-        "V": svd.V.toArray()[0:k],
+        "V": svd.V.toArray()[:, 0:k],
     }
 
 
