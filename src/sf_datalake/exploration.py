@@ -1,13 +1,19 @@
 """Utility functions for data exploration using spark DataFrame objects.
 """
 
+from datetime import datetime
 from typing import Iterable, List, Tuple
 
+import numpy as np
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
+import pyspark.sql.types as T
 import scipy.stats
-from pyspark.sql.types import ArrayType, DoubleType, FloatType
+from pyspark.mllib.linalg import Vectors
+from pyspark.mllib.linalg.distributed import RowMatrix
+
+import sf_datalake.utils
 
 
 def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -151,7 +157,9 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     """
     assert "features" in df.columns, "Input DataFrame doesn't have a 'features' column."
 
-    dense_to_array_udf = F.udf(lambda v: [float(x) for x in v], ArrayType(FloatType()))
+    dense_to_array_udf = F.udf(
+        lambda v: [float(x) for x in v], T.ArrayType(T.FloatType())
+    )
 
     df = df.withColumn("features_array", dense_to_array_udf("features"))
     n_features = len(df.first()["features"])
@@ -190,14 +198,14 @@ def one_way_anova(
     global_avg = df.select(F.avg(continuous_var)).take(1)[0][0]
     df_groups = df_groups.withColumn("global_avg", F.lit(global_avg))
 
-    udf_squared_diff = F.udf(lambda x: x[0] * (x[1] - x[2]) ** 2, DoubleType())
+    udf_squared_diff = F.udf(lambda x: x[0] * (x[1] - x[2]) ** 2, T.DoubleType())
     df_squared_diff = df_groups.withColumn(
         "squared_diff",
         udf_squared_diff(F.struct("nobs_per_group", "global_avg", "group_avg")),
     )
     ssbg = df_squared_diff.select(F.sum("squared_diff")).take(1)[0][0]
 
-    udf_within_ss = F.udf(lambda x: (x[0] - 1) * x[1] ** 2, DoubleType())
+    udf_within_ss = F.udf(lambda x: (x[0] - 1) * x[1] ** 2, T.DoubleType())
     df_squared_diff = df_groups.withColumn(
         "squared_within", udf_within_ss(F.struct("nobs_per_group", "group_sse"))
     )
@@ -216,3 +224,135 @@ def one_way_anova(
         "df_wg": df_wg,
         "df_bg": df_bg,
     }
+
+
+def build_eigenspace(df: pyspark.sql.DataFrame, features: List[str], k: int) -> dict:
+    """Build the eigenspace of a DataFrame.
+
+    Args:
+        df: input DataFrame
+        features: names of the features used to build the eigenspace
+        k: dimension of the eigenspace
+
+    Returns:
+        Eigenvalues, inverse of eigenvalues, eigenvectors, variance explained/
+    """
+    assert set(features) <= set(df.columns)
+
+    df = df.select(features)
+    mat = RowMatrix(df.rdd.map(Vectors.dense))
+    svd = mat.computeSVD(len(features))
+    s_squared = [x * x for x in list(svd.s)]
+    return {
+        "s": svd.s[0:k],
+        "explained_variance": np.cumsum(s_squared / sum(s_squared))[k - 1],
+        "s_inverse": np.diag([1 / x for x in svd.s[0:k]]),
+        "V": svd.V.toArray()[0:k],
+    }
+
+
+def project_on_eigenspace(
+    df: pyspark.sql.DataFrame, eigenspace: dict, features: List[str]
+) -> List[List[float]]:
+    """Project a DataFrame with a list of features on an eigenspace.
+
+    Args:
+        df: input DataFrame
+        eigenspace: obtained from the function build_eigenspace()
+        features : names of the features used to build the eigenspace
+
+    Returns:
+        The list of new coordinates corresponding to the DataFrame
+        projected on the eigenspace.
+    """
+    assert set(features) <= set(df.columns)
+    assert "s_inverse" in eigenspace.keys()
+    assert "V" in eigenspace.keys()
+
+    df = df.select(features)
+    X = np.array(df.collect())
+    U = np.matmul(X, np.matmul(eigenspace["V"], eigenspace["s_inverse"]))
+    return [[float(y) for y in x] for x in U]
+
+
+def convert_projections_to_dataframe(
+    U: List[List[float]], df: pyspark.sql.DataFrame, period: datetime
+) -> pyspark.sql.DataFrame:
+    """Convert projections as a List[List[float]] into a DataFrame.
+    This function is internally used by build_obs_trajectories(). It
+    is limited to eigenvectors of dimension 2.
+
+    Args:
+        U: eigenvectors
+        df: the original DataFrame that will be fed with the eigenvectors
+        period: period of the projection
+
+    Returns:
+        A DataFrame where features has been replaced by eigenvectors.
+    """
+    assert "siren" in set(df.columns)
+
+    all_siren = df.select("siren").rdd.flatMap(lambda x: x).collect()
+    U_on_cp1 = [x[0] for x in U]
+    U_on_cp2 = [x[1] for x in U]
+
+    data = [
+        (siren, period, cp1, cp2)
+        for siren, cp1, cp2 in zip(all_siren, U_on_cp1, U_on_cp2)
+    ]
+    spark = sf_datalake.utils.get_spark_session()
+    rdd = spark.sparkContext.parallelize(data)
+    return rdd.toDF(["siren", "periode", "cp1", "cp2"])
+
+
+def project_on_eigenspace_over_time(
+    df: pyspark.sql.DataFrame, start: str, end: str, features: List[str]
+) -> pyspark.sql.DataFrame:
+    """Build an eigenspace from the first period `start` and project the
+    data from all next periods on this space.
+
+    Args:
+        df: input DataFrame
+        start: start of the period as 'yyyy-mm-dd'
+        end: end of the period as 'yyyy-mm-dd'
+        features: names of the features used
+
+    Returns:
+        Data over time projected for each period on the eigenspace built
+        from the first period.
+    """
+    assert set(["siren", "periode"] + features) <= set(df.columns)
+
+    df_pca = (
+        df.filter(df.periode >= start)
+        .filter(df.periode < end)
+        .orderBy(["periode", "siren"])
+    )
+    periods = df_pca.select("periode").distinct().rdd.flatMap(lambda x: x).collect()
+    eigenspace = build_eigenspace(
+        df_pca.filter(df_pca.periode == periods[0]), features, 2
+    )
+
+    spark = sf_datalake.utils.get_spark_session()
+
+    schema = T.StructType(
+        [
+            T.StructField("siren", T.StringType(), True),
+            T.StructField("periode", T.TimestampType(), True),
+            T.StructField("cp1", T.DoubleType(), True),
+            T.StructField("cp2", T.DoubleType(), True),
+        ]
+    )
+    obs_trajectories = spark.createDataFrame(
+        data=spark.sparkContext.emptyRDD(), schema=schema
+    )
+
+    for period in periods:  # groupBy() to optimize?
+        df_period = df_pca.filter(df.periode == period)
+        U_period = project_on_eigenspace(df_period, eigenspace, features)
+        df_period_eigenspace = convert_projections_to_dataframe(
+            U_period, df_period, period
+        )
+        obs_trajectories = obs_trajectories.union(df_period_eigenspace)
+
+    return obs_trajectories
