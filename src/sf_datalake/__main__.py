@@ -76,7 +76,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         config["MODEL"]["MAX_ITER"],
     )
 
-    scaling_stages = sf_datalake.transform.generate_scaling_stages(config)
+    scaling_stages = sf_datalake.transform.generate_transforming_stages(config)
     model_stages = sf_datalake.model.generate_stages(config)
     postprocessing_stages = [sf_datalake.transform.ProbabilityFormatter()]
 
