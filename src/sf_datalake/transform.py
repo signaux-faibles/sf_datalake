@@ -1,7 +1,8 @@
 """Utilities and classes for handling and transforming datasets."""
 
-from typing import Dict, Iterable, List
+from typing import Iterable, List
 
+import numpy as np
 import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
@@ -65,11 +66,11 @@ def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     return df
 
 
-def get_transformer_from_str(name: str) -> Transformer:
+def get_transformer(name: str) -> Transformer:
     """Get a pre-configured Transformer object by specifying its name.
 
     Args:
-        name: Transformer's name
+        name: Transformer object's name
 
     Returns:
         The selected Transformer with prepared parameters.
@@ -82,24 +83,41 @@ def get_transformer_from_str(name: str) -> Transformer:
             inputCol="to_StandardScaler",
             outputCol="from_StandardScaler",
         ),
-        "OneHotEncoder": OneHotEncoder(
-            inputCol="to_OneHotEncoder", outputCol="from_OneHotEncoder", dropLast=False
-        ),
+        "OneHotEncoder": OneHotEncoder(dropLast=False),
     }
     return factory[name]
 
 
-# def generate_column_indexer(config: dict) -> List:
-#     """Generates an index associated with the features matrix columns.
+def feature_index(config: dict) -> List[str]:
+    """Generates an index associated with the features matrix columns.
 
-#     This index is used to keep track of the position of each features during the
-#     explanation section.
+    This index is used to keep track of the position of each features, which comes in
+    handy in the explanation stage.
 
-#     Args:
-#         config: model configuration, as loaded by utils.get_config().
+    Args:
+        config: model configuration, as loaded by utils.get_config().
 
-#     """
-#     pass
+    Returns:
+        A list of features ordered as they are inside the features matrix.
+
+    """
+    indexer: List[str] = []
+    for transformer, features in config["TRANSFORMER_FEATURES"].items():
+        if transformer == "StandardScaler":
+            indexer.extend(features)
+        elif transformer == "OneHotEncoder":
+            for feature in features:
+                indexer.extend(
+                    [
+                        f"{feature}_i"
+                        for i in range(len(config["ONE_HOT_CATEGORIES"][feature]))
+                    ]
+                )
+        else:
+            raise NotImplementedError(
+                f"Indexing for transformer {transformer} is not implemented yet."
+            )
+    return indexer
 
 
 def generate_transforming_stages(config: dict) -> List[Transformer]:
@@ -115,24 +133,30 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
 
     """
     stages: List[Transformer] = []
-    transformed_features: List[str] = []
-    transformer_features: Dict[str, List[str]] = {}
-    for feature, transformer in config["TRANSFORMERS"]:
-        transformer_features.setdefault(transformer, []).append(feature)
-    for transformer, features in transformer_features.items():
-        outputColAssembler = f"to_{transformer}"
-        outputColScaler = f"from_{transformer}"
-        transformer_vector_assembler = VectorAssembler(
-            inputCols=features, outputCol=outputColAssembler
-        )
-        stages += [transformer_vector_assembler, get_transformer_from_str(transformer)]
-        transformed_features.append(outputColScaler)
+    concat_input_cols: List[str] = []
 
-    concat_vector_assembler = VectorAssembler(
-        inputCols=transformed_features, outputCol="features"
-    )
-    stages.append(concat_vector_assembler)
+    for transformer_name, features in config["TRANSFORMER_FEATURES"].items():
+        # OneHotEncoder takes an un-assembled numeric column as input.
+        if transformer_name == "OneHotEncoder":
+            for feature in features:
+                ohe = get_transformer(transformer_name)
+                ohe.setInputCol(feature)
+                ohe.setOutputCol(f"ohe_{feature}")
+                concat_input_cols.append(f"ohe_{feature}")
+                stages.append(ohe)
+        else:
+            stages.extend(
+                [
+                    VectorAssembler(
+                        inputCols=features, outputCol=f"to_{transformer_name}"
+                    ),
+                    get_transformer(transformer_name),
+                ]
+            )
+            concat_input_cols.append(f"from_{transformer_name}")
 
+    # We add a final concatenation stage of all columns that should be fed to the model.
+    stages.append(VectorAssembler(inputCols=concat_input_cols, outputCol="features"))
     return stages
 
 
@@ -283,12 +307,24 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
         """
         assert {"paydex_nb_jours", "paydex_nb_jours_past_12"} <= set(dataset.columns)
 
+        ## Paydex variation
         dataset = dataset.withColumn(
             "paydex_yoy",
             dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
         )
 
-        days_splits = [float("-inf")] + self.config["PAYDEX_SPLITS"] + [float("inf")]
+        ## Binned paydex delay
+        def bins_to_splits(bins: List[List[str]]) -> List[str]:
+            splits: List[str] = []
+            all_values = [v for bin_ in bins for v in bin_]
+            for value in all_values:
+                if value not in splits:
+                    splits.append(value)
+            return splits
+
+        days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
+        days_splits = np.array([float(v) for v in bins_to_splits(days_bins)])
+
         bucketizer = pyspark.ml.feature.Bucketizer(
             splits=days_splits,
             handleInvalid="error",
