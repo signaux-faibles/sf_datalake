@@ -8,7 +8,7 @@ import pyspark.sql
 import pyspark.sql.functions as F
 from pyspark.ml import Transformer
 from pyspark.ml.feature import StandardScaler, VectorAssembler
-from pyspark.sql.types import FloatType, StringType
+from pyspark.sql.types import ArrayType, DoubleType, FloatType, StringType
 from pyspark.sql.window import Window
 
 
@@ -454,3 +454,40 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
         """
         transform_udf = F.udf(lambda v: float(v[1]), FloatType())
         return dataset.withColumn("probability", transform_udf("probability"))
+
+
+def vector_disassembler(
+    df: pyspark.sql.DataFrame,
+    feature_names: List[str],
+    feature_assembled_name: str,
+    keep_col_names: List[str],
+) -> pyspark.sql.DataFrame:
+    """Inverse operation of a pyspark.ml.feature.VectorAssembler.
+
+    Args:
+        df: input DataFrame
+        feature_names: individual features previously assembled from a VectorAssembler
+        feature_assembled_name: name of the assembled feature from a VectorAssembler
+        keep_col_names: additional features to keep that have not been assembled
+
+    Returns:
+        A DataFrame with individual features that have been disassembled.
+    """
+    assert set(keep_col_names + [feature_assembled_name]) <= set(df.columns)
+
+    def udf_vector_disassembler(col):
+        return F.udf(lambda v: v.toArray().tolist(), ArrayType(DoubleType()))(col)
+
+    df = df.select(keep_col_names + [feature_assembled_name])
+
+    df = df.withColumn(
+        feature_assembled_name, udf_vector_disassembler(F.col(feature_assembled_name))
+    ).select(
+        keep_col_names
+        + [F.col(feature_assembled_name)[i] for i in range(len(feature_names))]
+    )
+
+    for i, feat in enumerate(feature_names):
+        df = df.withColumnRenamed(f"{feature_assembled_name}[{i}]", feat)
+
+    return df
