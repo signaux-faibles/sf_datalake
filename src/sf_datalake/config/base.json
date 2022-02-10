@@ -56,8 +56,8 @@
         "apart_heures_consommees": "StandardScaler",
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
-        "avg_delta_dette_par_effectif": "StandardScaler",
-    ],
+        "avg_delta_dette_par_effectif": "StandardScaler"
+    },
     "AGG_DICT": {
         "cotisation": "sum",
         "cotisation_moy12m": "sum",
