@@ -98,18 +98,8 @@ def explain(
 
     """
     model = get_model_from_pipeline_model(pipeline_model, config["MODEL"]["NAME"])
-
-    features_lists = [
-        stage.getInputCols()
-        for stage in pipeline_model.stages
-        if isinstance(stage, pyspark.ml.feature.VectorAssembler)
-    ]
-    # We drop the last element of features_lists which is a stage where an assembler
-    # only concatenates previous assembled feature groups.
-    features = [feat for flist in features_lists[:-1] for feat in flist]
-
     factory = {"LogisticRegression": explain_logistic_regression}
-    return factory[config["MODEL"]["NAME"]](config, model, features, df)
+    return factory[config["MODEL"]["NAME"]](config, model, df)
 
 
 def explain_logistic_regression(
