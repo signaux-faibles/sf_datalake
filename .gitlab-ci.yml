@@ -91,11 +91,11 @@ prepare_new_working_directory:
     - mkdir -p ${REGISTRY}/log
     - mkdir -p ${REGISTRY}/bin
     - mkdir -p ${REGISTRY}/results
-    - echo "Preparing spark configuration inside ${REGISTRY}/spark_config.json (will be set to  'null' if no prediction should be run afterwards)."
+    - echo "Preparing spark configuration inside ${REGISTRY}/spark_config.json (will be set to 'null' if no prediction should be run afterwards)."
     - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/spark_config.json | envsubst > ${REGISTRY}/spark_config.json
     - cat ${REGISTRY}/spark_config.json
-    - echo "Getting MaacDo version from default or ${DEPLOYMENT_TYPE} or ${CI_COMMIT_REF_SLUG} from .ci/datalake/maacdo_version.json "
-    - MAACDO_VERSION=$(jq --raw-output --arg GROUP "${DEPLOYMENT_TYPE}" --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$GROUP] + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
+    - echo "Getting MaacDo version from default or ${CI_COMMIT_REF_SLUG} from .ci/datalake/maacdo_version.json "
+    - MAACDO_VERSION=$(jq --raw-output --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
     - echo "${MAACDO_VERSION} > ${REGISTRY}/.maacdo_version"
     - echo "Got MaacDo version as ${MAACDO_VERSION} "
     - git clone --depth 1 --branch ${MAACDO_VERSION} https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${REGISTRY}/bin
