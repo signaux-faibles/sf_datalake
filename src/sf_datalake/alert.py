@@ -1,6 +1,6 @@
 """Generation of alert levels based on model predictions. """
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -25,13 +25,13 @@ def name_alert_group(score: float, t_red: float, t_orange: float) -> str:
     return "Pas d'alerte"
 
 
-def alert_tailoring(
+def tailoring(
     preds_df: pd.DataFrame,
     debt_df: pd.DataFrame,
     debt_cols: Dict[str, List[str]],
     prev_alert_col: str = "alertPreRedressements",
     tol: float = 0.2,
-):
+) -> Tuple[pd.DataFrame, pd.Index]:
     """Expert rule for alert update.
 
     Args:
@@ -40,11 +40,11 @@ def alert_tailoring(
           upgraded.
         debt_cols : A dict mapping names to lists of columns to be summed / averaged:
           - "start": The sum of these columns will be considered the starting point of
-            debt change.
-          - end: The sum of these columns will be considered the ending point of debt
-            change.
-          - contribution: These columns will be used to compute an average monthly
-            contribution.
+          debt change.
+          - "end": The sum of these columns will be considered the ending point of debt
+          change.
+          - "contribution": These columns will be used to compute an average monthly
+          contribution.
         prev_alert_col: the name of the initial alert level column in `preds_df`.
         tol: the threshold, as a percentage of (normalized) debt evolution, above which
           alert level is upgraded.
