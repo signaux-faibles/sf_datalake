@@ -2,6 +2,7 @@
 "Signaux Faibles" project package for failure prediction computations.
 
 * ``config/`` - Configuration and model parameters that will be used during execution.
+* ``alert.py`` - Generation of alert levels based on model predictions.
 * ``__init__.py`` - Some data-related variables definitions.
 * ``__main__.py`` - Main entry point script, which can be used to launch end-to-end
   predictions.

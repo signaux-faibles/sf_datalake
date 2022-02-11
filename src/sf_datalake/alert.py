@@ -1,4 +1,4 @@
-"""Generation of alert levels based on model predictions. """
+"""Generation of alert levels based on model predictions."""
 
 from typing import Dict, List, Tuple
 

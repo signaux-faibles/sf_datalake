@@ -55,18 +55,7 @@ This will install git hooks that should enforce a set of properties before commi
 - `datasets_handling/` - Production of datasets from raw data. Datasets loading and handling, exploration and feature engineering utilities.
 - `docs/` - Sphinx auto-documentation sources (see `datascience_workflow.md`) and textual / tabular documentation of the data used for training and prediction.
 - `notebooks/` - Jupyter notebooks that leverage the package code. These may typically be used for tutorials / presentations.
-- `src/` Contains all the package code:
-    - `config/` - Configuration and model parameters that will be used during execution.
-    - `processing/` - Data processing and models execution.
-    - `__init__.py` - Some data-related variables definitions.
-    - `__main__.py` - Main entry point script, which can be used to launch end-to-end predictions.
-    - `evaluation.py` - Scores computations.
-    - `exploration.py `- Data exploration-dedicated functions.
-    - `io.py` - I/O functions.
-    - `model.py` - Model utilities and classes.
-    - `sampler.py` - Data sampling functions.
-    - `transform.py` - Utilities and classes for handling and transforming datasets.
-    - `utils.py` - Utility functions for spark session and data handling.
+- `src/` Contains all the python package source code, see the docs pages for a thorough description or the `__init__.py` module docstring.
 - `test/` - Tests (unitary, integration) associated with the code. They may be executed anytime using `pytest`.
 - `datalake DGFiP.md` - Info about handing jobs over to the datalake and use of the jupyter lab.
 - `datascience_workflow.md`- describes the workflow for data scientists working on the project.
