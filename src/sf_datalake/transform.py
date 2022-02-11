@@ -1,5 +1,6 @@
 """Utilities and classes for handling and transforming datasets."""
 
+import logging
 from typing import Iterable, List
 
 import numpy as np
@@ -273,6 +274,13 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with extra `paydex_yoy` and `paydex_bins` columns.
 
         """
+        if not ({"paydex_bin", "paydex_yoy"} & self.config["FEATURES"]):
+            logging.info(
+                "paydex data was not requested as a feature inside the provided \
+                configuration file."
+            )
+            return dataset
+
         assert {"paydex_nb_jours", "paydex_nb_jours_past_12"} <= set(dataset.columns)
 
         ## Paydex variation
