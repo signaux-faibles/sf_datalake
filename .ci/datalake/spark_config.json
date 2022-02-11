@@ -13,7 +13,9 @@
             ],
             "args": [
                 "--output_directory",
-                "${LAKE_HOME}/donnees/sorties_modele/${CI_PIPELINE_ID}"
+                "${LAKE_HOME}/donnees/sorties_modele/${CI_PIPELINE_ID}",
+                "--configuration",
+                "${PREDICTION_CONFIG_FILE}"
             ]
         }
     },
@@ -33,7 +35,9 @@
                 "--sample_ratio",
                 "0.0001",
                 "--output_directory",
-                "${LAKE_HOME}/donnees/test/${CI_PIPELINE_ID}"
+                "${LAKE_HOME}/donnees/test/${CI_PIPELINE_ID}",
+                "--configuration",
+                "${PREDICTION_CONFIG_FILE}"
             ]
         }
     }

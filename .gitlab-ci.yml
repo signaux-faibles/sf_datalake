@@ -10,6 +10,7 @@ variables:
   LAKE_ENTRYPOINT: "${LAKE_MODULES_DIR}/main.py"
   DEPLOYMENT_TYPE: "null"
   RUN_SPARK_TASK: "no"
+  PREDICTION_CONFIG_FILE: "base.json"
 
 ### Workflow: defines when branch and merge request pipelines should run.
 
