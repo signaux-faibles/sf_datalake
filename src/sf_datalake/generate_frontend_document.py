@@ -12,8 +12,8 @@ from typing import Union
 
 import pandas as pd
 
-import sf_datalake.alert
 import sf_datalake.evaluation
+import sf_datalake.predictions
 
 
 def main(
@@ -68,7 +68,7 @@ def main(
         predictions=test_set["score"], outcomes=test_set["label"]
     )
     prediction_set["alertPreRedressements"] = prediction_set["score"].apply(
-        sf_datalake.alert.name_alert_group,
+        sf_datalake.predictions.name_alert_group,
         args=(score_threshold["t1"], score_threshold["t2"]),
     )
 
@@ -86,16 +86,31 @@ def main(
     )
     debt_data = debt_start_agg.join(debt_end_agg, lsuffix="_start", rsuffix="_end")
 
-    updated_alert, tailor_index = sf_datalake.alert.tailoring(
+    debt_cols = {
+        "start": ["part_salariale_start", "part_patronale_start"],
+        "end": ["part_salariale_end", "part_patronale_end"],
+        "contribution": ["cotisation_start", "cotisation_end"],
+    }
+
+    tailoring = [
+        (
+            sf_datalake.predictions.debt_tailoring,
+            {
+                "siren_index": prediction_set.index,
+                "debt_df": debt_data,
+                "debt_cols": debt_cols,
+            },
+        )
+    ]
+    prediction_set = sf_datalake.predictions.tailor_alert(
         prediction_set,
-        debt_data,
-        {
-            "start": ["part_salariale_start", "part_patronale_start"],
-            "end": ["part_salariale_end", "part_patronale_end"],
-            "contribution": ["cotisation_start", "cotisation_end"],
-        },
+        tailoring,
+        pre_alert_col="alertPreRedressement",
+        post_alert_col="alert",
     )
-    prediction_set.loc[:, "alert"] = updated_alert
+    tailor_index = prediction_set[
+        prediction_set["alert"] != prediction_set["alertPreRedressement"]
+    ].index
 
     ## Score explanation per categories
     if args.metadata is not None:
