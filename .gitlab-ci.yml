@@ -9,7 +9,7 @@ variables:
   LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
   LAKE_ENTRYPOINT: "${LAKE_MODULES_DIR}/main.py"
   DEPLOYMENT_TYPE: "null"
-  RUN_SPARK_TASK: "no"
+  PREDICTION_CONFIG_FILE: "base.json"
 
 ### Workflow: defines when branch and merge request pipelines should run.
 
@@ -18,11 +18,9 @@ workflow:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
       variables:
         DEPLOYMENT_TYPE: "prod"
-        RUN_SPARK_TASK: "yes"
     - if: '$CI_COMMIT_BRANCH == "develop" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"'
       variables:
         DEPLOYMENT_TYPE: "small"
-        RUN_SPARK_TASK: "yes"
     - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
     - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "develop"'
@@ -90,11 +88,11 @@ prepare_new_working_directory:
     - mkdir -p ${REGISTRY}/log
     - mkdir -p ${REGISTRY}/bin
     - mkdir -p ${REGISTRY}/results
-    - echo "Preparing spark configuration inside ${REGISTRY}/spark_config.json (will be set to  'null' if no prediction should be run afterwards)."
+    - echo "Preparing spark configuration inside ${REGISTRY}/spark_config.json (will be set to 'null' if no prediction should be run afterwards)."
     - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/spark_config.json | envsubst > ${REGISTRY}/spark_config.json
     - cat ${REGISTRY}/spark_config.json
-    - echo "Getting MaacDo version from default or ${DEPLOYMENT_TYPE} or ${CI_COMMIT_REF_SLUG} from .ci/datalake/maacdo_version.json "
-    - MAACDO_VERSION=$(jq --raw-output --arg GROUP "${DEPLOYMENT_TYPE}" --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$GROUP] + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
+    - echo "Getting MaacDo version from default or ${CI_COMMIT_REF_SLUG} from .ci/datalake/maacdo_version.json "
+    - MAACDO_VERSION=$(jq --raw-output --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
     - echo "${MAACDO_VERSION} > ${REGISTRY}/.maacdo_version"
     - echo "Got MaacDo version as ${MAACDO_VERSION} "
     - git clone --depth 1 --branch ${MAACDO_VERSION} https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${REGISTRY}/bin
@@ -185,7 +183,7 @@ send_entrypoint_to_lake:
       -i ${LAKE_ENTRYPOINT}
       -c ${REGISTRY}/ci_job.par
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
 
 ### Spark jobs handling
 
@@ -205,7 +203,7 @@ start_spark_task:
     - echo "To stop the spark task, execute the following from the server running the gitlab runner process:"
     - echo "--> ./api_maacdo.pl -a ArretTacheSpark -j ${idLivy} -c ${REGISTRY}/ci_job.par"
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
 
 wait_for_task_finishing:
   stage: deploy
@@ -237,7 +235,7 @@ wait_for_task_finishing:
         sleep 60
       done
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
 
 stop_spark_task:
   stage: deploy
@@ -256,7 +254,7 @@ stop_spark_task:
         echo "Nothing to do."
       fi
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
       when: manual
       allow_failure: true
 
@@ -289,7 +287,7 @@ fetch_yarn_logs:
     - ./api_maacdo.pl -a YarnLogsTacheSpark -j ${ID_LIVY} -c ${REGISTRY}/ci_job.par
     - find ${REGISTRY}/log/ -type f -name 'YarnLogsTacheSpark_*' -execdir cat '{}' + | grep -v 'OnOutOfMemoryError' | grep 'Error' -B 20
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
       when: on_failure
 
 fetch_run_outputs_from_HDFS:
@@ -313,7 +311,7 @@ fetch_run_outputs_from_HDFS:
     - echo "Removing remote results in ${MODEL_OUTPUT_DIR}"
     - bash rmRecursiveHdfs.sh ${MODEL_OUTPUT_DIR} ${REGISTRY}/ci_job.par
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
       when: always
 
 ######################
