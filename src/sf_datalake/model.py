@@ -7,6 +7,8 @@ import pyspark.ml.classification
 import pyspark.sql.functions as F
 from pyspark.sql.types import StringType
 
+import sf_datalake.utils
+
 
 def generate_stages(config: dict) -> List[pyspark.ml.Model]:
     """Generate stages associated with a given Model.
@@ -96,24 +98,13 @@ def explain(
 
     """
     model = get_model_from_pipeline_model(pipeline_model, config["MODEL"]["NAME"])
-
-    features_lists = [
-        stage.getInputCols()
-        for stage in pipeline_model.stages
-        if isinstance(stage, pyspark.ml.feature.VectorAssembler)
-    ]
-    # We drop the last element of features_lists which is a stage where an assembler
-    # only concatenates previous assembled feature groups.
-    features = [feat for flist in features_lists[:-1] for feat in flist]
-
     factory = {"LogisticRegression": explain_logistic_regression}
-    return factory[config["MODEL"]["NAME"]](config, model, features, df)
+    return factory[config["MODEL"]["NAME"]](config, model, df)
 
 
 def explain_logistic_regression(
     config: dict,
     model: pyspark.ml.Model,
-    model_features: List[str],
     df: pyspark.sql.DataFrame,
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
     """Computes the contribution of different features to the predicted output.
@@ -124,7 +115,6 @@ def explain_logistic_regression(
     Args:
         config: model configuration, as loaded by utils.get_config().
         model: the LogisticRegression model fit in the pipeline.
-        model_features: the features used by the model.
         df: the prediction samples.
 
     Returns:
@@ -149,9 +139,9 @@ def explain_logistic_regression(
     explanation_df = (
         ep.transform(df)
         .rdd.map(lambda r: [r["siren"]] + [float(f) for f in r["eprod"]])
-        .toDF(["siren"] + model_features)
+        .toDF(["siren"] + sf_datalake.utils.feature_index(config))
     )
-    for group, features in config["MESO_URSSAF_GROUPS"].items():
+    for group, features in config["MESO_GROUPS"].items():
         explanation_df = explanation_df.withColumn(
             group, sum(explanation_df[col] for col in features)
         ).drop(*features)

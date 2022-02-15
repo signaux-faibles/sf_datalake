@@ -1,12 +1,15 @@
 """Utilities and classes for handling and transforming datasets."""
 
-from typing import Dict, Iterable, List
+import logging
+from itertools import chain
+from typing import Iterable, List
 
+import numpy as np
 import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
 from pyspark.ml import Transformer
-from pyspark.ml.feature import StandardScaler, VectorAssembler
+from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.sql.types import FloatType, StringType
 from pyspark.sql.window import Window
 
@@ -65,28 +68,30 @@ def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     return df
 
 
-def get_scaler_from_str(s: str) -> Transformer:
-    """Get a Transformer from its name.
+def get_transformer(name: str) -> Transformer:
+    """Get a pre-configured Transformer object by specifying its name.
 
     Args:
-        s: Name of the Transformer
+        name: Transformer object's name
 
     Returns:
-        The selected Transformer with prepared parameters
+        The selected Transformer with prepared parameters.
+
     """
     factory = {
         "StandardScaler": StandardScaler(
             withMean=True,
             withStd=True,
-            inputCol="features_to_transform_StandardScaler",
-            outputCol="features_transformed_StandardScaler",
-        )
+            inputCol="to_StandardScaler",
+            outputCol="from_StandardScaler",
+        ),
+        "OneHotEncoder": OneHotEncoder(dropLast=False),
     }
-    return factory[s]
+    return factory[name]
 
 
-def generate_scaling_stages(config: dict) -> List[Transformer]:
-    """Generates all stages related to Transformer objects.
+def generate_transforming_stages(config: dict) -> List[Transformer]:
+    """Generates all stages related to feature transformation.
 
     The stages are ready to be included in a pyspark.ml.Pipeline.
 
@@ -98,28 +103,38 @@ def generate_scaling_stages(config: dict) -> List[Transformer]:
 
     """
     stages: List[Transformer] = []
-    transformed_features: List[str] = []
-    transformer_features: Dict[str, List[str]] = {}
-    for feature, transformer in config["TRANSFORMERS"]:
-        transformer_features.setdefault(transformer, []).append(feature)
-    for transformer, features in transformer_features.items():
-        outputColAssembler = f"features_to_transform_{transformer}"
-        outputColScaler = f"features_transformed_{transformer}"
-        transformer_vector_assembler = VectorAssembler(
-            inputCols=features, outputCol=outputColAssembler
-        )
-        stages += [transformer_vector_assembler, get_scaler_from_str(transformer)]
-        transformed_features.append(outputColScaler)
+    concat_input_cols: List[str] = []
 
-    concat_vector_assembler = VectorAssembler(
-        inputCols=transformed_features, outputCol="features"
-    )
-    stages.append(concat_vector_assembler)
+    for transformer_name, features in config["TRANSFORMER_FEATURES"].items():
+        # OneHotEncoder takes an un-assembled numeric column as input.
+        if transformer_name == "OneHotEncoder":
+            for feature in features:
+                ohe = get_transformer(transformer_name)
+                ohe.setInputCol(feature)
+                ohe.setOutputCol(f"ohe_{feature}")
+                concat_input_cols.append(f"ohe_{feature}")
+                stages.append(ohe)
+        else:
+            stages.extend(
+                [
+                    VectorAssembler(
+                        inputCols=features, outputCol=f"to_{transformer_name}"
+                    ),
+                    get_transformer(transformer_name),
+                ]
+            )
+            concat_input_cols.append(f"from_{transformer_name}")
+
+    # We add a final concatenation stage of all columns that should be fed to the model.
+    stages.append(VectorAssembler(inputCols=concat_input_cols, outputCol="features"))
     return stages
 
 
 def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
-    """Generates stages for preprocessing pipeline construction.
+    """Generates preprocessing stages.
+
+    These stages are ready to be included in a pyspark.ml.Pipeline object for data
+    preprocessing and feature engineering.
 
     Args:
         config: model configuration, as loaded by utils.get_config().
@@ -130,6 +145,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     """
     stages = [
         MissingValuesHandler(config),
+        PaydexColumnsAdder(config),
         SirenAggregator(config),
         DatasetFilter(),
         AvgDeltaDebtPerSizeColumnAdder(config),
@@ -240,54 +256,69 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
         return dataset
 
 
-class PaydexYoyColumnAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to compute the year over year values with Paydex data."""
+class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
+    """A transformer to compute features associated with Paydex data."""
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Computes the year over year values with Paydex data.
+        """Computes the yearly variation and quantile bin of payment delay (in days).
+
+        DataFrame to transform containing "paydex_nb_jours" and
+        "paydex_nb_jours_past_12" columns.
 
         Args:
-            dataset: DataFrame to transform containing "paydex_nb_jours" and
-                     "paydex_nb_jours_past_12" columns.
+            dataset: DataFrame to transform.
 
         Returns:
-            Transformed DataFrame with an extra `paydex_yoy` column.
+            Transformed DataFrame with extra `paydex_yoy` and `paydex_bins` columns.
 
         """
+        if not ({"paydex_bin", "paydex_yoy"} & set(self.config["FEATURES"])):
+            logging.info(
+                "paydex data was not requested as a feature inside the provided \
+                configuration file."
+            )
+            return dataset
+
         assert {"paydex_nb_jours", "paydex_nb_jours_past_12"} <= set(dataset.columns)
 
-        return dataset.withColumn(
+        ## Paydex variation
+        dataset = dataset.withColumn(
             "paydex_yoy",
             dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
         )
 
+        ## Binned paydex delay
+        days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
+        days_splits = np.unique(np.array([float(v) for v in chain(*days_bins)]))
 
-class PaydexGroupColumnAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to cut paydex number of days data into quantile bins."""
-
-    def __init__(self, num_buckets) -> None:
-        super().__init__()
-        self.num_buckets = num_buckets
-
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Cuts paydex number of days data into quantile bins.
-
-        Args:
-            dataset: DataFrame to transform containing "paydex_nb_jours".
-
-        Returns:
-            Transformed DataFrame with an extra `paydex_bins` column.
-
-        """
-        assert "paydex_nb_jours" in dataset.columns
-
-        qds = pyspark.ml.feature.QuantileDiscretizer(
-            inputCol="paydex_nb_jours",
-            outputCol="paydex_bins",
+        bucketizer = pyspark.ml.feature.Bucketizer(
+            splits=days_splits,
             handleInvalid="error",
-            numBuckets=self.num_buckets,
+            inputCol="paydex_nb_jours",
+            outputCol="paydex_bin",
         )
-        return qds.fit(dataset).transform(dataset)
+        dataset = bucketizer.transform(dataset)
+
+        ## Add corresponding 'meso' column names to the configuration.
+        self.config["MESO_GROUPS"]["paydex_bin"] = [
+            f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
+        ]
+
+        ## Fill missing values
+        if self.config["FILL_MISSING_VALUES"]:
+            dataset = dataset.fillna(
+                {
+                    "paydex_bin": self.config["DEFAULT_VALUES"]["paydex_bin"],
+                    "paydex_yoy": self.config["DEFAULT_VALUES"]["paydex_yoy"],
+                }
+            )
+        else:
+            dataset = dataset.dropna(subset=["paydex_bin", "paydex_yoy"])
+        return dataset
 
 
 class MissingValuesHandler(Transformer):  # pylint: disable=R0903
@@ -415,7 +446,7 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
             *(
                 set(
                     self.config["IDENTIFIERS"]
-                    + self.config["FEATURES"]
+                    + list(self.config["FEATURES"])
                     + self.config["TARGET"]
                 )
             )
