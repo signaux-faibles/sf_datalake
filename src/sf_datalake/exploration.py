@@ -435,3 +435,40 @@ def project_features_on_eigenspace_over_time(
         features_trajectories = features_trajectories.union(df_period_eigenspace)
 
     return features_trajectories
+
+
+def generate_qqplot_dataset(
+    df1: pyspark.sql.DataFrame,
+    df2: pyspark.sql.DataFrame,
+    feature_name: str,
+    quantiles: List[str] = [f"{i}%" for i in range(5, 96)],
+):
+    """Generate the dataset ready to produce a Q-Q plot.
+
+    Args:
+        df1: input DataFrame with `feature_name` as a column
+        df2: input DataFrame with `feature_name` as a column
+        feature_name: name of the feature in both df1 and df2 DataFrames
+        quantiles: list of the quantiles to be computed
+
+    Returns:
+        A DataFrame with 3 columns:
+            - `summary`: the quantiles
+            - `x`: values of the quantiles for the feature `feature_name` from df1
+            - `y`: values of the quantiles for the feature `feature_name` from df2
+    """
+    assert feature_name in df1.columns
+    assert feature_name in df2.columns
+
+    df1 = (
+        df1.summary(*quantiles)
+        .select(["summary", feature_name])
+        .withColumnRenamed(feature_name, "x")
+    )
+    df2 = (
+        df2.summary(*quantiles)
+        .select(["summary", feature_name])
+        .withColumnRenamed(feature_name, "y")
+    )
+    df = df1.join(df2, how="left", on="summary")
+    return df
