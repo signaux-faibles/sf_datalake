@@ -305,8 +305,7 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
 
         ## Add corresponding 'meso' column names to the configuration.
         self.config["MESO_GROUPS"]["paydex_bin"] = [
-            f"paydex_bin_ohcat{i}"
-            for i in range(len(self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]))
+            f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
         ]
 
         ## Fill missing values
