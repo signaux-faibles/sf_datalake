@@ -265,7 +265,8 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Computes the yearly variation and quantile bin of payment delay (in days).
 
-        DataFrame to transform containing "paydex_nb_jours"self.
+        DataFrame to transform containing "paydex_nb_jours" and
+        "paydex_nb_jours_past_12" columns.
 
         Args:
             dataset: DataFrame to transform.
