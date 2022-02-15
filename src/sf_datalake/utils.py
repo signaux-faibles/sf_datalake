@@ -69,7 +69,7 @@ def feature_index(config: dict) -> List[str]:
                 indexer.extend(
                     [
                         f"{feature}_ohcat{i}"
-                        for i in range(len(config["ONE_HOT_CATEGORIES"][feature]))
+                        for i, _ in enumerate(config["ONE_HOT_CATEGORIES"][feature])
                     ]
                 )
         else:
