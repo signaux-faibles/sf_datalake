@@ -79,16 +79,23 @@ def main(
     debt_end_data = urssaf_data[urssaf_data.periode == args.debt_end_date]
 
     debt_start_agg = debt_start_data.groupby("siren").agg(
-        {"cotisation": sum, "part_salariale": sum, "part_patronale": sum}
+        {
+            "cotisation": sum,
+            "montant_part_ouvriere": sum,
+            "montant_part_patronale": sum,
+        }
     )
     debt_end_agg = debt_end_data.groupby("siren").agg(
-        {"cotisation": sum, "part_salariale": sum, "part_patronale": sum}
+        {
+            "cotisation": sum,
+            "montant_part_ouvriere": sum,
+            "montant_part_patronale": sum,
+        }
     )
     debt_data = debt_start_agg.join(debt_end_agg, lsuffix="_start", rsuffix="_end")
-
     debt_cols = {
-        "start": ["part_salariale_start", "part_patronale_start"],
-        "end": ["part_salariale_end", "part_patronale_end"],
+        "start": ["montant_part_ouvriere_start", "montant_part_patronale_start"],
+        "end": ["montant_part_ouvriere_end", "montant_part_patronale_end"],
         "contribution": ["cotisation_start", "cotisation_end"],
     }
 
