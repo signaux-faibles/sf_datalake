@@ -10,9 +10,13 @@ import pyspark.sql
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 import scipy.stats
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.linalg.distributed import RowMatrix
 
+import sf_datalake.transform
 import sf_datalake.utils
 
 
@@ -442,7 +446,7 @@ def generate_qqplot_dataset(
     df2: pyspark.sql.DataFrame,
     feature_name: str,
     quantiles: List[str] = [f"{i}%" for i in range(5, 96)],
-):
+) -> pyspark.sql.DataFrame:
     """Generate the dataset ready to produce a Q-Q plot.
 
     Args:
@@ -472,3 +476,54 @@ def generate_qqplot_dataset(
     )
     df = df1.join(df2, how="left", on="summary")
     return df
+
+
+def generate_unbiaser_covid_params(
+    df: pyspark.sql.DataFrame, features: List[str], config: dict
+) -> dict:
+    """Generate for each feature in `features`, the necessary parameters to unbias
+    the feature after the COVID-19 event.
+
+    Args:
+        df: input DataFrame
+        features: name of the features to unbias
+        config: model configuration, as loaded by utils.get_config().
+
+    Returns:
+        A dict with features as keys. For each feature, the following dict:
+            {
+                "params": list of the parameters to unbias the feature
+                "rmse": root mean square error of the unbias model for the feature
+                "r2": r square of the unbias model for the feature
+            }
+    """
+    pipeline_preprocessor = Pipeline(
+        stages=sf_datalake.transform.generate_preprocessing_stages(config)
+    )
+    df = pipeline_preprocessor.fit(df).transform(df)
+
+    # keep data from the first date of the learning dataset
+    df = df.filter(df["periode"] >= config["TRAIN_DATES"][0])
+
+    df1 = df.filter(df["periode"] <= "2020-02-29").select(features)
+    df2 = df.filter(df["periode"] > "2020-02-29").select(features)
+
+    unbiaser_params = {}
+    for feat in features:
+        df = generate_qqplot_dataset(df1, df2, feature_name=feat)
+        df = df.withColumn("x", F.col("x").cast("float"))
+        df = df.withColumn("y", F.col("y").cast("float"))
+        vector_assembler = VectorAssembler(inputCols=["y"], outputCol="features")
+
+        df_va = vector_assembler.transform(df)
+        df_va = df_va.select(["features", "x"])
+
+        lr = LinearRegression(featuresCol="features", labelCol="x")
+        lr_model = lr.fit(df_va)
+        unbiaser_params[feat] = {
+            "params": [lr_model.intercept, lr_model.coefficients[0]],
+            "rmse": lr_model.summary.rootMeanSquaredError,
+            "r2": lr_model.summary.r2,
+        }
+
+    return unbiaser_params
