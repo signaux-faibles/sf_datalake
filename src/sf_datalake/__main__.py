@@ -41,6 +41,9 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     else:
         output_directory = args.output_directory
     config["SEED"] = random.randint(0, 10000) if args.SEED is None else args.SEED
+    config["TRANSFORMER_FEATURES"] = sf_datalake.utils.transformer_features_mapping(
+        config
+    )
     sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
 
     # Prepare data.
@@ -76,11 +79,13 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         config["MODEL"]["MAX_ITER"],
     )
 
-    scaling_stages = sf_datalake.transform.generate_scaling_stages(config)
+    transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
     model_stages = sf_datalake.model.generate_stages(config)
     postprocessing_stages = [sf_datalake.transform.ProbabilityFormatter()]
 
-    pipeline = Pipeline(stages=scaling_stages + model_stages + postprocessing_stages)
+    pipeline = Pipeline(
+        stages=transforming_stages + model_stages + postprocessing_stages
+    )
     pipeline_model = pipeline.fit(train_data)
     _ = pipeline_model.transform(train_data)
     model = sf_datalake.model.get_model_from_pipeline_model(

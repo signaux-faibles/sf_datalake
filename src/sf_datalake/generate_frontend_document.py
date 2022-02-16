@@ -14,6 +14,7 @@ import pandas as pd
 
 import sf_datalake.evaluation
 import sf_datalake.predictions
+import sf_datalake.utils
 
 
 def main(
@@ -31,7 +32,7 @@ def main(
     if isinstance(args, argparse.Namespace):
         args = vars(args)
 
-    pred_config = sf_datalake.utils.get_config(args.config)
+    pred_config = sf_datalake.utils.get_config(args["configuration"])
 
     micro_macro = {
         micro: macro
@@ -208,6 +209,12 @@ if __name__ == "__main__":
         default=None,
         help="""Path to a JSON document containing additional metadata that will be
         added to every entry in the output document.""",
+    )
+    path_group.add_argument(
+        "-c",
+        "--configuration",
+        help="Path to the prediction run configuration file.",
+        required=True,
     )
     path_group.add_argument(
         "--concerning_data",
