@@ -4,6 +4,8 @@ This script produces a JSON document that can be used by the front-end component
 Signaux Faibles website to display info about selected companies. It requires data
 output by the prediction model, as well as URSSAF debt / contributions data.
 
+See the command-line interface for more details on expected inputs.
+
 """
 
 import argparse
@@ -46,11 +48,9 @@ def main(
 
     test_set = pd.read_csv(args["test_set"], header=0, index_col="siren")
     test_set.index = normalize_siren_index(test_set.index)
-    test_set.rename({"probability": "score"}, axis=1, inplace=True)
 
     prediction_set = pd.read_csv(args["prediction_set"], header=0, index_col="siren")
     prediction_set.index = normalize_siren_index(prediction_set.index)
-    prediction_set.rename({"probability": "score"}, axis=1, inplace=True)
 
     macro_explanation = pd.read_csv(
         args["explanation_data"], header=0, index_col="siren"
@@ -66,18 +66,22 @@ def main(
 
     ## Compute thresholds
     score_threshold = sf_datalake.evaluation.optimal_beta_thresholds(
-        predictions=test_set["score"], outcomes=test_set["label"]
+        predictions=test_set["probability"], outcomes=test_set["failure_within_18m"]
     )
-    prediction_set["alertPreRedressements"] = prediction_set["score"].apply(
+    prediction_set["alertPreRedressements"] = prediction_set["probability"].apply(
         sf_datalake.predictions.name_alert_group,
-        args=(score_threshold["t1"], score_threshold["t2"]),
+        args=(score_threshold[0.5], score_threshold[2]),
     )
 
     ## A posteriori alert tailoring
-    urssaf_data = pd.read_csv(args["urssaf_data"])
+    urssaf_data = pd.read_csv(
+        args["urssaf_data"],
+        index_col="siren",
+        parse_dates=["periode"],
+    )
     urssaf_data.index = normalize_siren_index(urssaf_data.index)
-    debt_start_data = urssaf_data[urssaf_data.periode == args.debt_start_date]
-    debt_end_data = urssaf_data[urssaf_data.periode == args.debt_end_date]
+    debt_start_data = urssaf_data[urssaf_data.periode == args["debt_start_date"]]
+    debt_end_data = urssaf_data[urssaf_data.periode == args["debt_end_date"]]
 
     debt_start_agg = debt_start_data.groupby("siren").agg(
         {
@@ -113,17 +117,17 @@ def main(
     prediction_set = sf_datalake.predictions.tailor_alert(
         prediction_set,
         tailoring,
-        pre_alert_col="alertPreRedressement",
+        pre_alert_col="alertPreRedressements",
         post_alert_col="alert",
     )
     tailor_index = prediction_set[
-        prediction_set["alert"] != prediction_set["alertPreRedressement"]
+        prediction_set["alert"] != prediction_set["alertPreRedressements"]
     ].index
 
     ## Score explanation per categories
-    if args.metadata is not None:
-        with open(args.metadata, mode="r", encoding="utf-8") as md:
-            for field, value in json.load(md):
+    if args["metadata"] is not None:
+        with open(args["metadata"], mode="r", encoding="utf-8") as md:
+            for field, value in json.load(md).items():
                 prediction_set[field] = value
 
     concerning_micro_threshold = args["concerning_threshold"]

@@ -64,8 +64,8 @@ def name_alert_group(score: float, t_red: float, t_orange: float) -> str:
 def tailor_alert(
     preds_df: pd.DataFrame,
     tailoring: Iterable[Tuple[Callable, Dict]],
-    pre_alert_col: str = "alertPreRedressement",
-    post_alert_col: str = "alert",
+    pre_alert_col: str,
+    post_alert_col: str,
 ) -> pd.DataFrame:
     """Updates alert levels using expert rules.
 
@@ -92,10 +92,9 @@ def tailor_alert(
     preds_df.loc[:, post_alert_col] = preds_df.loc[:, pre_alert_col].copy()
     for function, kwargs in tailoring:
         update_index = function(**kwargs)
-        updated_alert = preds_df.loc[:, post_alert_col].copy()
-        preds_df.loc[update_index, post_alert_col] = updated_alert.loc[
-            update_index
-        ].map(update_rule)
+        preds_df.loc[update_index, post_alert_col] = (
+            preds_df.loc[update_index, post_alert_col].copy().map(update_rule)
+        )
 
     return preds_df
 
@@ -126,14 +125,12 @@ def debt_tailoring(
         The (siren) indexes where an alert update should take place.
 
     """
-
-    # Compute debt change
     debt_start = debt_df.loc[:, debt_cols["start"]].sum(axis="columns")
     debt_end = debt_df.loc[:, debt_cols["end"]].sum(axis="columns")
     contribution_average = (
         debt_df.loc[:, debt_cols["contribution"]]
         .mean(axis="columns")
-        .replace(0, np.nan, inplace=True)
+        .replace(0, np.nan)
     )
-    debt_evolution = (debt_end - debt_start) / (contribution_average * 12).fillna(0)
+    debt_evolution = ((debt_end - debt_start) / (contribution_average * 12)).fillna(0)
     return debt_df[debt_evolution > tol].index.intersection(siren_index)
