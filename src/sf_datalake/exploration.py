@@ -6,7 +6,12 @@ from typing import Iterable, List, Tuple
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
-from pyspark.sql.types import ArrayType, FloatType
+import pyspark.sql.types as T
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+
+import sf_datalake.transform
 
 
 def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -130,7 +135,9 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     """
     assert "features" in df.columns, "Input DataFrame doesn't have a 'features' column."
 
-    dense_to_array_udf = F.udf(lambda v: [float(x) for x in v], ArrayType(FloatType()))
+    dense_to_array_udf = F.udf(
+        lambda v: [float(x) for x in v], T.ArrayType(T.FloatType())
+    )
 
     df = df.withColumn("features_array", dense_to_array_udf("features"))
     n_features = len(df.first()["features"])
@@ -143,3 +150,91 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     all_col_means = df_agg.select(F.col("mean")).collect()[0]["mean"]
 
     return (all(x < tol for x in all_col_means), all_col_means)
+
+
+def generate_qqplot_dataset(
+    df1: pyspark.sql.DataFrame,
+    df2: pyspark.sql.DataFrame,
+    feature_name: str,
+    quantiles: List[str] = [f"{i}%" for i in range(5, 96)],
+) -> pyspark.sql.DataFrame:
+    """Generate the dataset ready to produce a Q-Q plot.
+
+    Args:
+        df1: input DataFrame with `feature_name` as a column
+        df2: input DataFrame with `feature_name` as a column
+        feature_name: name of the feature in both df1 and df2 DataFrames
+        quantiles: list of the quantiles to be computed
+
+    Returns:
+        A DataFrame with 3 columns:
+            - `summary`: the quantiles
+            - `x`: values of the quantiles for the feature `feature_name` from df1
+            - `y`: values of the quantiles for the feature `feature_name` from df2
+    """
+    assert feature_name in df1.columns
+    assert feature_name in df2.columns
+
+    df1 = (
+        df1.summary(*quantiles)
+        .select(["summary", feature_name])
+        .withColumnRenamed(feature_name, "x")
+    )
+    df2 = (
+        df2.summary(*quantiles)
+        .select(["summary", feature_name])
+        .withColumnRenamed(feature_name, "y")
+    )
+    df = df1.join(df2, how="left", on="summary")
+    return df
+
+
+def generate_unbiaser_covid_params(
+    df: pyspark.sql.DataFrame, features: List[str], config: dict
+) -> dict:
+    """Generate for each feature in `features`, the necessary parameters to unbias
+    the feature after the COVID-19 event.
+
+    Args:
+        df: input DataFrame
+        features: name of the features to unbias
+        config: model configuration, as loaded by utils.get_config().
+
+    Returns:
+        A dict with features as keys. For each feature, the following dict:
+            {
+                "params": list of the parameters to unbias the feature
+                "rmse": root mean square error of the unbias model for the feature
+                "r2": r square of the unbias model for the feature
+            }
+    """
+    pipeline_preprocessor = Pipeline(
+        stages=sf_datalake.transform.generate_preprocessing_stages(config)
+    )
+    df = pipeline_preprocessor.fit(df).transform(df)
+
+    # keep data from the first date of the learning dataset
+    df = df.filter(df["periode"] >= config["TRAIN_DATES"][0])
+
+    df1 = df.filter(df["periode"] <= "2020-02-29").select(features)
+    df2 = df.filter(df["periode"] > "2020-02-29").select(features)
+
+    unbiaser_params = {}
+    for feat in features:
+        df = generate_qqplot_dataset(df1, df2, feature_name=feat)
+        df = df.withColumn("x", F.col("x").cast("float"))
+        df = df.withColumn("y", F.col("y").cast("float"))
+        vector_assembler = VectorAssembler(inputCols=["y"], outputCol="features")
+
+        df_va = vector_assembler.transform(df)
+        df_va = df_va.select(["features", "x"])
+
+        lr = LinearRegression(featuresCol="features", labelCol="x")
+        lr_model = lr.fit(df_va)
+        unbiaser_params[feat] = {
+            "params": [lr_model.intercept, lr_model.coefficients[0]],
+            "rmse": lr_model.summary.rootMeanSquaredError,
+            "r2": lr_model.summary.r2,
+        }
+
+    return unbiaser_params
