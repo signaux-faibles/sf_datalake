@@ -46,22 +46,20 @@ def main(
     def normalize_siren_index(ix: pd.Index) -> pd.Index:
         return ix.astype(str).str.zfill(9).astype(int)
 
-    test_set = pd.read_csv(args["test_set"], header=0, index_col="siren")
+    test_set = pd.read_csv(args["test_set"], index_col="siren")
     test_set.index = normalize_siren_index(test_set.index)
 
-    prediction_set = pd.read_csv(args["prediction_set"], header=0, index_col="siren")
+    prediction_set = pd.read_csv(args["prediction_set"], index_col="siren")
     prediction_set.index = normalize_siren_index(prediction_set.index)
 
-    macro_explanation = pd.read_csv(
-        args["explanation_data"], header=0, index_col="siren"
-    )
+    macro_explanation = pd.read_csv(args["explanation_data"], index_col="siren")
     macro_explanation.index = normalize_siren_index(macro_explanation.index)
     macro_explanation.columns = [
         col[: col.find("_macro_score")] for col in macro_explanation.columns
     ]
     macro_explanation.drop(columns="misc", inplace=True, errors="ignore")
 
-    concerning_data = pd.read_csv(args["concerning_data"], header=0, index_col="siren")
+    concerning_data = pd.read_csv(args["concerning_data"], index_col="siren")
     concerning_data.index = normalize_siren_index(concerning_data.index)
 
     ## Compute thresholds
