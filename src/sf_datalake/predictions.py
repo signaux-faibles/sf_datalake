@@ -63,7 +63,7 @@ def name_alert_group(score: float, t_red: float, t_orange: float) -> str:
 
 def tailor_alert(
     preds_df: pd.DataFrame,
-    tailoring: Iterable[Tuple[Callable, Dict]],
+    tailoring_steps: Iterable[Tuple[Callable, Dict]],
     pre_alert_col: str,
     post_alert_col: str,
 ) -> pd.DataFrame:
@@ -71,26 +71,34 @@ def tailor_alert(
 
     Args:
         preds_df: Prediction data.
-        tailoring: An iterable of (function, kwargs) tuples of tailoring functions and
-          their associated kwargs as a dict.
-        pre_alert_col: Name of the alert column before tailoring.
-        post_alert_col: Name of the alert column after tailoring.
+        tailoring_steps: An iterable of (function, kwargs) tuples of tailoring functions
+          and their associated kwargs as a dict. Each function should return a pd.Index
+          of rows where the update rule should be applied.
+        pre_alert_col: Name of the column holding before tailoring alerts.
+        post_alert_col: Name of the column holding after tailoring alerts.
 
     Returns:
         A prediction DataFrame with the `post_alert_col` containing a tailored alert
           level.
 
     """
-    assert pre_alert_col in preds_df.columns
-
+    # TODO: This update rule might be different depending on the tailoring steps.
     update_rule = {
         "Pas d'alerte": "Alerte seuil F2",
         "Alerte seuil F2": "Alerte seuil F1",
         "Alerte seuil F1": "Alerte seuil F1",
     }
 
+    assert pre_alert_col in preds_df.columns
+    assert (
+        preds_df[pre_alert_col]
+        .astype("category")
+        .cat.categories.isin(update_rule)
+        .all()
+    )
+
     preds_df.loc[:, post_alert_col] = preds_df.loc[:, pre_alert_col].copy()
-    for function, kwargs in tailoring:
+    for function, kwargs in tailoring_steps:
         update_index = function(**kwargs)
         preds_df.loc[update_index, post_alert_col] = (
             preds_df.loc[update_index, post_alert_col].copy().map(update_rule)
@@ -105,7 +113,11 @@ def debt_tailoring(
     debt_cols: Dict[str, List[str]],
     tol: float = 0.2,
 ) -> pd.Index:
-    """Increases alert level based on social debt evolution over time.
+    """Computes indexes where alert level should be raised based on social debt.
+
+    For a given company, if social debt evolution over time exceeds the input threshold,
+    the corresponding index will be included in the rows for which alert should be
+    updated.
 
     Args:
         siren_index: An index of the analyzed companies SIRENs.

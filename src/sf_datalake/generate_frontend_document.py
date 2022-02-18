@@ -44,7 +44,7 @@ def main(
 
     ## Load lists produced in the data lake.
     def normalize_siren_index(ix: pd.Index) -> pd.Index:
-        return ix.astype(str).str.zfill(9)
+        return ix.astype(str).str.zfill(9).astype(int)
 
     test_set = pd.read_csv(args["test_set"], header=0, index_col="siren")
     test_set.index = normalize_siren_index(test_set.index)
@@ -68,9 +68,13 @@ def main(
     score_threshold = sf_datalake.evaluation.optimal_beta_thresholds(
         predictions=test_set["probability"], outcomes=test_set["failure_within_18m"]
     )
-    prediction_set["alertPreRedressements"] = prediction_set["probability"].apply(
-        sf_datalake.predictions.name_alert_group,
-        args=(score_threshold[0.5], score_threshold[2]),
+    prediction_set["alertPreRedressements"] = (
+        prediction_set["probability"]
+        .apply(
+            sf_datalake.predictions.name_alert_group,
+            args=(score_threshold[0.5], score_threshold[2]),
+        )
+        .astype("category")
     )
 
     ## A posteriori alert tailoring
