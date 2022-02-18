@@ -29,16 +29,16 @@ def merge_predictions(predictions: List[pd.DataFrame]) -> pd.DataFrame:
         A DataFrame with merged predicted probabilities.
 
     """
-    merged = predictions.pop()
+    merged = predictions.pop(0)
     if not predictions:
         logging.warning("Predictions contains a single model output.")
         return merged
+    assert all(merged.columns.equals(pred.columns) for pred in predictions)
+    assert all(merged.index.name == pred.index.name for pred in predictions)
 
     for prediction in predictions:
         diff_ix = prediction.index.difference(merged.index)
-        merged = pd.append(
-            prediction[diff_ix],
-        )
+        merged = merged.append(prediction.loc[diff_ix], verify_integrity=True)
     return merged
 
 
