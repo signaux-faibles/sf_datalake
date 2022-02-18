@@ -100,7 +100,7 @@ def tailor_alert(
 
 
 def debt_tailoring(
-    siren_index: pd.DataFrame,
+    siren_index: pd.Index,
     debt_df: pd.DataFrame,
     debt_cols: Dict[str, List[str]],
     tol: float = 0.2,
@@ -109,7 +109,7 @@ def debt_tailoring(
 
     Args:
         siren_index: An index of the analyzed companies SIRENs.
-        debt_df: Debt data, used as a means to decide whether alert level should be
+        debt_df: Debt data, used to decide whether or not alert level should be
           upgraded.
         debt_cols : A dict mapping names to lists of columns to be summed / averaged:
           - "start": The sum of these columns will be considered the starting point of

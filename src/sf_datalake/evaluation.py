@@ -31,7 +31,7 @@ def optimal_beta_thresholds(
     Args:
         predictions: The computed probability of a failure state within the next
           18 months.
-        outcomes: The predicted outcomes. 0 means "no failure within the next 18
+        outcomes: The true outcomes. 0 means "no failure within the next 18
           months", while 1 means "failure within the next 18 months".
         betas: The required :math:`\\beta` values for F-score thresholds computation.
         n_thr: Size of an even-spaced array of values spanning the [0, 1] interval that
