@@ -143,3 +143,20 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     all_col_means = df_agg.select(F.col("mean")).collect()[0]["mean"]
 
     return (all(x < tol for x in all_col_means), all_col_means)
+
+
+def print_spark_df_scores(results: pyspark.sql.DataFrame):
+    """Quickly prints scores from data contained in a spark DataFrame."""
+    correct_count = results.filter(results.label == results.prediction).count()
+    total_count = results.count()
+    correct_1_count = results.filter(
+        (results.label == 1) & (results.prediction == 1)
+    ).count()
+    total_1_test = results.filter((results.label == 1)).count()
+    total_1_predict = results.filter((results.prediction == 1)).count()
+
+    print(f"All correct predections count: {correct_count}")
+    print(f"Total count: {total_count}")
+    print(f"Accuracy %: {(correct_count / total_count) * 100}")
+    print(f"Recall %: {(correct_1_count / total_1_test) * 100}")
+    print(f"Precision %: {(correct_1_count / total_1_predict) * 100}")
