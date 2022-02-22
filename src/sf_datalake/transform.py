@@ -151,7 +151,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
         AvgDeltaDebtPerSizeColumnAdder(config),
         DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
-        UnbiaserCovid19(config),
+        Covid19Adapter(config),
         DatasetColumnSelector(config),
     ]
     return stages
@@ -492,7 +492,7 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
         return dataset.withColumn("probability", transform_udf("probability"))
 
 
-class UnbiaserCovid19(Transformer):  # pylint: disable=R0903
+class Covid19Adapter(Transformer):  # pylint: disable=R0903
     """A transformer to unbias data after COVID-19 event."""
 
     def __init__(self, config) -> None:
