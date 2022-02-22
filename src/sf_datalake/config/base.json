@@ -58,6 +58,19 @@
         "ratio_dette": "StandardScaler",
         "avg_delta_dette_par_effectif": "StandardScaler"
     },
+    "FEATURES_TO_ADAPT": [
+        "MNT_AF_BFONC_BFR",
+        "MNT_AF_BFONC_TRESORERIE",
+        "RTO_AF_RATIO_RENT_MBE",
+        "MNT_AF_BFONC_FRNG",
+        "MNT_AF_CA",
+        "MNT_AF_SIG_EBE_RET",
+        "RTO_AF_RENT_ECO",
+        "RTO_AF_SOLIDITE_FINANCIERE",
+        "RTO_INVEST_CA",
+        "cotisation",
+        "effectif"
+    ],
     "AGG_DICT": {
         "cotisation": "sum",
         "cotisation_moy12m": "sum",

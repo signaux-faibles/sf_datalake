@@ -151,7 +151,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
         AvgDeltaDebtPerSizeColumnAdder(config),
         DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
-        UnbiaserCovid19(),
+        UnbiaserCovid19(config),
         DatasetColumnSelector(config),
     ]
     return stages
@@ -495,6 +495,10 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
 class UnbiaserCovid19(Transformer):  # pylint: disable=R0903
     """A transformer to unbias data after COVID-19 event."""
 
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
+
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
         """Unbias data after the COVID-19 event by a linear model fit on
         quantiles before/after COVID-19.
@@ -506,20 +510,6 @@ class UnbiaserCovid19(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with unbiased data after the COVID-19 event.
 
         """
-        FEATURES_TO_ADAPT = [  # according to Q-Q plots
-            "MNT_AF_BFONC_BFR",
-            "MNT_AF_BFONC_TRESORERIE",
-            "RTO_AF_RATIO_RENT_MBE",
-            "MNT_AF_BFONC_FRNG",
-            "MNT_AF_CA",
-            "MNT_AF_SIG_EBE_RET",
-            "RTO_AF_RENT_ECO",
-            "RTO_AF_SOLIDITE_FINANCIERE",
-            "RTO_INVEST_CA",
-            "cotisation",
-            "effectif",
-        ]
-
         # unbiaser_covid_params is generated from
         # exploration.generate_unbiaser_covid_params()
         unbiaser_covid_params = {
@@ -580,9 +570,9 @@ class UnbiaserCovid19(Transformer):  # pylint: disable=R0903
             },
         }
 
-        assert set(FEATURES_TO_ADAPT) <= set(dataset.columns)
+        assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
 
-        for feat in FEATURES_TO_ADAPT:
+        for feat in self.config["FEATURES_TO_ADAPT"]:
             dataset = dataset.withColumn(
                 feat,
                 F.when(
