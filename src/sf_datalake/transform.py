@@ -506,7 +506,7 @@ class UnbiaserCovid19(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with unbiased data after the COVID-19 event.
 
         """
-        FEATURES_TO_BE_UNBIASED = [  # according to Q-Q plots
+        FEATURES_TO_ADAPT = [  # according to Q-Q plots
             "MNT_AF_BFONC_BFR",
             "MNT_AF_BFONC_TRESORERIE",
             "RTO_AF_RATIO_RENT_MBE",
@@ -580,9 +580,9 @@ class UnbiaserCovid19(Transformer):  # pylint: disable=R0903
             },
         }
 
-        assert set(FEATURES_TO_BE_UNBIASED) <= set(dataset.columns)
+        assert set(FEATURES_TO_ADAPT) <= set(dataset.columns)
 
-        for feat in FEATURES_TO_BE_UNBIASED:
+        for feat in FEATURES_TO_ADAPT:
             dataset = dataset.withColumn(
                 feat,
                 F.when(
