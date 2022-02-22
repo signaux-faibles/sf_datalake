@@ -216,8 +216,8 @@ def generate_unbiaser_covid_params(
     # keep data from the first date of the learning dataset
     df = df.filter(df["periode"] >= config["TRAIN_DATES"][0])
 
-    df1 = df.filter(df["periode"] <= "2020-02-29").select(features)
-    df2 = df.filter(df["periode"] > "2020-02-29").select(features)
+    df1 = df.filter(df["periode"] <= config["PANDEMIC_EVENT_DATE"]).select(features)
+    df2 = df.filter(df["periode"] > config["PANDEMIC_EVENT_DATE"]).select(features)
 
     unbiaser_params = {}
     for feat in features:

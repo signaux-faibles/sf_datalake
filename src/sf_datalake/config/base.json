@@ -15,6 +15,7 @@
         "2018-11-01"
     ],
     "PREDICTION_DATE": "2020-02-01",
+    "PANDEMIC_EVENT_DATE": "2020-02-29",
     "MODEL": {
         "NAME": "LogisticRegression",
         "REGULARIZATION_COEFF": 0.05,

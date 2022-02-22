@@ -516,7 +516,7 @@ class Covid19Adapter(Transformer):  # pylint: disable=R0903
             dataset = dataset.withColumn(
                 feat,
                 F.when(
-                    F.col("periode") > "2020-02-29",
+                    F.col("periode") > self.config["PANDEMIC_EVENT_DATE"],
                     self.config["ADAPTER_COVID_PARAMS"][feat]["params"][0]
                     + self.config["ADAPTER_COVID_PARAMS"][feat]["params"][1]
                     * F.col(feat),
