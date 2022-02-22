@@ -510,66 +510,6 @@ class Covid19Adapter(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with unbiased data after the COVID-19 event.
 
         """
-        # unbiaser_covid_params is generated from
-        # exploration.generate_unbiaser_covid_params()
-        unbiaser_covid_params = {
-            "MNT_AF_BFONC_BFR": {
-                "params": [23623.665674728258, 0.56296943266575639],
-                "rmse": 70571.22084858362,
-                "r2": 0.9940361612169091,
-            },
-            "MNT_AF_BFONC_TRESORERIE": {
-                "params": [22236.184117106088, 0.58412926143396038],
-                "rmse": 42171.00682101867,
-                "r2": 0.9944725281058036,
-            },
-            "RTO_AF_RATIO_RENT_MBE": {
-                "params": [-0.0015722972109895586, 1.0464419929184383],
-                "rmse": 0.0014390084193837763,
-                "r2": 0.999422153539393,
-            },
-            "MNT_AF_BFONC_FRNG": {
-                "params": [59213.016524039755, 0.57295572977379372],
-                "rmse": 95524.35412399008,
-                "r2": 0.9952842529340152,
-            },
-            "MNT_AF_CA": {
-                "params": [960810.9153172815, 0.41353858849763436],
-                "rmse": 972975.2806476083,
-                "r2": 0.9817355692218368,
-            },
-            "MNT_AF_SIG_EBE_RET": {
-                "params": [38680.8834803771, 0.51602364042763094],
-                "rmse": 63670.270806772,
-                "r2": 0.9778103093621975,
-            },
-            "RTO_AF_RENT_ECO": {
-                "params": [-0.009450544412868727, 1.1473067958388148],
-                "rmse": 0.005281719432831142,
-                "r2": 0.9992802110584927,
-            },
-            "RTO_AF_SOLIDITE_FINANCIERE": {
-                "params": [-0.03858807453691644, 1.0472144997536623],
-                "rmse": 0.005608115232355715,
-                "r2": 0.9991168735366558,
-            },
-            "RTO_INVEST_CA": {
-                "params": [-0.004315476083762521, 0.99394772186907443],
-                "rmse": 0.004566023973095764,
-                "r2": 0.9986652084031244,
-            },
-            "cotisation": {
-                "params": [100.91665931258059, 1.1356772860529647],
-                "rmse": 593.7368742398097,
-                "r2": 0.9996548293427363,
-            },
-            "effectif": {
-                "params": [-0.9358249557851157, 1.0530334074660543],
-                "rmse": 0.7119727250833081,
-                "r2": 0.9994210784203903,
-            },
-        }
-
         assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
 
         for feat in self.config["FEATURES_TO_ADAPT"]:
@@ -577,8 +517,9 @@ class Covid19Adapter(Transformer):  # pylint: disable=R0903
                 feat,
                 F.when(
                     F.col("periode") > "2020-02-29",
-                    unbiaser_covid_params[feat]["params"][0]
-                    + unbiaser_covid_params[feat]["params"][1] * F.col(feat),
+                    self.config["ADAPTER_COVID_PARAMS"][feat]["params"][0]
+                    + self.config["ADAPTER_COVID_PARAMS"][feat]["params"][1]
+                    * F.col(feat),
                 ).otherwise(F.col(feat)),
             )
 
