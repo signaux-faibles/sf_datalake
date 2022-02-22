@@ -225,9 +225,7 @@ def generate_unbiaser_covid_params(
         df = df.withColumn("x", F.col("x").cast("float"))
         df = df.withColumn("y", F.col("y").cast("float"))
         vector_assembler = VectorAssembler(inputCols=["y"], outputCol="features")
-
-        df_va = vector_assembler.transform(df)
-        df_va = df_va.select(["features", "x"])
+        df_va = vector_assembler.transform(df).select(["features", "x"])
 
         lr = LinearRegression(featuresCol="features", labelCol="x")
         lr_model = lr.fit(df_va)
