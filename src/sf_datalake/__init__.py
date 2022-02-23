@@ -16,11 +16,6 @@
 * ``utils.py`` - Utility functions for spark session and data handling.
 """
 
-DATA_ROOT_DIR = (
-    "/projets/TSF/sources"  # Needed by make_monthly_indics.py and make_yearly_indics.py
-)
-VUES_DIR = "/projets/TSF/sources/livraison_MRV-DTNUM_juin_2021"
-
 ETL_FILES = [
     "etl_associe-ref_groupe_france",
     "etl_decla-declarations_af",

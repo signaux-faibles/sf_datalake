@@ -1,6 +1,5 @@
 {
     "OUTPUT_ROOT_DIR": "/projets/TSF/donnees",
-    "DATA_ROOT_DIR": "/projets/TSF/sources",
     "FILL_MISSING_VALUES": true,
     "SAMPLE_RATIO": 1.0,
     "TRAIN_TEST_SPLIT_RATIO": 0.8,

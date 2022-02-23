@@ -8,14 +8,14 @@ import random
 import sys
 from os import path
 
+from pyspark.ml import Pipeline
+
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint: disable=C0413
-
-from pyspark.ml import Pipeline
 
 import sf_datalake.io
 import sf_datalake.model
@@ -48,11 +48,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
 
     # Prepare data.
     yearly_data = sf_datalake.io.load_data(
-        {
-            "yearly_data": path.join(
-                config["DATA_ROOT_DIR"], "base/indicateurs_annuels.orc"
-            ),
-        },
+        {"yearly_data": config["DATASET"]},
         spl_ratio=config["SAMPLE_RATIO"],
         seed=config["SEED"],
     )["yearly_data"]
@@ -127,6 +123,13 @@ if __name__ == "__main__":
         'base.json' will be used.
         """,
         default="base.json",
+    )
+    parser.add_argument(
+        "--dataset",
+        destination="DATASET",
+        type=str,
+        help="Path to the dataset that will be used both for training.",
+        default="/projets/TSF/sources/base/indicateurs_annuels.orc",
     )
     parser.add_argument(
         "--output_directory",
