@@ -152,7 +152,7 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     return (all(x < tol for x in all_col_means), all_col_means)
 
 
-def generate_qqplot_dataset(
+def qqplot_dataset(
     df1: pyspark.sql.DataFrame,
     df2: pyspark.sql.DataFrame,
     feature: str,
@@ -160,24 +160,29 @@ def generate_qqplot_dataset(
 ) -> pyspark.sql.DataFrame:
     """Generate the dataset ready to produce a Q-Q plot.
 
+    This will produce Q-Q plot data about a given `feature` found
+    in two different datasets.
+
     Args:
-        df1: input DataFrame with `feature` as a column
-        df2: input DataFrame with `feature` as a column
-        feature: name of the feature in both df1 and df2 DataFrames
+        df1: input DataFrame with feature as a column
+        df2: input DataFrame with feature as a column
+        feature: name of the feature in both df1 and df2
         quantiles: list of the quantiles to be computed
 
     Returns:
         A DataFrame with 3 columns:
-            - `summary`: the quantiles
-            - `x`: values of the quantiles for the feature `feature` from df1
-            - `y`: values of the quantiles for the feature `feature` from df2
+          - `quantiles`: the quantiles
+          - `x`: feature quantiles values in df1
+          - `y`: feature quantiles values in df2
     """
     assert feature in df1.columns
     assert feature in df2.columns
 
     df1 = (
-        df1.summary(*quantiles)
-        .select(["summary", feature])
+        df1.summary(*quantiles).select(
+            ["summary", feature]
+        )  # TODO name summary "quantiles" but this should be
+        # done by using approxquantiles in spite of summary
         .withColumnRenamed(feature, "x")
     )
     df2 = (
@@ -189,11 +194,14 @@ def generate_qqplot_dataset(
     return df
 
 
-def generate_unbiaser_covid_params(
+def adapter_covid19_params(
     df: pyspark.sql.DataFrame, features: List[str], config: dict
 ) -> dict:
-    """Generate for each feature in `features`, the necessary parameters to unbias
-    the feature after the COVID-19 event.
+    """Generate for each feature , the necessary parameters to
+    adapt a feature after the pandemic event.
+
+    Parameters come from a linear model fit on quantiles
+    post-pandemic to predict pre-pandemic.
 
     Args:
         df: input DataFrame
@@ -213,15 +221,17 @@ def generate_unbiaser_covid_params(
     )
     df = pipeline_preprocessor.fit(df).transform(df)
 
-    # keep data from the first date of the learning dataset
+    # Keep data from the first date of the learning period
     df = df.filter(df["periode"] >= config["TRAIN_DATES"][0])
 
+    # Split training data according to a date associated with the beginning of
+    # the pandemic event
     df1 = df.filter(df["periode"] <= config["PANDEMIC_EVENT_DATE"]).select(features)
     df2 = df.filter(df["periode"] > config["PANDEMIC_EVENT_DATE"]).select(features)
 
-    unbiaser_params = {}
+    adapter_params = {}
     for feat in features:
-        df = generate_qqplot_dataset(df1, df2, feature=feat)
+        df = qqplot_dataset(df1, df2, feature=feat)
         df = df.withColumn("x", F.col("x").cast("float"))
         df = df.withColumn("y", F.col("y").cast("float"))
         vector_assembler = VectorAssembler(inputCols=["y"], outputCol="features")
@@ -229,10 +239,10 @@ def generate_unbiaser_covid_params(
 
         lr = LinearRegression(featuresCol="features", labelCol="x")
         lr_model = lr.fit(df_va)
-        unbiaser_params[feat] = {
+        adapter_params[feat] = {
             "params": [lr_model.intercept, lr_model.coefficients[0]],
             "rmse": lr_model.summary.rootMeanSquaredError,
             "r2": lr_model.summary.r2,
         }
 
-    return unbiaser_params
+    return adapter_params

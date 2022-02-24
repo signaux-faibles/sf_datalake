@@ -500,14 +500,16 @@ class Covid19Adapter(Transformer):  # pylint: disable=R0903
         self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Unbias data after the COVID-19 event by a linear model fit on
-        quantiles before/after COVID-19.
+        """Adapt post-pandemic data using linear fits of features quantiles.
+
+        Adapt data after a pandemic event by a linear model fit on
+        quantiles post-pandemic to predict pre-pandemic.
 
         Args:
             dataset: DataFrame to transform.
 
         Returns:
-            Transformed DataFrame with unbiased data after the COVID-19 event.
+            Transformed DataFrame with adapted data after the pandemic event.
 
         """
         assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
