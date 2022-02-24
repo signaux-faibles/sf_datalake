@@ -49,7 +49,10 @@ def data_path_parser(input_type: str = "orc") -> argparse.ArgumentParser:
 
 
 def load_data(
-    data_paths: Dict[str, str], spl_ratio: float = None, seed: int = 1234
+    data_paths: Dict[str, str],
+    file_format: str = None,
+    spl_ratio: float = None,
+    seed: int = 1234,
 ) -> Dict[str, pyspark.sql.DataFrame]:
     """Loads one or more orc-stored datasets and returns them in a dict.
 
@@ -57,22 +60,27 @@ def load_data(
         data_paths: A dict[str, str] structured as follows: {dataframe_name: file_path}
           `dataframe_name` will be the key to use to get access to a given DataFrame in
           the returned dict.
+        file_format: The file format, can be either csv or orc.
         spl_ratio: If stated, the size of the return sampled datasets, as a fraction of
           the full datasets respective sizes.
+        seed: A random seed, used for sub-sampling in case spl_ratio is < 1.
 
     Returns:
-        A dictionary of DataFrame objects.
+        A dictionary of datasets as pyspark DataFrame objects.
 
     """
     datasets = {}
 
     spark = sf_datalake.utils.get_spark_session()
     for name, file_path in data_paths.items():
-        file_format = path.splitext(file_path)[-1]
+        if file_format is None:
+            file_format = path.splitext(file_path)[-1]
         if file_format == ".csv":
             df = spark.read.csv(file_path, sep="|", inferSchema=True, header=True)
         elif file_format == ".orc":
             df = spark.read.orc(file_path)
+        else:
+            raise ValueError(f"Unknown file format {file_format}.")
         if spl_ratio is not None:
             df = df.sample(fraction=spl_ratio, seed=seed)
         datasets[name] = df

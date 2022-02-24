@@ -49,6 +49,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     # Prepare data.
     yearly_data = sf_datalake.io.load_data(
         {"yearly_data": config["DATASET"]},
+        file_format="orc",
         spl_ratio=config["SAMPLE_RATIO"],
         seed=config["SEED"],
     )["yearly_data"]

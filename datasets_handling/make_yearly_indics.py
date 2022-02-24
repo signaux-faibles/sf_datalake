@@ -26,7 +26,7 @@ data_paths = {
     "af": path.join(args.input_dir, "etl_decla-declarations_af"),
     "rar_tva": path.join(args.input_dir, "rar.rar_tva_exercice"),
 }
-datasets = sf_datalake.io.load_data(data_paths)
+datasets = sf_datalake.io.load_data(data_paths, file_format="orc")
 
 ###################
 # Merge datasets  #

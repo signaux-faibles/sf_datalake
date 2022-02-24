@@ -31,7 +31,7 @@ data_paths = {
     ),
 }
 
-datasets = sf_datalake.io.load_data(data_paths)
+datasets = sf_datalake.io.load_data(data_paths, file_format="orc")
 
 #######
 # RAR #
