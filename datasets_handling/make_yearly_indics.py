@@ -1,38 +1,36 @@
-"""Build yearly indicators data.
+"""Build a dataset of yearly DGFiP data.
 
 This follows MRV's process, originally written in SAS.
-"""
 
+USAGE
+    python make_yearly_data.py <DGFiP_vues_directory> <output_directory>
+"""
 from os import path
 
 import pyspark.sql.functions as F
 from pyspark.sql.window import Window
 
-from sf_datalake import DATA_ROOT_DIR, VUES_DIR
-from sf_datalake.io import load_data
-
-OUTPUT_PATH = path.join(DATA_ROOT_DIR, "/base/indicateurs_annuels.orc")
+import sf_datalake.io
+from sf_datalake import DGFIP_VARIABLES
 
 ####################
 # Loading datasets #
 ####################
 
+parser = sf_datalake.io.data_path_parser("orc")
+parser.description = "Build a dataset of yearly DGFiP data."
+args = parser.parse_args()
+
 data_paths = {
-    "indmap": path.join(VUES_DIR, "etl_decla-declarations_indmap.orc"),
-    "af": path.join(VUES_DIR, "etl_decla-declarations_af.orc"),
-    "defa": path.join(VUES_DIR, "pub_medoc_oracle-t_defaillance.orc"),
-    "refent_etab": path.join(VUES_DIR, "pub_refent-t_ref_etablissements.orc"),
-    "refent_entr": path.join(VUES_DIR, "pub_refent-t_ref_entreprise.orc"),
-    "jugements": path.join(VUES_DIR, "etl_refent_oracle-t_jugement_histo.orc"),
-    "rar_tva": path.join(VUES_DIR, "rar.rar_tva_exercice.orc"),
-    "sf": path.join(DATA_ROOT_DIR, "data_sf_padded.orc"),
+    "indmap": path.join(args.input_dir, "etl_decla-declarations_indmap"),
+    "af": path.join(args.input_dir, "etl_decla-declarations_af"),
+    "rar_tva": path.join(args.input_dir, "rar.rar_tva_exercice"),
 }
+datasets = sf_datalake.io.load_data(data_paths)
 
-datasets = load_data(data_paths)
-
-####################
-# Merge datasets   #
-####################
+###################
+# Merge datasets  #
+###################
 
 df = (
     datasets["indmap"]
@@ -41,56 +39,7 @@ df = (
         on=["siren", "date_deb_exercice", "date_fin_exercice"],
         how="left",
     )
-    .select(
-        "siren",
-        "date_deb_exercice",
-        "date_fin_exercice",
-        "MNT_AF_CA",
-        "MNT_AF_SIG_EBE",
-        "RTO_AF_SOLV_ENDT_NET",
-        "MNT_AF_BPAT_PASSIF_K_PROPRES",
-        "MNT_AF_SIG_RCAI",
-        "MNT_AF_BFONC_TRESORERIE",
-        "RTO_AF_AUTO_FINANCIERE",
-        "RTO_AF_SOLV_INDP_FI",
-        "MNT_AF_BFONC_ACTIF_TRESORERIE",
-        "MNT_AF_BFONC_PASSIF_TRESORERIE",
-        "MNT_AF_BPAT_ACTIF_SUP1AN",
-        "MNT_AF_BPAT_ACTIF_STOCKS",
-        "MNT_AF_BPAT_ACTIF_DISPO",
-        "RTO_AF_SOLV_ENDT_BRUT",
-        "MNT_AF_BFONC_RESSOUR_STABL",
-        "MNT_AF_BFONC_FRNG",
-        "MNT_AF_BPAT_ACTIF_CREANCES",
-        "RTO_AF_SOLV_SOLVABILITE",
-        "RTO_AF_SOLV_LQDT_RESTRINTE",
-        "RTO_AF_STRUCT_FIN_IMM",
-        "RTO_AF_SOLIDITE_FINANCIERE",
-        "TX_MOY_TVA_COL",
-        "NBR_JOUR_RGLT_CLI",
-        "NBR_JOUR_RGLT_FRS",
-        "TOT_CREA_CHAV_MOINS1AN",
-        "TOT_DET_PDTAV_MOINS1AN",
-        "PCT_AF_SOLV_LQDT_GEN",
-        "PCT_REND_EXPL",
-        "RTO_MG_ACHAT_REV",
-        "PCT_CHARG_EXTE_CA_NET",
-        "PCT_INDEP_FIN",
-        "PCT_PDS_INTERET",
-        "NBR_JOUR_ROTA_STK",
-        "RTO_INVEST_CA",
-        "RTO_TVA_COL_FR",
-        "D_CMPT_COUR_ASSO_DEB",
-        "D_CMPT_COUR_ASSO_CRED",
-        "RTO_TVA_DEDUC_ACH",
-        "RTO_TVA_DECUC_TVA_COL",
-        "D_CR_250_EXPL_SALAIRE",
-        "D_CR_252_EXPL_CH_SOC",
-        "MNT_AF_SIG_EBE_RET",
-        "MNT_AF_BFONC_BFR",
-        "RTO_AF_RATIO_RENT_MBE",
-        "RTO_AF_RENT_ECO",
-    )
+    .select(DGFIP_VARIABLES)
 )
 
 # Jointure RAR_TVA
@@ -137,40 +86,11 @@ tac = tac_base.select(tac_columns + key_columns)
 
 ##  'taux d'accroissement' DataFrame join
 
-df_v = df.join(
+indics_annuels = df.join(
     tac,
     on=["siren", "date_deb_exercice", "date_fin_exercice"],
     how="left",
 )
 
-## SF join
 
-df_v = df_v.withColumn(
-    "year_dgfip", F.year(df_v["date_fin_exercice"])
-).withColumnRenamed("siren", "siren_dgfip")
-
-sf = (
-    datasets["sf"]
-    .withColumn(
-        "year",
-        F.when(
-            datasets["sf"]["arrete_bilan_bdf"].isNotNull(),
-            F.year(datasets["sf"]["arrete_bilan_bdf"]),
-        )
-        .when(
-            (datasets["sf"]["exercice_diane"].isNotNull())
-            & (datasets["sf"]["arrete_bilan_bdf"].isNull()),
-            datasets["sf"]["exercice_diane"],
-        )
-        .otherwise(F.year(datasets["sf"]["periode"])),
-    )
-    .withColumn("siren", F.substring(datasets["sf"].siret, 1, 9))
-)
-
-indics_annuels = sf.join(
-    df_v,
-    on=[sf.year == df_v.year_dgfip, sf.siren == df_v.siren_dgfip],
-    how="full_outer",
-)
-
-indics_annuels.write.format("orc").save(OUTPUT_PATH)
+indics_annuels.write.format("orc").save(args.output_dir)

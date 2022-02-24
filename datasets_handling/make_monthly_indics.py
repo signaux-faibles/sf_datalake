@@ -1,48 +1,37 @@
-"""Build monthly TVA data.
+"""Build a dataset of monthly TVA data.
 
 This follows MRV's process, originally written in SAS: `21_indicateurs.sas`
+
+USAGE
+    python make_monthly_data.py <DGFiP_vues_directory> <output_directory>
+
 """
 
 from os import path
 
 import pyspark.sql.functions as F
 
-from sf_datalake import DATA_ROOT_DIR, VUES_DIR
-from sf_datalake.io import load_data
-from sf_datalake.transform import parse_date, process_payment
-
-OUTPUT_FILE = path.join(DATA_ROOT_DIR, "tva.orc")
+import sf_datalake.io
+import sf_datalake.transform
 
 ####################
 # Loading datasets #
 ####################
 
+parser = sf_datalake.io.data_path_parser("orc")
+parser.description = "Build a dataset of monthly TVA data."
+args = parser.parse_args()
+
 data_paths = {
-    "t_art": path.join(VUES_DIR, "pub_risq_oracle.t_art.orc"),
-    "t_mvt": path.join(VUES_DIR, "pub_risq_oracle.t_mvt.orc"),
-    "t_mvr": path.join(VUES_DIR, "pub_risq_oracle.t_mvr.orc"),  # unused for now
-    "t_dar": path.join(VUES_DIR, "pub_risq_oracle.t_dar.orc"),  # unused for now
-    "t_dos": path.join(VUES_DIR, "pub_risq_oracle.t_dos.orc"),  # unused for now
-    "t_ech": path.join(VUES_DIR, "pub_risq_oracle.t_ech.orc"),  # unused for now
-    "af": path.join(VUES_DIR, "etl_decla-declarations_af.orc"),
-    "t_ref_etablissements": path.join(
-        VUES_DIR, "pub_refent-t_ref_etablissements.orc"
-    ),  # unused for now
-    "t_ref_entreprise": path.join(
-        VUES_DIR, "pub_refent-t_ref_entreprise.orc"
-    ),  # unused for now
-    "t_ref_code_nace": path.join(
-        VUES_DIR, "pub_refer-t_ref_code_nace_complet.orc"
-    ),  # unused for now
-    "liasse_tva_ca3": path.join(
-        VUES_DIR, "etl_tva.liasse_tva_ca3_view.orc"
-    ),  # unused for now
+    "t_art": path.join(args.input_dir, "pub_risq_oracle.t_art"),
+    "t_mvt": path.join(args.input_dir, "pub_risq_oracle.t_mvt"),
+    "liasse_tva_ca3": path.join(args.input_dir, "etl_tva.liasse_tva_ca3_view"),
     "t_etablissement_annee": path.join(
-        VUES_DIR, "etl_refent-T_ETABLISSEMENT_ANNEE.orc"
-    ),  # unused for now
+        args.input_dir, "etl_refent-T_ETABLISSEMENT_ANNEE"
+    ),
 }
 
-datasets = load_data(data_paths)
+datasets = sf_datalake.io.load_data(data_paths)
 
 #######
 # RAR #
@@ -50,12 +39,12 @@ datasets = load_data(data_paths)
 
 # Convert to dates
 
-t_art = parse_date(
+t_art = sf_datalake.transform.parse_date(
     datasets["t_art"], ["art_disc", "art_didr", "art_datedcf", "art_dori"]
 )
 t_art = t_art.orderBy(["frp", "art_cleart"])  # useless on spark a priori ?
 
-t_mvt = parse_date(datasets["t_mvt"], ["mvt_djc", "mvt_deff"])
+t_mvt = sf_datalake.transform.parse_date(datasets["t_mvt"], ["mvt_djc", "mvt_deff"])
 t_mvt = t_mvt.orderBy(["frp", "art_cleart"])  # useless on spark a priori ?
 
 corresp_siren_frp2 = datasets["t_etablissement_annee"].withColumn(
@@ -78,11 +67,11 @@ mvt_montant_creance = t_mvt.join(
 # Eventuellement faire un join car on perd des colonnes en faisant
 # l'aggrégation. À voir.
 mvt_paiement = t_mvt.filter("mvt_nacrd == 0 OR mvt_nacrd == 1")
-mvt_paiement = process_payment(mvt_paiement)
+mvt_paiement = sf_datalake.transform.process_payment(mvt_paiement)
 
 # Paiements autres
 mvt_paiement_autre = t_mvt.filter("mvt_nacrd != 0 AND mvt_nacrd != 1")
-mvt_paiement_autre = process_payment(mvt_paiement_autre)
+mvt_paiement_autre = sf_datalake.transform.process_payment(mvt_paiement_autre)
 
 # Join all tables
 creances = t_art.join(mvt_montant_creance, on=["frp", "art_cleart"], how="left")
@@ -116,9 +105,6 @@ x_creances = x_creances.withColumn(
     "IND_HCF", F.when(F.col("ART_DATEDCF").isNotNull(), 0).otherwise(1)
 )
 
-# Je filtre pas sur les années (L254-L285 de 21_indicateurs.sas). On le fait à la
-# modélisation ?
-
 # TODO vérifier comment ces opérations se comportent vis à vis des nulls
 rar_mois_article = x_creances.withColumn(
     "MNT_PAIEMENT_CUM_TOT",
@@ -136,12 +122,6 @@ rar_mois_article = rar_mois_article.withColumn(
 rar_mois_article = rar_mois_article.withColumn(
     "MNT_RAR_HCF", F.col("MNT_RAR") * F.col("IND_HCF")
 )
-
-# Il manque des opérations qui n'ont plus de sens, il me semble, car on ne séléctionne
-# plus les dates (L288-L306 de 21_indicateurs.sas)
-
-# Write file
-rar_mois_article.write.format("orc").save("/projets/TSF/sources/base/rar.orc")
 
 # Les entreprises peuvent déclarer la TVA mensuellement, trimestriellement ou
 # annuellement.
@@ -322,4 +302,5 @@ x_tva = x_tva.withColumn(
 x_tva = x_tva.withColumn("M_TVA_NET_DUE", F.col("D3310_28") + F.col("D3517S_28_i"))
 
 # Write file
-x_tva.write.format("orc").save(OUTPUT_FILE)
+rar_mois_article.write.format("orc").save(path.join("rar"))
+x_tva.write.format("orc").save(path.join("tva"))
