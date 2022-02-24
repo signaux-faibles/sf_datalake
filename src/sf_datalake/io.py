@@ -74,10 +74,10 @@ def load_data(
     spark = sf_datalake.utils.get_spark_session()
     for name, file_path in data_paths.items():
         if file_format is None:
-            file_format = path.splitext(file_path)[-1]
-        if file_format == ".csv":
+            file_format = path.splitext(file_path)[-1][1:]
+        if file_format == "csv":
             df = spark.read.csv(file_path, sep="|", inferSchema=True, header=True)
-        elif file_format == ".orc":
+        elif file_format == "orc":
             df = spark.read.orc(file_path)
         else:
             raise ValueError(f"Unknown file format {file_format}.")
