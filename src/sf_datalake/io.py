@@ -1,5 +1,6 @@
 """Utility functions for data handling."""
 
+import argparse
 import logging
 from os import path
 from typing import Dict, Iterable, Optional
@@ -8,6 +9,43 @@ import pkg_resources
 import pyspark.sql
 
 import sf_datalake.utils
+
+
+def data_path_parser(input_type: str = "orc") -> argparse.ArgumentParser:
+    """Creates a general argument parser for data file / directories io handling.
+
+    Args:
+        input_type: Whether the inputs should be looked for either as csv files or as
+          a directory containing orc files.
+
+    Returns:
+        An ArgumentParser object ready to be used as is or further customized.
+
+    """
+    parser = argparse.ArgumentParser(description="General parser for data files io.")
+    parser.add_argument(
+        "-t",
+        "--input_type",
+        help="""Describes if the inputs should be looked for either as csv files or as
+        a directory containing orc files.""",
+        choices=["csv", "orc"],
+        default=input_type,
+    )
+    parser.add_argument(
+        "input_dir",
+        help="""Path to the directory containing tables saved as orc. Each table will be
+        looked for either:
+        - As a directory containing orc part files, this directory name is the original
+        table name, without any extension.
+        - As a single (possibly gzipped) csv file.
+        """,
+    )
+    parser.add_argument(
+        "output_dir",
+        help="""Output directory where the output dataset(s) will be stored (as multiple
+        orc files).""",
+    )
+    return parser
 
 
 def load_data(
@@ -30,7 +68,11 @@ def load_data(
 
     spark = sf_datalake.utils.get_spark_session()
     for name, file_path in data_paths.items():
-        df = spark.read.orc(file_path)
+        file_format = path.splitext(file_path)[-1]
+        if file_format == ".csv":
+            df = spark.read.csv(file_path, sep="|", inferSchema=True, header=True)
+        elif file_format == ".orc":
+            df = spark.read.orc(file_path)
         if spl_ratio is not None:
             df = df.sample(fraction=spl_ratio, seed=seed)
         datasets[name] = df
@@ -46,8 +88,11 @@ def csv_to_orc(input_filename: str, output_filename: str):
 
     """
     spark = sf_datalake.utils.get_spark_session()
-    df = spark.read.options(inferSchema="True", header="True", delimiter="|").csv(
-        path.join(input_filename)
+    df = spark.read.csv(
+        input_filename,
+        sep="|",
+        inferSchema=True,
+        header=True,
     )
     df.write.format("orc").save(output_filename)
 
