@@ -156,7 +156,7 @@ def qqplot_dataset(
     df1: pyspark.sql.DataFrame,
     df2: pyspark.sql.DataFrame,
     feature: str,
-    quantiles: List[str] = [f"{i}%" for i in range(5, 96)],
+    quantiles: List[float] = [i / 100 for i in range(5, 96)],
 ) -> pyspark.sql.DataFrame:
     """Generate the dataset ready to produce a Q-Q plot.
 
@@ -178,20 +178,16 @@ def qqplot_dataset(
     assert feature in df1.columns
     assert feature in df2.columns
 
-    df1 = (
-        df1.summary(*quantiles).select(
-            ["summary", feature]
-        )  # TODO name summary "quantiles" but this should be
-        # done by using approxquantiles in spite of summary
-        .withColumnRenamed(feature, "x")
-    )
-    df2 = (
-        df2.summary(*quantiles)
-        .select(["summary", feature])
-        .withColumnRenamed(feature, "y")
-    )
-    df = df1.join(df2, how="left", on="summary")
-    return df
+    spark = sf_datalake.utils.get_spark_session()
+
+    values = df1.approxQuantile(feature, quantiles, 0.001)
+    dataset1 = spark.createDataFrame(list(zip(quantiles, values)), ["quantiles", "x"])
+
+    values = df2.approxQuantile(feature, quantiles, 0.001)
+    dataset2 = spark.createDataFrame(list(zip(quantiles, values)), ["quantiles", "y"])
+
+    dataset = dataset1.join(dataset2, how="left", on="quantiles").orderBy("quantiles")
+    return dataset
 
 
 def adapter_covid19_params(
@@ -232,8 +228,6 @@ def adapter_covid19_params(
     adapter_params = {}
     for feat in features:
         df = qqplot_dataset(df1, df2, feature=feat)
-        df = df.withColumn("x", F.col("x").cast("float"))
-        df = df.withColumn("y", F.col("y").cast("float"))
         vector_assembler = VectorAssembler(inputCols=["y"], outputCol="features")
         df_va = vector_assembler.transform(df).select(["features", "x"])
 
