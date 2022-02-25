@@ -6,12 +6,12 @@ from typing import Iterable, List, Tuple
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
-import pyspark.sql.types as T
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import LinearRegression
 
 import sf_datalake.transform
+import sf_datalake.utils
 
 
 def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -135,11 +135,10 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     """
     assert "features" in df.columns, "Input DataFrame doesn't have a 'features' column."
 
-    dense_to_array_udf = F.udf(
-        lambda v: [float(x) for x in v], T.ArrayType(T.FloatType())
+    df = df.withColumn(
+        "features_array",
+        sf_datalake.utils.dense_to_array_udf("features"),  # pylint: disable=E1101
     )
-
-    df = df.withColumn("features_array", dense_to_array_udf("features"))
     n_features = len(df.first()["features"])
 
     df_agg = df.agg(
