@@ -136,8 +136,7 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     assert "features" in df.columns, "Input DataFrame doesn't have a 'features' column."
 
     df = df.withColumn(
-        "features_array",
-        sf_datalake.utils.dense_to_array_udf("features"),  # pylint: disable=E1101
+        "features_array", sf_datalake.utils.dense_to_array_udf("features")
     )
     n_features = len(df.first()["features"])
 

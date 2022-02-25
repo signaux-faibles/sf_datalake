@@ -80,6 +80,15 @@ def feature_index(config: dict) -> List[str]:
             )
     return indexer
 
-    @F.udf(returnType=T.ArrayType(T.FloatType()))
-    def dense_to_array_udf(features):  # pylint: disable=W0101
-        return [float(x) for x in features]
+
+@F.udf(returnType=T.ArrayType(T.FloatType()))
+def dense_to_array_udf(assembled_feature: str) -> F.udf:
+    """Transform an assembled column as an array.
+
+    Args:
+        assembled_feature: assembled feature
+
+    Returns:
+        An F.udf function
+    """
+    return [float(x) for x in assembled_feature]
