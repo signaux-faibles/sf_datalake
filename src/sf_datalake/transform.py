@@ -69,7 +69,7 @@ def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
 
 
 def get_transformer(name: str) -> Transformer:
-    """Get a pre-configured Transformer object by specifying its name.
+    """Gets a pre-configured Transformer object by specifying its name.
 
     Args:
         name: Transformer object's name
@@ -279,7 +279,7 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
         """
         if not ({"paydex_bin", "paydex_yoy"} & set(self.config["FEATURES"])):
             logging.info(
-                "paydex data was not requested as a feature inside the provided \
+                "Paydex data was not requested as a feature inside the provided \
                 configuration file."
             )
             return dataset
@@ -500,14 +500,17 @@ class Covid19Adapter(Transformer):  # pylint: disable=R0903
         self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Adapt data after a pandemic event by a linear model fit on
-        post-pandemic quantiles to predict pre-pandemic ones.
+        """Adapts post-pandemic data using linear fits of features quantiles.
+
+        Adapt post-pandemic event data through linear fits of the pre-pandemic quantiles
+        --> post-pandemic quantiles mappings (for each variable that ).
 
         Args:
             dataset: DataFrame to transform.
 
         Returns:
-            Transformed DataFrame with adapted data after the pandemic event.
+            Transformed DataFrame with post-pandemic data adapted to fit pre-pandemic
+              distribution.
 
         """
         assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
@@ -517,8 +520,8 @@ class Covid19Adapter(Transformer):  # pylint: disable=R0903
                     feat,
                     F.when(
                         F.col("periode") > self.config["PANDEMIC_EVENT_DATE"],
-                        self.config["ADAPTER_COVID_PARAMS"][feat]["params"][0]
-                        + self.config["ADAPTER_COVID_PARAMS"][feat]["params"][1]
+                        self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][0]
+                        + self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][1]
                         * F.col(feat),
                     ).otherwise(F.col(feat)),
                 )

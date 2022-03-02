@@ -75,7 +75,7 @@
         "cotisation",
         "effectif"
     ],
-    "ADAPTER_COVID_PARAMS": {
+    "COVID_ADAPTER_PARAMETERS": {
         "MNT_AF_BFONC_BFR": {
             "params": [
                 23623.665674728258,

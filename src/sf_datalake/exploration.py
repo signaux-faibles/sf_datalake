@@ -123,8 +123,8 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     `features` column is the result of at least a `VectorAssembler()`.
 
     Args:
-        df : Input DataFrame.
-        tol :  a tolerance for the zero equality test.
+        df: Input DataFrame.
+        tol: A tolerance for the zero equality test.
 
     Returns:
         Tuple[bool, List]: True if variables are centered else False. A list of the
@@ -158,20 +158,21 @@ def qqplot_dataset(
 ) -> pyspark.sql.DataFrame:
     """Generate the dataset ready to produce a Q-Q plot.
 
-    This will produce Q-Q plot data about a given `feature` found
-    in two different datasets.
+    This will produce Q-Q plot data about a given `feature` found in two different
+    datasets.
 
     Args:
-        df1: input DataFrame with feature as a column
-        df2: input DataFrame with feature as a column
-        feature: name of the feature in both df1 and df2
-        quantiles: list of the quantiles to be computed
+        df1: Input DataFrame with feature as a column.
+        df2: Input DataFrame with feature as a column.
+        feature: Name of the feature in both df1 and df2.
+        quantiles: List of the quantiles to be computed.
 
     Returns:
         A DataFrame with 3 columns:
           - `quantiles`: the quantiles
           - `x`: feature quantiles values in df1
           - `y`: feature quantiles values in df2
+
     """
     assert feature in df1.columns
     assert feature in df2.columns
@@ -188,27 +189,27 @@ def qqplot_dataset(
     return dataset
 
 
-def adapter_covid19_params(
+def covid19_adapter_params(
     df: pyspark.sql.DataFrame, features: List[str], config: dict
 ) -> dict:
-    """Generate for each feature , the necessary parameters to
-    adapt a feature after the pandemic event.
+    """Generates parameters to adapt post-pandemic data over a set of features.
 
-    Parameters come from a linear model fit on post-pandemic
-    quantiles to predict pre-pandemic ones.
+    Parameters are built using a linear model fit on post-pandemic quantiles vs
+    pre-pandemic quantiles.
 
     Args:
-        df: input DataFrame
-        features: name of the features to adapt
+        df: input DataFrame.
+        features: name of the features to run the fit on.
         config: model configuration, as loaded by utils.get_config().
 
     Returns:
-        A dict with features as keys. For each feature, the following dict:
+        A dict with features as keys. For each feature, the structure is as follows:
             {
-                "params": list of the parameters to adapt the feature
-                "rmse": root mean square error of the model to adapt the feature
-                "r2": r square of the model to adapt the feature
+                "params": list of the linear fit parameters (intercept + coefficient).
+                "rmse": root mean square error of the linear fit.
+                "r2": r square of the linear fit.
             }
+
     """
     pipeline_preprocessor = Pipeline(
         stages=sf_datalake.transform.generate_preprocessing_stages(config)
@@ -226,8 +227,11 @@ def adapter_covid19_params(
     adapter_params = {}
     for feat in features:
         df = qqplot_dataset(df1, df2, feature=feat)
-        vector_assembler = VectorAssembler(inputCols=["y"], outputCol="features")
-        df_va = vector_assembler.transform(df).select(["features", "x"])
+        df_va = (
+            VectorAssembler(inputCols=["y"], outputCol="features")
+            .transform(df)
+            .select(["features", "x"])
+        )
 
         lr = LinearRegression(featuresCol="features", labelCol="x")
         lr_model = lr.fit(df_va)
