@@ -516,17 +516,18 @@ class Covid19Adapter(Transformer):  # pylint: disable=R0903
               distribution.
 
         """
-        assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
-        if self.config["USE_COVID19ADAPTER"]:
-            for feat in self.config["FEATURES_TO_ADAPT"]:
-                dataset = dataset.withColumn(
-                    feat,
-                    F.when(
-                        F.col("periode") > self.config["PANDEMIC_EVENT_DATE"],
-                        self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][0]
-                        + self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][1]
-                        * F.col(feat),
-                    ).otherwise(F.col(feat)),
-                )
+        if not self.config["USE_COVID19ADAPTER"]:
+            return dataset
 
+        assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
+        for feat in self.config["FEATURES_TO_ADAPT"]:
+            dataset = dataset.withColumn(
+                feat,
+                F.when(
+                    F.col("periode") > self.config["PANDEMIC_EVENT_DATE"],
+                    self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][0]
+                    + self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][1]
+                    * F.col(feat),
+                ).otherwise(F.col(feat)),
+            )
         return dataset
