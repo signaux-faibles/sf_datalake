@@ -6,7 +6,12 @@ from typing import Iterable, List, Tuple
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
-from pyspark.sql.types import ArrayType, FloatType
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.regression import LinearRegression
+
+import sf_datalake.transform
+import sf_datalake.utils
 
 
 def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -118,8 +123,8 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     `features` column is the result of at least a `VectorAssembler()`.
 
     Args:
-        df : Input DataFrame.
-        tol :  a tolerance for the zero equality test.
+        df: Input DataFrame.
+        tol: A tolerance for the zero equality test.
 
     Returns:
         Tuple[bool, List]: True if variables are centered else False. A list of the
@@ -130,9 +135,9 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     """
     assert "features" in df.columns, "Input DataFrame doesn't have a 'features' column."
 
-    dense_to_array_udf = F.udf(lambda v: [float(x) for x in v], ArrayType(FloatType()))
-
-    df = df.withColumn("features_array", dense_to_array_udf("features"))
+    df = df.withColumn(
+        "features_array", sf_datalake.utils.dense_to_array_udf("features")
+    )
     n_features = len(df.first()["features"])
 
     df_agg = df.agg(
@@ -143,6 +148,100 @@ def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
     all_col_means = df_agg.select(F.col("mean")).collect()[0]["mean"]
 
     return (all(x < tol for x in all_col_means), all_col_means)
+
+
+def qqplot_dataset(
+    df1: pyspark.sql.DataFrame,
+    df2: pyspark.sql.DataFrame,
+    feature: str,
+    quantiles: List[float] = [i / 100 for i in range(5, 96)],
+) -> pyspark.sql.DataFrame:
+    """Generate the dataset ready to produce a Q-Q plot.
+
+    This will produce Q-Q plot data about a given `feature` found in two different
+    datasets.
+
+    Args:
+        df1: Input DataFrame with feature as a column.
+        df2: Input DataFrame with feature as a column.
+        feature: Name of the feature in both df1 and df2.
+        quantiles: List of the quantiles to be computed.
+
+    Returns:
+        A DataFrame with 3 columns:
+          - `quantiles`: the quantiles
+          - `x`: feature quantiles values in df1
+          - `y`: feature quantiles values in df2
+
+    """
+    assert feature in df1.columns
+    assert feature in df2.columns
+
+    spark = sf_datalake.utils.get_spark_session()
+
+    values = df1.approxQuantile(feature, quantiles, 0.001)
+    dataset1 = spark.createDataFrame(list(zip(quantiles, values)), ["quantiles", "x"])
+
+    values = df2.approxQuantile(feature, quantiles, 0.001)
+    dataset2 = spark.createDataFrame(list(zip(quantiles, values)), ["quantiles", "y"])
+
+    dataset = dataset1.join(dataset2, how="left", on="quantiles").orderBy("quantiles")
+    return dataset
+
+
+def covid19_adapter_params(
+    df: pyspark.sql.DataFrame, features: List[str], config: dict
+) -> dict:
+    """Generates parameters to adapt post-pandemic data over a set of features.
+
+    Parameters are built using a linear model fit on post-pandemic quantiles vs
+    pre-pandemic quantiles.
+
+    Args:
+        df: input DataFrame.
+        features: name of the features to run the fit on.
+        config: model configuration, as loaded by utils.get_config().
+
+    Returns:
+        A dict with features as keys. For each feature, the structure is as follows:
+            {
+                "params": list of the linear fit parameters (intercept + coefficient).
+                "rmse": root mean square error of the linear fit.
+                "r2": r square of the linear fit.
+            }
+
+    """
+    pipeline_preprocessor = Pipeline(
+        stages=sf_datalake.transform.generate_preprocessing_stages(config)
+    )
+    df = pipeline_preprocessor.fit(df).transform(df)
+
+    # Keep data from the first date of the learning period
+    df = df.filter(df["periode"] >= config["TRAIN_DATES"][0])
+
+    # Split training data according to a date associated with the beginning of
+    # the pandemic event
+    df1 = df.filter(df["periode"] <= config["PANDEMIC_EVENT_DATE"]).select(features)
+    df2 = df.filter(df["periode"] > config["PANDEMIC_EVENT_DATE"]).select(features)
+
+    adapter_params = {}
+    for feat in features:
+        df = qqplot_dataset(df1, df2, feature=feat)
+        df_va = (
+            VectorAssembler(inputCols=["y"], outputCol="features")
+            .transform(df)
+            .select(["features", "x"])
+        )
+
+        lr = LinearRegression(featuresCol="features", labelCol="x")
+        lr_model = lr.fit(df_va)
+        adapter_params[feat] = {
+            "params": [lr_model.intercept, lr_model.coefficients[0]],
+            "rmse": lr_model.summary.rootMeanSquaredError,
+            "r2": lr_model.summary.r2,
+        }
+
+    return adapter_params
 
 
 def print_spark_df_scores(results: pyspark.sql.DataFrame):

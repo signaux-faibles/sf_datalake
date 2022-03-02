@@ -4,6 +4,8 @@ import json
 from typing import Dict, List
 
 import pkg_resources
+import pyspark.sql.functions as F
+import pyspark.sql.types as T
 from pyspark.sql import SparkSession
 
 
@@ -77,3 +79,16 @@ def feature_index(config: dict) -> List[str]:
                 f"Indexing for transformer {transformer} is not implemented yet."
             )
     return indexer
+
+
+@F.udf(returnType=T.ArrayType(T.FloatType()))
+def dense_to_array_udf(assembled_feature: str) -> F.udf:
+    """Transform an assembled column as an array.
+
+    Args:
+        assembled_feature: assembled feature
+
+    Returns:
+        An F.udf function
+    """
+    return [float(x) for x in assembled_feature]

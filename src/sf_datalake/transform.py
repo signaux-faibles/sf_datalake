@@ -85,7 +85,7 @@ def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
 
 
 def get_transformer(name: str) -> Transformer:
-    """Get a pre-configured Transformer object by specifying its name.
+    """Gets a pre-configured Transformer object by specifying its name.
 
     Args:
         name: Transformer object's name
@@ -167,6 +167,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
         AvgDeltaDebtPerSizeColumnAdder(config),
         DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
+        Covid19Adapter(config),
         DatasetColumnSelector(config),
     ]
     return stages
@@ -294,7 +295,7 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
         """
         if not ({"paydex_bin", "paydex_yoy"} & set(self.config["FEATURES"])):
             logging.info(
-                "paydex data was not requested as a feature inside the provided \
+                "Paydex data was not requested as a feature inside the provided \
                 configuration file."
             )
             return dataset
@@ -306,6 +307,9 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             "paydex_yoy",
             dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
         )
+
+        if not "paydex_bin" in self.config["FEATURES"]:
+            return dataset
 
         ## Binned paydex delay
         days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
@@ -505,3 +509,41 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
         """
         transform_udf = F.udf(lambda v: float(v[1]), FloatType())
         return dataset.withColumn("probability", transform_udf("probability"))
+
+
+class Covid19Adapter(Transformer):  # pylint: disable=R0903
+    """Adapt post-pandemic data using linear fits of features quantiles."""
+
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Adapts post-pandemic data using linear fits of features quantiles.
+
+        Adapt post-pandemic event data through linear fits of the pre-pandemic quantiles
+        --> post-pandemic quantiles mappings (for each variable that ).
+
+        Args:
+            dataset: DataFrame to transform.
+
+        Returns:
+            Transformed DataFrame with post-pandemic data adapted to fit pre-pandemic
+              distribution.
+
+        """
+        if not self.config["USE_COVID19ADAPTER"]:
+            return dataset
+
+        assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
+        for feat in self.config["FEATURES_TO_ADAPT"]:
+            dataset = dataset.withColumn(
+                feat,
+                F.when(
+                    F.col("periode") > self.config["PANDEMIC_EVENT_DATE"],
+                    self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][0]
+                    + self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][1]
+                    * F.col(feat),
+                ).otherwise(F.col(feat)),
+            )
+        return dataset

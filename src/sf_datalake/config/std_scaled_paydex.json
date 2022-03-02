@@ -2,6 +2,7 @@
     "OUTPUT_ROOT_DIR": "/projets/TSF/donnees",
     "DATA_ROOT_DIR": "/projets/TSF/sources",
     "FILL_MISSING_VALUES": true,
+    "USE_COVID19ADAPTER": false,
     "SAMPLE_RATIO": 1.0,
     "TRAIN_TEST_SPLIT_RATIO": 0.8,
     "TARGET_OVERSAMPLING_RATIO": 0.2,
@@ -15,6 +16,7 @@
         "2018-11-01"
     ],
     "PREDICTION_DATE": "2020-02-01",
+    "PANDEMIC_EVENT_DATE": "2020-02-29",
     "MODEL": {
         "NAME": "LogisticRegression",
         "REGULARIZATION_COEFF": 0.05,
@@ -57,8 +59,111 @@
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
         "avg_delta_dette_par_effectif": "StandardScaler",
-        "paydex_bin": "StandardScaler",
+        "paydex_nb_jours": "StandardScaler",
         "paydex_yoy": "StandardScaler"
+    },
+    "FEATURES_TO_ADAPT": [
+        "MNT_AF_BFONC_BFR",
+        "MNT_AF_BFONC_TRESORERIE",
+        "RTO_AF_RATIO_RENT_MBE",
+        "MNT_AF_BFONC_FRNG",
+        "MNT_AF_CA",
+        "MNT_AF_SIG_EBE_RET",
+        "RTO_AF_RENT_ECO",
+        "RTO_AF_SOLIDITE_FINANCIERE",
+        "RTO_INVEST_CA",
+        "cotisation",
+        "effectif"
+    ],
+    "COVID_ADAPTER_PARAMETERS": {
+        "MNT_AF_BFONC_BFR": {
+            "params": [
+                23623.665674728258,
+                0.5629694326657564
+            ],
+            "rmse": 70571.22084858362,
+            "r2": 0.9940361612169091
+        },
+        "MNT_AF_BFONC_TRESORERIE": {
+            "params": [
+                22236.184117106088,
+                0.5841292614339604
+            ],
+            "rmse": 42171.00682101867,
+            "r2": 0.9944725281058036
+        },
+        "RTO_AF_RATIO_RENT_MBE": {
+            "params": [
+                -0.0015722972109895586,
+                1.0464419929184383
+            ],
+            "rmse": 0.0014390084193837763,
+            "r2": 0.999422153539393
+        },
+        "MNT_AF_BFONC_FRNG": {
+            "params": [
+                59213.016524039755,
+                0.5729557297737937
+            ],
+            "rmse": 95524.35412399008,
+            "r2": 0.9952842529340152
+        },
+        "MNT_AF_CA": {
+            "params": [
+                960810.9153172815,
+                0.41353858849763436
+            ],
+            "rmse": 972975.2806476083,
+            "r2": 0.9817355692218368
+        },
+        "MNT_AF_SIG_EBE_RET": {
+            "params": [
+                38680.8834803771,
+                0.5160236404276309
+            ],
+            "rmse": 63670.270806772,
+            "r2": 0.9778103093621975
+        },
+        "RTO_AF_RENT_ECO": {
+            "params": [
+                -0.009450544412868727,
+                1.1473067958388148
+            ],
+            "rmse": 0.005281719432831142,
+            "r2": 0.9992802110584927
+        },
+        "RTO_AF_SOLIDITE_FINANCIERE": {
+            "params": [
+                -0.03858807453691644,
+                1.0472144997536623
+            ],
+            "rmse": 0.005608115232355715,
+            "r2": 0.9991168735366558
+        },
+        "RTO_INVEST_CA": {
+            "params": [
+                -0.004315476083762521,
+                0.9939477218690744
+            ],
+            "rmse": 0.004566023973095764,
+            "r2": 0.9986652084031244
+        },
+        "cotisation": {
+            "params": [
+                100.91665931258059,
+                1.1356772860529647
+            ],
+            "rmse": 593.7368742398097,
+            "r2": 0.9996548293427363
+        },
+        "effectif": {
+            "params": [
+                -0.9358249557851157,
+                1.0530334074660543
+            ],
+            "rmse": 0.7119727250833081,
+            "r2": 0.9994210784203903
+        }
     },
     "AGG_DICT": {
         "cotisation": "sum",
@@ -85,7 +190,6 @@
         "paydex_nb_jours": 0,
         "paydex_nb_jours_past_12": 0,
         "paydex_yoy": 0,
-        "paydex_bin": 0,
         "montant_part_ouvriere_past_12": 0.0,
         "montant_part_patronale_past_12": 0.0,
         "montant_part_ouvriere_past_6": 0.0,
