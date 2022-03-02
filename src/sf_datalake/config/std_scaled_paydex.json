@@ -59,7 +59,7 @@
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
         "avg_delta_dette_par_effectif": "StandardScaler",
-        "paydex_bin": "StandardScaler",
+        "paydex_nb_jours": "StandardScaler",
         "paydex_yoy": "StandardScaler"
     },
     "FEATURES_TO_ADAPT": [
@@ -190,7 +190,6 @@
         "paydex_nb_jours": 0,
         "paydex_nb_jours_past_12": 0,
         "paydex_yoy": 0,
-        "paydex_bin": 0,
         "montant_part_ouvriere_past_12": 0.0,
         "montant_part_patronale_past_12": 0.0,
         "montant_part_ouvriere_past_6": 0.0,

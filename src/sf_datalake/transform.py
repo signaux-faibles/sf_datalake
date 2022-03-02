@@ -292,6 +292,9 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
         )
 
+        if not "paydex_bin" in self.config["FEATURES"]:
+            return dataset
+
         ## Binned paydex delay
         days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
         days_splits = np.unique(np.array([float(v) for v in chain(*days_bins)]))
