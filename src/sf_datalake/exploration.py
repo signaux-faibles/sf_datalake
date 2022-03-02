@@ -194,20 +194,20 @@ def adapter_covid19_params(
     """Generate for each feature , the necessary parameters to
     adapt a feature after the pandemic event.
 
-    Parameters come from a linear model fit on quantiles
-    post-pandemic to predict pre-pandemic.
+    Parameters come from a linear model fit on post-pandemic
+    quantiles to predict pre-pandemic ones.
 
     Args:
         df: input DataFrame
-        features: name of the features to unbias
+        features: name of the features to adapt
         config: model configuration, as loaded by utils.get_config().
 
     Returns:
         A dict with features as keys. For each feature, the following dict:
             {
-                "params": list of the parameters to unbias the feature
-                "rmse": root mean square error of the unbias model for the feature
-                "r2": r square of the unbias model for the feature
+                "params": list of the parameters to adapt the feature
+                "rmse": root mean square error of the model to adapt the feature
+                "r2": r square of the model to adapt the feature
             }
     """
     pipeline_preprocessor = Pipeline(

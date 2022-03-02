@@ -493,17 +493,15 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
 
 
 class Covid19Adapter(Transformer):  # pylint: disable=R0903
-    """A transformer to unbias data after COVID-19 event."""
+    """Adapt post-pandemic data using linear fits of features quantiles."""
 
     def __init__(self, config) -> None:
         super().__init__()
         self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Adapt post-pandemic data using linear fits of features quantiles.
-
-        Adapt data after a pandemic event by a linear model fit on
-        quantiles post-pandemic to predict pre-pandemic.
+        """Adapt data after a pandemic event by a linear model fit on
+        post-pandemic quantiles to predict pre-pandemic ones.
 
         Args:
             dataset: DataFrame to transform.
