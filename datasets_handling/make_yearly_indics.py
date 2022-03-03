@@ -1,9 +1,17 @@
 """Build a dataset of yearly DGFiP data.
 
-This follows MRV's process, originally written in SAS.
+This follows MRV's process, originally written in SAS. Source data should be stored
+beforehand inside an input directory which, in turn, contains 3 directories containing
+the data as (possibly multiple) orc file(s):
+- etl_decla-declarations_indmap
+- etl_decla-declarations_af
+- rar.rar_tva_exercice
+
+A yearly dataset will be stored as split orc files under the chosen output directory.
 
 USAGE
-    python make_yearly_data.py <DGFiP_vues_directory> <output_directory>
+    python make_yearly_data.py <DGFiP_tables_directory> <output_directory>
+
 """
 from os import path
 
@@ -17,14 +25,14 @@ from sf_datalake import DGFIP_VARIABLES
 # Loading datasets #
 ####################
 
-parser = sf_datalake.io.data_path_parser("orc")
+parser = sf_datalake.io.data_path_parser()
 parser.description = "Build a dataset of yearly DGFiP data."
 args = parser.parse_args()
 
 data_paths = {
-    "indmap": path.join(args.input_dir, "etl_decla-declarations_indmap"),
-    "af": path.join(args.input_dir, "etl_decla-declarations_af"),
-    "rar_tva": path.join(args.input_dir, "rar.rar_tva_exercice"),
+    "indmap": path.join(args.input, "etl_decla-declarations_indmap"),
+    "af": path.join(args.input, "etl_decla-declarations_af"),
+    "rar_tva": path.join(args.input, "rar.rar_tva_exercice"),
 }
 datasets = sf_datalake.io.load_data(data_paths, file_format="orc")
 
@@ -42,21 +50,21 @@ df = (
     .select(DGFIP_VARIABLES)
 )
 
-# Jointure RAR_TVA
+# Join RAR_TVA
 df = df.join(
     datasets["rar_tva"],
     on=["siren", "date_deb_exercice", "date_fin_exercice"],
     how="left",
 )
 
-# Calcul taux d'accroissement
+# Drop duplicates
 df = df.withColumn(
     "per_rank",
     F.dense_rank().over(Window.partitionBy("siren").orderBy("date_deb_exercice")),
-).drop_duplicates(
-    subset=["siren", "per_rank"]
-)  # 2 obs with the same "date_deb_exercice" --> only keep 1
+).drop_duplicates(subset=["siren", "per_rank"])
+# TODO: review this drop. Here, 2 obs with the same "date_deb_exercice" --> only keep 1
 
+# Compute variations
 df_ante = df.alias("df_ante")
 for col in df_ante.columns:
     df_ante = df_ante.withColumnRenamed(col, f"{col}_ante")
@@ -93,4 +101,4 @@ indics_annuels = df.join(
 )
 
 
-indics_annuels.write.format("orc").save(args.output_dir)
+indics_annuels.write.format("orc").save(args.output)

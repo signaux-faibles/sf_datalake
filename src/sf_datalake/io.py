@@ -11,12 +11,12 @@ import pyspark.sql
 import sf_datalake.utils
 
 
-def data_path_parser(input_type: str = "orc") -> argparse.ArgumentParser:
+def data_path_parser() -> argparse.ArgumentParser:
     """Creates a general argument parser for data file / directories io handling.
 
-    Args:
-        input_type: Whether the inputs should be looked for either as csv files or as
-          a directory containing orc files.
+    Two positional arguments are added without default value:
+    1) data input directory.
+    2) data output directory.
 
     Returns:
         An ArgumentParser object ready to be used as is or further customized.
@@ -24,26 +24,17 @@ def data_path_parser(input_type: str = "orc") -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(description="General parser for data files io.")
     parser.add_argument(
-        "-t",
-        "--input_type",
-        help="""Describes if the inputs should be looked for either as csv files or as
-        a directory containing orc files.""",
-        choices=["csv", "orc"],
-        default=input_type,
-    )
-    parser.add_argument(
-        "input_dir",
-        help="""Path to the directory containing tables saved as orc. Each table will be
-        looked for either:
-        - As a directory containing orc part files, this directory name is the original
-        table name, without any extension.
-        - As a single (possibly gzipped) csv file.
+        "input",
+        help="""Path to an input source. Can be either:
+        - A directory containing different files.
+        - A single file.
+
+        These should be readable by a pyspark.sql.DataFrameReader subclass instance.
         """,
     )
     parser.add_argument(
-        "output_dir",
-        help="""Output directory where the output dataset(s) will be stored (as multiple
-        orc files).""",
+        "output",
+        help="""Output path where the output dataset(s) will be stored.""",
     )
     return parser
 
@@ -51,6 +42,7 @@ def data_path_parser(input_type: str = "orc") -> argparse.ArgumentParser:
 def load_data(
     data_paths: Dict[str, str],
     file_format: str = None,
+    sep: str = ",",
     spl_ratio: float = None,
     seed: int = 1234,
 ) -> Dict[str, pyspark.sql.DataFrame]:
@@ -60,7 +52,8 @@ def load_data(
         data_paths: A dict[str, str] structured as follows: {dataframe_name: file_path}
           `dataframe_name` will be the key to use to get access to a given DataFrame in
           the returned dict.
-        file_format: The file format, can be either csv or orc.
+        file_format: The file format, can be either "csv" or "orc".
+        sep: Separator character, in case `file_format` is "csv".
         spl_ratio: If stated, the size of the return sampled datasets, as a fraction of
           the full datasets respective sizes.
         seed: A random seed, used for sub-sampling in case spl_ratio is < 1.
@@ -76,7 +69,7 @@ def load_data(
         if file_format is None:
             file_format = path.splitext(file_path)[-1][1:]
         if file_format == "csv":
-            df = spark.read.csv(file_path, sep="|", inferSchema=True, header=True)
+            df = spark.read.csv(file_path, sep=sep, inferSchema=True, header=True)
         elif file_format == "orc":
             df = spark.read.orc(file_path)
         else:
@@ -87,18 +80,19 @@ def load_data(
     return datasets
 
 
-def csv_to_orc(input_filename: str, output_filename: str):
+def csv_to_orc(input_filename: str, output_filename: str, sep: str):
     """Writes a file stored as csv in orc format.
 
     Args:
         input_filename: Path to a csv file.
         output_filename: Path to write the output orc file to.
+        sep: Separator character.
 
     """
     spark = sf_datalake.utils.get_spark_session()
     df = spark.read.csv(
         input_filename,
-        sep="|",
+        sep=sep,
         inferSchema=True,
         header=True,
     )

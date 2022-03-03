@@ -1,6 +1,12 @@
 """Build a dataset of monthly TVA data.
 
-This follows MRV's process, originally written in SAS: `21_indicateurs.sas`
+This follows MRV's process, originally written in SAS: `21_indicateurs.sas`. Source data
+should be stored beforehand inside an input directory which, in turn, contains the 4
+following directories containing the data as (possibly multiple) orc file(s):
+- pub_risq_oracle.t_art
+- pub_risq_oracle.t_mvt
+- etl_tva.liasse_tva_ca3_view
+- etl_refent-T_ETABLISSEMENT_ANNEE
 
 USAGE
     python make_monthly_data.py <DGFiP_vues_directory> <output_directory>
@@ -18,19 +24,16 @@ import sf_datalake.transform
 # Loading datasets #
 ####################
 
-parser = sf_datalake.io.data_path_parser("orc")
-parser.description = "Build a dataset of monthly TVA data."
+parser = sf_datalake.io.data_path_parser()
+parser.description = "Build a dataset of monthly/quarterly TVA data."
 args = parser.parse_args()
 
 data_paths = {
-    "t_art": path.join(args.input_dir, "pub_risq_oracle.t_art"),
-    "t_mvt": path.join(args.input_dir, "pub_risq_oracle.t_mvt"),
-    "liasse_tva_ca3": path.join(args.input_dir, "etl_tva.liasse_tva_ca3_view"),
-    "t_etablissement_annee": path.join(
-        args.input_dir, "etl_refent-T_ETABLISSEMENT_ANNEE"
-    ),
+    "t_art": path.join(args.input, "pub_risq_oracle.t_art"),
+    "t_mvt": path.join(args.input, "pub_risq_oracle.t_mvt"),
+    "liasse_tva_ca3": path.join(args.input, "etl_tva.liasse_tva_ca3_view"),
+    "t_etablissement_annee": path.join(args.input, "etl_refent-T_ETABLISSEMENT_ANNEE"),
 }
-
 datasets = sf_datalake.io.load_data(data_paths, file_format="orc")
 
 #######
@@ -105,7 +108,7 @@ x_creances = x_creances.withColumn(
     "IND_HCF", F.when(F.col("ART_DATEDCF").isNotNull(), 0).otherwise(1)
 )
 
-# TODO vérifier comment ces opérations se comportent vis à vis des nulls
+# TODO review how these operations handle null values.
 rar_mois_article = x_creances.withColumn(
     "MNT_PAIEMENT_CUM_TOT",
     sum(x_creances[col] for col in ["MNT_PAIEMENT_CUM", "MNT_PAIEMENT_CUM_AUTRE"]),
@@ -302,5 +305,5 @@ x_tva = x_tva.withColumn(
 x_tva = x_tva.withColumn("M_TVA_NET_DUE", F.col("D3310_28") + F.col("D3517S_28_i"))
 
 # Write file
-rar_mois_article.write.format("orc").save(path.join("rar"))
-x_tva.write.format("orc").save(path.join("tva"))
+rar_mois_article.write.format("orc").save(path.join(args.output, "rar"))
+x_tva.write.format("orc").save(path.join(args.output, "tva"))
