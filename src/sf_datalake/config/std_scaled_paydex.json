@@ -7,16 +7,16 @@
     "N_CONCERNING_MICRO": 3,
     "TRAIN_DATES": [
         "2016-01-01",
-        "2018-05-31"
+        "2019-05-31"
     ],
     "TEST_DATES": [
-        "2018-06-01",
-        "2018-11-01"
+        "2019-06-01",
+        "2020-01-31"
     ],
     "PREDICTION_DATE": "2020-02-01",
     "MODEL": {
         "NAME": "LogisticRegression",
-        "REGULARIZATION_COEFF": 0.05,
+        "REGULARIZATION_COEFF": 0.12,
         "MAX_ITER": 50,
         "TOL": 1e-05
     },
