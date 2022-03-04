@@ -92,13 +92,11 @@ for col in df.columns:
 
 tac = tac_base.select(tac_columns + key_columns)
 
-##  'taux d'accroissement' DataFrame join
-
+# 'taux d'accroissement' DataFrame join
 indics_annuels = df.join(
     tac,
     on=["siren", "date_deb_exercice", "date_fin_exercice"],
     how="left",
 )
-
 
 indics_annuels.write.format("orc").save(args.output)

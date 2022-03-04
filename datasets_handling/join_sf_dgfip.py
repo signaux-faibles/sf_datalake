@@ -7,8 +7,8 @@ USAGE
     --output <output_directory>
 
 """
-
 import argparse
+from os import path
 
 import pyspark.sql.functions as F
 
@@ -31,7 +31,7 @@ parser.add_argument(
 parser.add_argument(
     "--output",
     destination="output",
-    help="Path to the target output directory.",
+    help="Path to the output dataset.",
 )
 parser.add_argument(
     "--diff",
@@ -39,6 +39,8 @@ parser.add_argument(
     help="""Difference between 'arrete_bilan_diane' and 'periode' that will be
     used to complete missing diane accounting year end date (used as a join key).
     """,
+    type=int,
+    default=392,
 )
 
 args = parser.parse_args()
@@ -71,3 +73,5 @@ df_joined = df_sf.join(
     ],
     how="full_outer",
 )
+
+df_joined.write.format("orc").save(path.join(args.output))
