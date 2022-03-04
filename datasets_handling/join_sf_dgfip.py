@@ -20,22 +20,22 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument(
     "--sf",
-    destination="sf_data",
+    dest="sf_data",
     help="Path to the Signaux Faibles dataset.",
 )
 parser.add_argument(
     "--dgfip",
-    destination="dgfip_data",
+    dest="dgfip_data",
     help="Path to the dgfip dataset.",
 )
 parser.add_argument(
     "--output",
-    destination="output",
+    dest="output",
     help="Path to the output dataset.",
 )
 parser.add_argument(
     "--diff",
-    destination="bilan_periode_diff",
+    dest="bilan_periode_diff",
     help="""Difference between 'arrete_bilan_diane' and 'periode' that will be
     used to complete missing diane accounting year end date (used as a join key).
     """,
@@ -61,7 +61,7 @@ df_sf = stringify_and_pad_siren(datasets["sf"]).withColumn(
     "approx_date_fin_exercice",
     F.coalesce(
         F.col("arrete_bilan_diane"),
-        F.last_day(F.date_add(F.col("periode"), args.diff)),
+        F.last_day(F.date_add(F.col("periode"), args.bilan_periode_diff)),
     ),
 )
 
