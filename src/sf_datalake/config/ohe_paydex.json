@@ -1,5 +1,5 @@
 {
-    "OUTPUT_ROOT_DIR": "/projets/TSF/donnees",
+    "OUTPUT_ROOT_DIR": "/projets/TSF/predictions",
     "FILL_MISSING_VALUES": true,
     "SAMPLE_RATIO": 1.0,
     "TRAIN_TEST_SPLIT_RATIO": 0.8,
