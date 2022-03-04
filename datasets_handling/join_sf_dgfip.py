@@ -56,20 +56,24 @@ datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format
 
 ## Join datasets
 
-df_dgfip = datasets["dgfip"].withColumnRenamed("siren", "siren_dgfip")
+df_dgfip = datasets["dgfip"].withColumn(
+    "join_date", F.year(datasets["dgfip"].date_fin_exercice)
+)
 df_sf = stringify_and_pad_siren(datasets["sf"]).withColumn(
-    "approx_date_fin_exercice",
-    F.coalesce(
-        F.col("arrete_bilan_diane"),
-        F.last_day(F.date_add(F.col("periode"), args.bilan_periode_diff)),
+    "join_date",
+    F.year(
+        F.coalesce(
+            F.col("arrete_bilan_diane"),
+            F.last_day(F.date_add(F.col("periode"), args.bilan_periode_diff)),
+        )
     ),
 )
 
 df_joined = df_sf.join(
     df_dgfip,
     on=[
-        F.year(df_sf.approx_date_fin_exercice) == F.year(df_dgfip.date_fin_exercice),
-        df_sf.siren == df_dgfip.siren,
+        "join_date",
+        "siren",
     ],
     how="full_outer",
 )
