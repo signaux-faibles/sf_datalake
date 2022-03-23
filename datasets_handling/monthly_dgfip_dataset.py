@@ -13,10 +13,18 @@ USAGE
 
 """
 
+import os
+import sys
 from os import path
 
 import pyspark.sql.functions as F
 
+# isort: off
+sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
+sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
+# isort: on
+
+# pylint: disable = C0413
 import sf_datalake.io
 import sf_datalake.transform
 

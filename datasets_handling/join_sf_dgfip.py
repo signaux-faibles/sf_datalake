@@ -8,10 +8,18 @@ USAGE
 
 """
 import argparse
+import os
+import sys
 from os import path
 
 import pyspark.sql.functions as F
 
+# isort: off
+sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
+sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
+# isort: on
+
+# pylint: disable=C0413
 from sf_datalake.io import load_data
 from sf_datalake.transform import stringify_and_pad_siren
 
@@ -40,7 +48,7 @@ parser.add_argument(
     used to complete missing diane accounting year end date (used as a join key).
     """,
     type=int,
-    default=392,
+    default=-392,
 )
 
 args = parser.parse_args()

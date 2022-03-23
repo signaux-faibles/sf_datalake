@@ -13,11 +13,19 @@ USAGE
     python make_yearly_data.py <DGFiP_tables_directory> <output_directory>
 
 """
+import os
+import sys
 from os import path
 
 import pyspark.sql.functions as F
 from pyspark.sql.window import Window
 
+# isort: off
+sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
+sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
+# isort: on
+
+# pylint: disable=C0413
 import sf_datalake.io
 from sf_datalake import DGFIP_VARIABLES
 
