@@ -1,7 +1,7 @@
 {
     "maacdo": {
         "default": {
-            "version": "v2.0.0"
+            "version": "v2.1.0"
         },
         "an-sf-datalake-CI_COMMIT_REF_SLUG-(branch or tag)": {
             "version": "the-branch-or-tag-to-be-checked-out-from-the-maacdo-gitlab-repository"
