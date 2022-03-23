@@ -1,7 +1,7 @@
 """Main script for statistical prediction of company failure."""
 
 import argparse
-import datetime
+import datetime as dt
 import logging
 import os
 import random
@@ -34,9 +34,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         config[param] = value
     if args.output_directory is None:
         output_directory = path.join(
-            config["OUTPUT_ROOT_DIR"],
-            "sorties_modeles",
-            datetime.date.today().isoformat(),
+            config["OUTPUT_ROOT_DIR"], str(int(dt.datetime.now().timestamp()))
         )
     else:
         output_directory = args.output_directory
