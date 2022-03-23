@@ -8,7 +8,6 @@ import random
 import sys
 from os import path
 
-import pyspark
 from pyspark.ml import Pipeline
 
 # isort: off
@@ -51,7 +50,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         file_format="orc",
         spl_ratio=config["SAMPLE_RATIO"],
         seed=config["SEED"],
-    )["yearly_data"].persist(pyspark.StorageLevel.MEMORY_AND_DISK)
+    )["yearly_data"]
 
     pipeline_preprocessor = Pipeline(
         stages=sf_datalake.transform.generate_preprocessing_stages(config)
