@@ -130,7 +130,6 @@ if __name__ == "__main__":
         dest="DATASET",
         type=str,
         help="Path to the dataset that will be used both for training.",
-        default="/projets/TSF/sources/base/indicateurs_annuels.orc",
     )
     parser.add_argument(
         "--output_directory",
