@@ -1,5 +1,6 @@
 """Utility functions for data handling."""
 
+import argparse
 import logging
 from os import path
 from typing import Dict, Iterable, Optional
@@ -10,8 +11,40 @@ import pyspark.sql
 import sf_datalake.utils
 
 
+def data_path_parser() -> argparse.ArgumentParser:
+    """Creates a general argument parser for data file / directories io handling.
+
+    Two positional arguments are added without default value:
+    1) data input directory.
+    2) data output directory.
+
+    Returns:
+        An ArgumentParser object ready to be used as is or further customized.
+
+    """
+    parser = argparse.ArgumentParser(description="General parser for data files io.")
+    parser.add_argument(
+        "input",
+        help="""Path to an input source. Can be either:
+        - A directory containing different files.
+        - A single file.
+
+        These should be readable by a pyspark.sql.DataFrameReader subclass instance.
+        """,
+    )
+    parser.add_argument(
+        "output",
+        help="""Output path where the output dataset(s) will be stored.""",
+    )
+    return parser
+
+
 def load_data(
-    data_paths: Dict[str, str], spl_ratio: float = None, seed: int = 1234
+    data_paths: Dict[str, str],
+    file_format: str = None,
+    sep: str = ",",
+    spl_ratio: float = None,
+    seed: int = 1234,
 ) -> Dict[str, pyspark.sql.DataFrame]:
     """Loads one or more orc-stored datasets and returns them in a dict.
 
@@ -19,35 +52,49 @@ def load_data(
         data_paths: A dict[str, str] structured as follows: {dataframe_name: file_path}
           `dataframe_name` will be the key to use to get access to a given DataFrame in
           the returned dict.
+        file_format: The file format, can be either "csv" or "orc".
+        sep: Separator character, in case `file_format` is "csv".
         spl_ratio: If stated, the size of the return sampled datasets, as a fraction of
           the full datasets respective sizes.
+        seed: A random seed, used for sub-sampling in case spl_ratio is < 1.
 
     Returns:
-        A dictionary of DataFrame objects.
+        A dictionary of datasets as pyspark DataFrame objects.
 
     """
     datasets = {}
 
     spark = sf_datalake.utils.get_spark_session()
     for name, file_path in data_paths.items():
-        df = spark.read.orc(file_path)
+        if file_format is None:
+            file_format = path.splitext(file_path)[-1][1:]
+        if file_format == "csv":
+            df = spark.read.csv(file_path, sep=sep, inferSchema=True, header=True)
+        elif file_format == "orc":
+            df = spark.read.orc(file_path)
+        else:
+            raise ValueError(f"Unknown file format {file_format}.")
         if spl_ratio is not None:
             df = df.sample(fraction=spl_ratio, seed=seed)
         datasets[name] = df
     return datasets
 
 
-def csv_to_orc(input_filename: str, output_filename: str):
+def csv_to_orc(input_filename: str, output_filename: str, sep: str):
     """Writes a file stored as csv in orc format.
 
     Args:
         input_filename: Path to a csv file.
         output_filename: Path to write the output orc file to.
+        sep: Separator character.
 
     """
     spark = sf_datalake.utils.get_spark_session()
-    df = spark.read.options(inferSchema="True", header="True", delimiter="|").csv(
-        path.join(input_filename)
+    df = spark.read.csv(
+        input_filename,
+        sep=sep,
+        inferSchema=True,
+        header=True,
     )
     df.write.format("orc").save(output_filename)
 

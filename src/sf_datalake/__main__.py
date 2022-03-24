@@ -1,12 +1,14 @@
 """Main script for statistical prediction of company failure."""
 
 import argparse
-import datetime
+import datetime as dt
 import logging
 import os
 import random
 import sys
 from os import path
+
+from pyspark.ml import Pipeline
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -14,8 +16,6 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint: disable=C0413
-
-from pyspark.ml import Pipeline
 
 import sf_datalake.io
 import sf_datalake.model
@@ -34,9 +34,7 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         config[param] = value
     if args.output_directory is None:
         output_directory = path.join(
-            config["OUTPUT_ROOT_DIR"],
-            "sorties_modeles",
-            datetime.date.today().isoformat(),
+            config["OUTPUT_ROOT_DIR"], str(int(dt.datetime.now().timestamp()))
         )
     else:
         output_directory = args.output_directory
@@ -48,11 +46,8 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
 
     # Prepare data.
     yearly_data = sf_datalake.io.load_data(
-        {
-            "yearly_data": path.join(
-                config["DATA_ROOT_DIR"], "base/indicateurs_annuels.orc"
-            ),
-        },
+        {"yearly_data": config["DATASET"]},
+        file_format="orc",
         spl_ratio=config["SAMPLE_RATIO"],
         seed=config["SEED"],
     )["yearly_data"]
@@ -127,6 +122,12 @@ if __name__ == "__main__":
         'base.json' will be used.
         """,
         default="base.json",
+    )
+    parser.add_argument(
+        "--dataset",
+        dest="DATASET",
+        type=str,
+        help="Path to the dataset that will be used both for training.",
     )
     parser.add_argument(
         "--output_directory",
