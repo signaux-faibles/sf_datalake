@@ -1,6 +1,6 @@
 """Build a dataset by joining DGFiP and Signaux Faibles data.
 
-The join is made along temporal and SIRET variables.
+The join is made along temporal and SIREN variables.
 
 USAGE
     python join_sf_dgfip.py --sf <sf_dataset> --dgfip <DGFiP_dataset> \
@@ -34,7 +34,7 @@ parser.add_argument(
 parser.add_argument(
     "--dgfip",
     dest="dgfip_data",
-    help="Path to the dgfip dataset.",
+    help="Path to the DGFiP dataset.",
 )
 parser.add_argument(
     "--output",
