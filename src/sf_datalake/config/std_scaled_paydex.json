@@ -1,6 +1,6 @@
 {
     "OUTPUT_ROOT_DIR": "/projets/TSF/predictions",
-    "DATASET": "/projets/TSF/donnees/agg/yearly_joined_data_has_paydex",
+    "DATASET": "/projets/TSF/donnees/agg/full_dataset_has_paydex",
     "FILL_MISSING_VALUES": true,
     "USE_COVID19ADAPTER": false,
     "SAMPLE_RATIO": 1.0,
