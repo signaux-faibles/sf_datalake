@@ -27,7 +27,6 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 import sf_datalake.io
-from sf_datalake import DGFIP_VARIABLES
 
 ####################
 # Loading datasets #
@@ -40,71 +39,41 @@ args = parser.parse_args()
 data_paths = {
     "indmap": path.join(args.input, "etl_decla-declarations_indmap"),
     "af": path.join(args.input, "etl_decla-declarations_af"),
-    "rar_tva": path.join(args.input, "rar.rar_tva_exercice"),
+    "rar_tva": path.join(args.input, "rar_tva_exercice"),
 }
 datasets = sf_datalake.io.load_data(data_paths, file_format="orc")
+
+# Set every column name to lower case (if not already).
+for name, ds in datasets.items():
+    datasets[name] = ds.toDF(*(col.lower() for col in ds.columns))
 
 ###################
 # Merge datasets  #
 ###################
 
-df = (
-    datasets["indmap"]
-    .join(
-        datasets["af"],
-        on=["siren", "date_deb_exercice", "date_fin_exercice"],
-        how="left",
-    )
-    .select(DGFIP_VARIABLES)
+join_columns = {"siren", "date_deb_exercice", "date_fin_exercice", "no_ocfi"}
+common_columns = set(datasets["af"].columns) & set(datasets["indmap"].columns)
+drop_columns = common_columns - join_columns
+# TODO: maybe we can drop less columns and still get a complete inner join,
+
+# Combine 'declarations' tables
+declarations = datasets["indmap"].join(
+    datasets["af"].drop(*drop_columns),
+    on=list(join_columns),
+    how="inner",
 )
 
-# Join RAR_TVA
-df = df.join(
-    datasets["rar_tva"],
-    on=["siren", "date_deb_exercice", "date_fin_exercice"],
-    how="left",
+# Join TVA annual debt data
+df = declarations.join(
+    datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
 )
 
-# Drop duplicates
-df = df.withColumn(
+# Drop accounting year duplicates
+df_nodup = df.withColumn(
     "per_rank",
     F.dense_rank().over(Window.partitionBy("siren").orderBy("date_deb_exercice")),
 ).drop_duplicates(subset=["siren", "per_rank"])
-# TODO: review this drop. Here, 2 obs with the same "date_deb_exercice" --> only keep 1
+# TODO: review this drop. Here, we only keep one "date_deb_exercice" whenever there is
+# more than one value associated with the same "date_fin_exercice".
 
-# Compute variations
-df_ante = df.alias("df_ante")
-for col in df_ante.columns:
-    df_ante = df_ante.withColumnRenamed(col, f"{col}_ante")
-
-tac_base = df.join(
-    df_ante,
-    on=[
-        df_ante.siren_ante == df.siren,
-        df_ante.per_rank_ante + 2 == df.per_rank,
-    ],
-    how="left",
-)
-
-tac_columns = []
-key_columns = ["siren", "date_deb_exercice", "date_fin_exercice"]
-skip_columns = ["per_rank"]
-
-for col in df.columns:
-    if not col in key_columns + skip_columns:
-        tac_base = tac_base.withColumn(
-            f"tac_1y_{col}",
-            (tac_base[col] - tac_base[f"{col}_ante"]) / (tac_base[f"{col}_ante"]),
-        )
-        tac_columns.append(f"tac_1y_{col}")
-
-tac = tac_base.select(tac_columns + key_columns)
-
-# 'taux d'accroissement' DataFrame join
-indics_annuels = df.join(
-    tac,
-    on=["siren", "date_deb_exercice", "date_fin_exercice"],
-    how="left",
-)
-
-indics_annuels.write.format("orc").save(args.output)
+df_nodup.write.format("orc").save(args.output)
