@@ -6,6 +6,7 @@ following directories containing the data as (possibly multiple) orc file(s):
 - t_art (pub_risq_oracle)
 - t_mvt (pub_risq_oracle)
 - liasse_tva_ca3_view (etl_tva)
+- liasse_tva_ca12_view (etl_tva)
 - etl_refent-T_ETABLISSEMENT_ANNEE
 
 USAGE
@@ -18,8 +19,8 @@ import sys
 from os import path
 
 import pyspark
+import pyspark.sql
 import pyspark.sql.functions as F
-from pyspark.sql.window import Window
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -29,8 +30,6 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # pylint: disable = C0413
 import sf_datalake.io
 import sf_datalake.transform
-
-## Utility function
 
 
 def process_payment(
@@ -46,33 +45,33 @@ def process_payment(
         A DataFrame with two new columns "nb_paiement" and "mnt_paiement_cum".
 
     """
-    output_cols = {"mnt": "MNT_PAIEMENT_CUM", "nb": "NB_PAIEMENT"}
+    output_cols = {"mnt": "mnt_paiement_cum", "nb": "nb_paiement"}
     if suffix is not None:
         output_cols = {key: f"{col}_{suffix}" for key, col in output_cols.items()}
-    windowval = (
-        Window.partitionBy("ART_CLEART")
-        .orderBy(["FRP", "min(MVT_DJC_INT)"])
-        .rangeBetween(Window.unboundedPreceding, 0)
+    window = (
+        pyspark.sql.Window.partitionBy("art_cleart")
+        .orderBy(["frp", "min(mvt_djc_int)"])
+        .rangeBetween(pyspark.sql.Window.unboundedPreceding, 0)
     )
 
-    df = df.withColumn("MVT_DJC_INT", F.unix_timestamp(F.col("MVT_DJC")))
-    gb = df.orderBy("FRP", "ART_CLEART", "MVT_DJC").groupBy(
-        ["FRP", "ART_CLEART", "MVT_DEFF"]
+    df = df.withColumn("mvt_djc_int", F.unix_timestamp(F.col("mvt_djc")))
+    gb = df.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
+        ["frp", "art_cleart", "mvt_deff"]
     )
     df_agg = (
-        gb.agg(F.min("MVT_DJC_INT"), F.sum("MVT_MCRD"))
-        .select(["FRP", "ART_CLEART", "min(MVT_DJC_INT)", "sum(MVT_MCRD)"])
+        gb.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
+        .select(["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"])
         .dropDuplicates()
     )
     return (
-        df_agg.filter(F.col("sum(MVT_MCRD)") != 0)
+        df_agg.filter(F.col("sum(mvt_mcrd)") != 0)
         .withColumn(
             output_cols["mnt"],
-            F.sum("sum(MVT_MCRD)").over(windowval),
+            F.sum("sum(mvt_mcrd)").over(window),
         )
-        .withColumn(output_cols["nb"], F.count("sum(MVT_MCRD)").over(windowval))
+        .withColumn(output_cols["nb"], F.count("sum(mvt_mcrd)").over(window))
         .dropDuplicates()
-        .drop(*["sum(MVT_MCRD)", "min(MVT_DJC_INT)"])
+        .drop(*["sum(mvt_mcrd)", "min(mvt_djc_int)"])
     )
 
 
@@ -93,9 +92,9 @@ data_paths = {
 }
 datasets = sf_datalake.io.load_data(data_paths, file_format="orc")
 
-# Set every column name to upper case (if not already).
+# Set every column name to lower case (if not already).
 for name, ds in datasets.items():
-    datasets[name] = ds.toDF(*(col.upper() for col in ds.columns))
+    datasets[name] = ds.toDF(*(col.lower() for col in ds.columns))
 
 
 #######
@@ -105,97 +104,97 @@ for name, ds in datasets.items():
 # Parse dates, create "frp" join key
 
 t_art = sf_datalake.transform.parse_date(
-    datasets["t_art"], ["ART_DISC", "ART_DIDR", "ART_DATEDCF", "ART_DORI"]
+    datasets["t_art"], ["art_disc", "art_didr", "art_datedcf", "art_dori"]
 )
-t_mvt = sf_datalake.transform.parse_date(datasets["t_mvt"], ["MVT_DJC", "MVT_DEFF"])
+t_mvt = sf_datalake.transform.parse_date(datasets["t_mvt"], ["mvt_djc", "mvt_deff"])
 
 corresp_siren_frp2 = (
     datasets["t_etablissement_annee"]
     .withColumn(
-        "FRP",
+        "frp",
         F.concat(
-            datasets["t_etablissement_annee"].FRP_SERVICE,
-            datasets["t_etablissement_annee"].FRP_DOSSIER,
+            datasets["t_etablissement_annee"]["frp_service"],
+            datasets["t_etablissement_annee"]["frp_dossier"],
         ),
     )
-    .drop(*["FRP_SERVICE", "FRP_DOSSIER"])
+    .drop(*["frp_service", "frp_dossier"])
 )
 
 # Eventuellement faire un join car on perd des colonnes en faisant
 # l'aggrégation. À voir.
 
 mvt_montant_creance = t_mvt.join(
-    t_mvt.groupBy(["FRP", "ART_CLEART"])
-    .sum("MVT_MDB")
-    .withColumnRenamed("sum(MVT_MDB)", "MNT_CREANCE"),
-    on=["FRP", "ART_CLEART"],
+    t_mvt.groupBy(["frp", "art_cleart"])
+    .sum("mvt_mdb")
+    .withColumnRenamed("sum(mvt_mdb)", "mnt_creance"),
+    on=["frp", "art_cleart"],
     how="left",
-).drop(*["ID", "DATE_CHARGEMENT", "FRP_SERVICE", "FRP_DOSSIER"])
+).drop(*["id", "date_chargement", "frp_service", "frp_dossier"])
 
 
-mvt_paiement_nacrd01 = process_payment(t_mvt.filter("MVT_NACRD == 0 OR MVT_NACRD == 1"))
+mvt_paiement_nacrd01 = process_payment(t_mvt.filter("mvt_nacrd == 0 OR mvt_nacrd == 1"))
 mvt_paiement_nacrd_autre = process_payment(
-    t_mvt.filter("MVT_NACRD != 0 AND MVT_NACRD != 1"), suffix="AUTRE"
+    t_mvt.filter("mvt_nacrd != 0 AND mvt_nacrd != 1"), suffix="autre"
 )
 
 # Join all tables
 creances = (
-    t_art.join(mvt_montant_creance, on=["FRP", "ART_CLEART"], how="left")
+    t_art.join(mvt_montant_creance, on=["frp", "art_cleart"], how="left")
     .join(
-        mvt_paiement_nacrd01.drop(*["FRP_SERVICE", "FRP_DOSSIER"]),
-        on=["FRP", "ART_CLEART"],
+        mvt_paiement_nacrd01.drop(*["frp_service", "frp_dossier"]),
+        on=["frp", "art_cleart"],
         how="left",
     )
     .join(
-        mvt_paiement_nacrd_autre.drop(*["FRP_SERVICE", "FRP_DOSSIER"]),
-        on=["FRP", "ART_CLEART"],
+        mvt_paiement_nacrd_autre.drop(*["frp_service", "frp_dossier"]),
+        on=["frp", "art_cleart"],
         how="left",
     )
-    .join(corresp_siren_frp2, on=["FRP"], how="left")
+    .join(corresp_siren_frp2, on=["frp"], how="left")
 )
 
 x_creances = creances.select(
     [
-        "SIREN",
-        "FRP",
-        "ART_CLEART",  # Clé de l'article
-        "ART_NAART",  # Nature de l'article
-        "ART_NAPMC",  # Nature mesure conservatoire
-        "ART_DORI",  # Date d'origine
-        "ART_DIDR",  # Date d'exibilité de l'impot
-        "ART_DATEDCF",  # Date prise en compte de la notification de redressement (cf)
-        "ART_DISC",  # Date d'inscription en RAR
-        "ART_ICIRREL",  # Indicateur de circuit de relance" (souvent pas rempli)
-        "MNT_CREANCE",  # Montant de la créance,
-        "MVT_DJC",  # Date journée compatble
-        "MNT_PAIEMENT_CUM",  # Montant des paiements à la date de la journée compatable
-        "MNT_PAIEMENT_CUM_AUTRE",  # Montant des paiements dit "autres" à la djc.
+        "siren",
+        "frp",
+        "art_cleart",  # Clé de l'article
+        "art_naart",  # Nature de l'article
+        "art_napmc",  # Nature mesure conservatoire
+        "art_dori",  # Date d'origine
+        "art_didr",  # Date d'exibilité de l'impot
+        "art_datedcf",  # Date prise en compte de la notification de redressement (cf)
+        "art_disc",  # Date d'inscription en RAR
+        "art_icirrel",  # Indicateur de circuit de relance (souvent pas rempli)
+        "mnt_creance",  # Montant de la créance,
+        "mvt_djc",  # Date journée compatble
+        "mnt_paiement_cum",  # Montant des paiements à la date de la journée compatable
+        "mnt_paiement_cum_autre",  # Montant des paiements dit "autres" à la djc.
     ]
 )
 
 x_creances = x_creances.withColumn(
-    "IND_CF", F.when(F.col("ART_DATEDCF").isNotNull(), 1).otherwise(0)
+    "ind_cf", F.when(F.col("art_datedcf").isNotNull(), 1).otherwise(0)
 )
 x_creances = x_creances.withColumn(
-    "IND_HCF", F.when(F.col("ART_DATEDCF").isNotNull(), 0).otherwise(1)
+    "ind_hcf", F.when(F.col("art_datedcf").isNotNull(), 0).otherwise(1)
 )
 
 # TODO review how these operations handle null values.
 rar_mois_article = x_creances.withColumn(
-    "MNT_PAIEMENT_CUM_TOT",
-    sum(x_creances[col] for col in ["MNT_PAIEMENT_CUM", "MNT_PAIEMENT_CUM_AUTRE"]),
+    "mnt_paiement_cum_tot",
+    sum(x_creances[col] for col in ["mnt_paiement_cum", "mnt_paiement_cum_autre"]),
 )
 rar_mois_article = rar_mois_article.withColumn(
-    "MNT_PAIEMENT_CUM_TOT_HCF", F.col("MNT_PAIEMENT_CUM_TOT") * F.col("IND_HCF")
+    "mnt_paiement_cum_tot_hcf", F.col("mnt_paiement_cum_tot") * F.col("ind_hcf")
 )
 rar_mois_article = rar_mois_article.withColumn(
-    "MNT_CREANCE_HCF", F.col("MNT_CREANCE") * F.col("IND_HCF")
+    "mnt_creance_hcf", F.col("mnt_creance") * F.col("ind_hcf")
 )
 rar_mois_article = rar_mois_article.withColumn(
-    "MNT_RAR", F.col("MNT_CREANCE") - F.col("MNT_PAIEMENT_CUM_TOT")
+    "mnt_rar", F.col("mnt_creance") - F.col("mnt_paiement_cum_tot")
 )
 rar_mois_article = rar_mois_article.withColumn(
-    "MNT_RAR_HCF", F.col("MNT_RAR") * F.col("IND_HCF")
+    "mnt_rar_hcf", F.col("mnt_rar") * F.col("ind_hcf")
 )
 
 # TVA can be declared either on a:
@@ -204,181 +203,191 @@ rar_mois_article = rar_mois_article.withColumn(
 # - yearly,
 # basis
 #
-# We add the "DUREE_PERIODE_TVA" variable to describe this parameter.
+# We add the "duree_periode_tva" variable to describe this parameter.
 #
 ca3 = datasets["liasse_tva_ca3"].withColumn(
-    "DUREE_PERIODE_TVA",
+    "duree_periode_tva",
     F.round(
         F.months_between(
-            datasets["liasse_tva_ca3"]["DTE_FIN_PERIODE"],
-            datasets["liasse_tva_ca3"]["DTE_DEBUT_PERIODE"],
+            datasets["liasse_tva_ca3"]["dte_fin_periode"],
+            datasets["liasse_tva_ca3"]["dte_debut_periode"],
+        )
+    ).cast("integer"),
+)
+ca12 = datasets["liasse_tva_ca12"].withColumn(
+    "duree_periode_tva",
+    F.round(
+        F.months_between(
+            datasets["liasse_tva_ca12"]["dte_fin_periode"],
+            datasets["liasse_tva_ca12"]["dte_debut_periode"],
         )
     ).cast("integer"),
 )
 
-x_tva = ca3.withColumn("D_TCA_TOTAL", F.col("D3310_29") + F.col("D3517S_55_I"))
+all_tva = ca3.join(ca12, on=["siren", "dte_fin_periode"], how="outer")
+x_tva = all_tva.withColumn("d_tca_total", F.col("d3310_29") + F.col("d3517s_55_i"))
 x_tva = x_tva.withColumn(
-    "D_TVA_NI_B0032_EXPORT", F.col("D3517S_02_B") + F.col("D3310_04")
+    "d_tva_ni_b0032_export", F.col("d3517s_02_b") + F.col("d3310_04")
 )
-x_tva = x_tva.withColumn("D_TVA_NI_B0034_LIC", F.col("D3517S_04_B") + F.col("D3310_06"))
+x_tva = x_tva.withColumn("d_tva_ni_b0034_lic", F.col("d3517s_04_b") + F.col("d3310_06"))
 x_tva = x_tva.withColumn(
-    "D_TVA_NI_B0037_ACH_FRCH", F.col("D3517S_01_B") + F.col("D3310_07")
-)
-x_tva = x_tva.withColumn(
-    "D_TVA_NI_B0029_LIV_EL_GAZ", F.col("D3517S_4D_B") + F.col("D3310_6A")
+    "d_tva_ni_b0037_ach_frch", F.col("d3517s_01_b") + F.col("d3310_07")
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_NI_B0043_ASSJT_HS_FR", F.col("D3517S_4B_B") + F.col("D3310_7A")
+    "d_tva_ni_b0029_liv_el_gaz", F.col("d3517s_4d_b") + F.col("d3310_6a")
 )
 x_tva = x_tva.withColumn(
-    "M_TVA_NI_B0033_AUTR_OP_NI",
-    F.col("D3310_7B") + F.col("D3517S_03_B") + F.col("D3310_05"),
+    "d_tva_ni_b0043_assjt_hs_fr", F.col("d3517s_4b_b") + F.col("d3310_7a")
+)
+x_tva = x_tva.withColumn(
+    "m_tva_ni_b0033_autr_op_ni",
+    F.col("d3310_7b") + F.col("d3517s_03_b") + F.col("d3310_05"),
 )
 cols_SUM_TVA_NI_bTOTAL = [
-    "D_TVA_NI_B0032_EXPORT",
-    "D_TVA_NI_B0034_LIC",
-    "D_TVA_NI_B0037_ACH_FRCH",
-    "D_TVA_NI_B0029_LIV_EL_GAZ",
-    "D_TVA_NI_B0043_ASSJT_HS_FR",
-    "M_TVA_NI_B0033_AUTR_OP_NI",
+    "d_tva_ni_b0032_export",
+    "d_tva_ni_b0034_lic",
+    "d_tva_ni_b0037_ach_frch",
+    "d_tva_ni_b0029_liv_el_gaz",
+    "d_tva_ni_b0043_assjt_hs_fr",
+    "m_tva_ni_b0033_autr_op_ni",
 ]
 x_tva = x_tva.withColumn(
-    "SUM_TVA_NI_BTOTAL", sum(x_tva[col] for col in cols_SUM_TVA_NI_bTOTAL)
+    "sum_tva_ni_btotal", sum(x_tva[col] for col in cols_SUM_TVA_NI_bTOTAL)
 )
 cols_M_TVA_BI_b0979_CA = [
-    "D3310_01",  # "D3517S_05_B0206",
-    "D3517S_5A_B",
-    "D3517S_06_B",  # "D3517S_6B_B0150",
-    "D3517S_6C_B",
-    "D3517S_07_B",
-    "D3517S_08_B",
-    "D3517S_09_B",
-    "D3517S_10_B",
+    "d3310_01",  # "d3517s_05_b0206",
+    "d3517s_5a_b",
+    "d3517s_06_b",  # "d3517s_6b_b0150",
+    "d3517s_6c_b",
+    "d3517s_07_b",
+    "d3517s_08_b",
+    "d3517s_09_b",
+    "d3517s_10_b",
 ]
 x_tva = x_tva.withColumn(
-    "M_TVA_BI_B0979_CA", sum(x_tva[col] for col in cols_M_TVA_BI_b0979_CA)
+    "m_tva_bi_b0979_ca", sum(x_tva[col] for col in cols_M_TVA_BI_b0979_CA)
 )
 cols_M_TVA_BI_b0981_AUTR_OP_IMP = [
-    "D3310_02",  # "D3310_2B",
-    "D3310_3C",
-    "D3517S_13_B",
-    "D3517S_11_B",
-    "D3517S_12_B",
+    "d3310_02",  # "d3310_2b",
+    "d3310_3c",
+    "d3517s_13_b",
+    "d3517s_11_b",
+    "d3517s_12_b",
 ]
 x_tva = x_tva.withColumn(
-    "M_TVA_BI_B0981_AUTR_OP_IMP",
+    "m_tva_bi_b0981_autr_op_imp",
     sum(x_tva[col] for col in cols_M_TVA_BI_b0981_AUTR_OP_IMP),
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_BI_B0044_ACH_PS_IC", F.col("D3517S_AC_B") + F.col("D3310_2A")
+    "d_tva_bi_b0044_ach_ps_ic", F.col("d3517s_ac_b") + F.col("d3310_2a")
 )
-x_tva = x_tva.withColumn("D_TVA_BI_B0031_AIC", F.col("D3517S_14_B") + F.col("D3310_03"))
+x_tva = x_tva.withColumn("d_tva_bi_b0031_aic", F.col("d3517s_14_b") + F.col("d3310_03"))
 x_tva = x_tva.withColumn(
-    "D_TVA_BI_B0030_LIV_EL_GAZ", F.col("D3517S_AA_B") + F.col("D3310_3A")
+    "d_tva_bi_b0030_liv_el_gaz", F.col("d3517s_aa_b") + F.col("d3310_3a")
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_BI_B0040_ASSJT_HS_FR", F.col("D3517S_AB_B") + F.col("D3310_3B")
+    "d_tva_bi_b0040_assjt_hs_fr", F.col("d3517s_ab_b") + F.col("d3310_3b")
 )
 cols_SUM_TVA_BI_bTOTAL = [
-    "M_TVA_BI_B0979_CA",
-    "M_TVA_BI_B0981_AUTR_OP_IMP",
-    "D_TVA_BI_B0044_ACH_PS_IC",
-    "D_TVA_BI_B0031_AIC",
-    "D_TVA_BI_B0030_LIV_EL_GAZ",
-    "D_TVA_BI_B0040_ASSJT_HS_FR",
+    "m_tva_bi_b0979_ca",
+    "m_tva_bi_b0981_autr_op_imp",
+    "d_tva_bi_b0044_ach_ps_ic",
+    "d_tva_bi_b0031_aic",
+    "d_tva_bi_b0030_liv_el_gaz",
+    "d_tva_bi_b0040_assjt_hs_fr",
 ]
 x_tva = x_tva.withColumn(
-    "SUM_TVA_BI_BTOTAL", sum(x_tva[col] for col in cols_SUM_TVA_BI_bTOTAL)
+    "sum_tva_bi_btotal", sum(x_tva[col] for col in cols_SUM_TVA_BI_bTOTAL)
 )
 x_tva = x_tva.withColumn(
-    "SUM_TVA_NI_BI_BTOTAL", F.col("SUM_TVA_BI_BTOTAL") + F.col("SUM_TVA_NI_BTOTAL")
+    "sum_tva_ni_bi_btotal", F.col("sum_tva_bi_btotal") + F.col("sum_tva_ni_btotal")
 )
-cols_M_TVA_BI_b0207_NORMAL = [  # "D3517S_05_B0206",
-    "D3310_08_BTX196",
-    "D3517S_5A_B",
-    "D3310_08_B",
-    "D3517S_11_B",
-    "D3517S_12_B",
-    "D3517S_13_B",
-    "D3517S_14_B",
-    "D3517S_AB_B",
-    "D3517S_AC_B",
-    "D3517S_AA_B",
+cols_M_TVA_BI_b0207_NORMAL = [  # "d3517s_05_b0206",
+    "d3310_08_btx196",
+    "d3517s_5a_b",
+    "d3310_08_b",
+    "d3517s_11_b",
+    "d3517s_12_b",
+    "d3517s_13_b",
+    "d3517s_14_b",
+    "d3517s_ab_b",
+    "d3517s_ac_b",
+    "d3517s_aa_b",
 ]
 x_tva = x_tva.withColumn(
-    "M_TVA_BI_B0207_NORMAL", sum(x_tva[col] for col in cols_M_TVA_BI_b0207_NORMAL)
+    "m_tva_bi_b0207_normal", sum(x_tva[col] for col in cols_M_TVA_BI_b0207_NORMAL)
 )
 x_tva = x_tva.withColumn(
-    "M_TVA_BI_B0105_REDUIT_5_5", F.col("D3517S_06_B") + F.col("D3310_09_B")
+    "m_tva_bi_b0105_reduit_5_5", F.col("d3517s_06_b") + F.col("d3310_09_b")
 )
 cols_M_TVA_BI_b0151_REDUIT_10 = [  # D3517S_6B_b0150,
-    "D3310_9B_BTX7",
-    "D3517S_6C_B",
-    "D3310_9B_B",
+    "d3310_9b_btx7",
+    "d3517s_6c_b",
+    "d3310_9b_b",
 ]
 x_tva = x_tva.withColumn(
-    "M_TVA_BI_B0151_REDUIT_10", sum(x_tva[col] for col in cols_M_TVA_BI_b0151_REDUIT_10)
+    "m_tva_bi_b0151_reduit_10", sum(x_tva[col] for col in cols_M_TVA_BI_b0151_REDUIT_10)
 )
 x_tva = x_tva.withColumn(
-    "M_TVA_BI_B0100_DOM_2_1", F.col("D3517S_08_B") + F.col("D3310_11_B")
+    "m_tva_bi_b0100_dom_2_1", F.col("d3517s_08_b") + F.col("d3310_11_b")
 )
 x_tva = x_tva.withColumn(
-    "M_TVA_BI_B0201_DOM_8_5", F.col("D3517S_07_B") + F.col("D3310_10_B")
+    "m_tva_bi_b0201_dom_8_5", F.col("d3517s_07_b") + F.col("d3310_10_b")
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_BI_B0950_TX_PART", F.col("D3517S_09_B") + F.col("D3310_14_B")
+    "d_tva_bi_b0950_tx_part", F.col("d3517s_09_b") + F.col("d3310_14_b")
 )
 x_tva = x_tva.withColumn(
-    "M_TVA_BI_B0900_ANC_TX", F.col("D3517S_10_B") + F.col("D3310_13_B")
+    "m_tva_bi_b0900_anc_tx", F.col("d3517s_10_b") + F.col("d3310_13_b")
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_COL_I0600_ANT_DED", F.col("D3310_15") + F.col("D3517S_18_I")
+    "d_tva_col_i0600_ant_ded", F.col("d3310_15") + F.col("d3517s_18_i")
 )
 x_tva = x_tva.withColumn(
-    "SUM_TVA_COL_TOTAL",
-    F.col("D3310_16")
-    - F.col("D3310_15")
-    + F.col("D3517S_16_I")
-    - F.col("D3310_7C")
-    - F.col("D3310_17")
-    - F.col("D3310_5B")
-    - F.col("D3517S_AA_I")
-    - F.col("D3517S_AB_I")
-    - F.col("D3517S_AC_I")
-    - F.col("D3517S_13_I")
-    - F.col("D3517S_14_I"),
+    "sum_tva_col_total",
+    F.col("d3310_16")
+    - F.col("d3310_15")
+    + F.col("d3517s_16_i")
+    - F.col("d3310_7c")
+    - F.col("d3310_17")
+    - F.col("d3310_5b")
+    - F.col("d3517s_aa_i")
+    - F.col("d3517s_ab_i")
+    - F.col("d3517s_ac_i")
+    - F.col("d3517s_13_i")
+    - F.col("d3517s_14_i"),
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_COL_I0031_AIC", F.col("D3517S_14_I") + F.col("D3310_17")
+    "d_tva_col_i0031_aic", F.col("d3517s_14_i") + F.col("d3310_17")
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_DED_I0703_IMM", F.col("D3310_19") + F.col("D3517S_23_I")
+    "d_tva_ded_i0703_imm", F.col("d3310_19") + F.col("d3517s_23_i")
 )
 x_tva = x_tva.withColumn(
-    "M_TVA_DED_I0702_ABS",
-    F.col("D3310_20") + F.col("D3517S_20_I") + F.col("D3517S_21_I"),
+    "m_tva_ded_i0702_abs",
+    F.col("d3310_20") + F.col("d3517s_20_i") + F.col("d3517s_21_i"),
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_DED_I0059_AUTR", F.col("D3310_21") + F.col("D3517S_25_I")
+    "d_tva_ded_i0059_autr", F.col("d3310_21") + F.col("d3517s_25_i")
 )  # D3310_2C
 # TODO if (D3310_22A=. AND D3517S_25A_TX_DED=.) then D_TVA_DED_TX_COEF_DED = 100; else
 # D_TVA_DED_TX_COEF_DED = SUM(D3310_22A,D3517S_25A_TX_DED) ;
 x_tva = x_tva.withColumn(
-    "D_TVA_DED_I0705_TOTAL", F.col("D3310_23") + F.col("D3517S_26_I")
+    "d_tva_ded_i0705_total", F.col("d3310_23") + F.col("d3517s_26_i")
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_DED_TOTAL_HS_REPORT",
-    F.col("D_TVA_DED_I0703_IMM")
-    + F.col("M_TVA_DED_I0702_ABS")
-    + F.col("D_TVA_DED_I0059_AUTR"),
+    "d_tva_ded_total_hs_report",
+    F.col("d_tva_ded_i0703_imm")
+    + F.col("m_tva_ded_i0702_abs")
+    + F.col("d_tva_ded_i0059_autr"),
 )
 x_tva = x_tva.withColumn(
-    "D_TVA_DED_I0709_DT_ES_DOM", F.col("D3310_24") + F.col("D3517S_27_I")
+    "d_tva_ded_i0709_dt_es_dom", F.col("d3310_24") + F.col("d3517s_27_i")
 )
 x_tva = x_tva.withColumn(
-    "M_TVA_NET_I8002_REMB_DEM", F.col("D3310_26") + F.col("D3517S_50_I")
+    "m_tva_net_i8002_remb_dem", F.col("d3310_26") + F.col("d3517s_50_i")
 )
-x_tva = x_tva.withColumn("M_TVA_NET_DUE", F.col("D3310_28") + F.col("D3517S_28_I"))
+x_tva = x_tva.withColumn("m_tva_net_due", F.col("d3310_28") + F.col("d3517s_28_i"))
 
 # Write file
 rar_mois_article.write.format("orc").save(path.join(args.output, "rar"))
