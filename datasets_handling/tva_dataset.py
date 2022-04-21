@@ -1,8 +1,9 @@
-"""Build a dataset of monthly TVA data.
+"""Build a dataset of TVA data.
 
-This follows MRV's process, originally written in SAS: `21_indicateurs.sas`. Source data
-should be stored beforehand inside an input directory which, in turn, contains the 4
-following directories containing the data as (possibly multiple) orc file(s):
+This roughly follows MRV's process, originally written in SAS
+`21_indicateurs.sas`. Source data should be stored beforehand inside an input directory
+which, in turn, contains the following directories containing the data as (possibly
+multiple) orc file(s):
 - t_art (pub_risq_oracle)
 - t_mvt (pub_risq_oracle)
 - liasse_tva_ca3_view (etl_tva)
