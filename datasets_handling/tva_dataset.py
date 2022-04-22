@@ -31,6 +31,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # pylint: disable = C0413
 import sf_datalake.io
 import sf_datalake.transform
+import sf_datalake.utils
 
 
 def process_payment(
@@ -121,9 +122,6 @@ corresp_siren_frp2 = (
     .drop(*["frp_service", "frp_dossier"])
 )
 
-# Eventuellement faire un join car on perd des colonnes en faisant
-# l'aggrégation. À voir.
-
 mvt_montant_creance = t_mvt.join(
     t_mvt.groupBy(["frp", "art_cleart"])
     .sum("mvt_mdb")
@@ -131,7 +129,6 @@ mvt_montant_creance = t_mvt.join(
     on=["frp", "art_cleart"],
     how="left",
 ).drop(*["id", "date_chargement", "frp_service", "frp_dossier"])
-
 
 mvt_paiement_nacrd01 = process_payment(t_mvt.filter("mvt_nacrd == 0 OR mvt_nacrd == 1"))
 mvt_paiement_nacrd_autre = process_payment(
@@ -171,7 +168,7 @@ x_creances = creances.select(
         "mnt_paiement_cum",  # Montant des paiements à la date de la journée compatable
         "mnt_paiement_cum_autre",  # Montant des paiements dit "autres" à la djc.
     ]
-)
+).na.fill(value=0, subset=["mnt_creance", "mnt_paiement_cum", "mnt_paiement_cum_autre"])
 
 x_creances = x_creances.withColumn(
     "ind_cf", F.when(F.col("art_datedcf").isNotNull(), 1).otherwise(0)
@@ -180,7 +177,6 @@ x_creances = x_creances.withColumn(
     "ind_hcf", F.when(F.col("art_datedcf").isNotNull(), 0).otherwise(1)
 )
 
-# TODO review how these operations handle null values.
 rar_mois_article = x_creances.withColumn(
     "mnt_paiement_cum_tot",
     sum(x_creances[col] for col in ["mnt_paiement_cum", "mnt_paiement_cum_autre"]),
@@ -204,29 +200,28 @@ rar_mois_article = rar_mois_article.withColumn(
 # - yearly,
 # basis
 #
-# We add the "duree_periode_tva" variable to describe this parameter.
+# We join data from different types of declarations and add the "duree_periode_tva"
+# variable to describe the period duration parameter.
 #
-ca3 = datasets["liasse_tva_ca3"].withColumn(
-    "duree_periode_tva",
-    F.round(
-        F.months_between(
-            datasets["liasse_tva_ca3"]["dte_fin_periode"],
-            datasets["liasse_tva_ca3"]["dte_debut_periode"],
-        )
-    ).cast("integer"),
-)
-ca12 = datasets["liasse_tva_ca12"].withColumn(
-    "duree_periode_tva",
-    F.round(
-        F.months_between(
-            datasets["liasse_tva_ca12"]["dte_fin_periode"],
-            datasets["liasse_tva_ca12"]["dte_debut_periode"],
-        )
-    ).cast("integer"),
-)
 
-all_tva = ca3.join(ca12, on=["siren", "dte_fin_periode"], how="outer")
-x_tva = all_tva.withColumn("d_tca_total", F.col("d3310_29") + F.col("d3517s_55_i"))
+tva_join_columns = list(
+    set(datasets["liasse_tva_ca3"].columns) & set(datasets["liasse_tva_ca12"].columns)
+)
+all_tva = (
+    datasets["liasse_tva_ca3"]
+    .join(datasets["liasse_tva_ca12"], on=tva_join_columns, how="outer")
+    .withColumn(
+        "duree_periode_tva",
+        F.round(
+            F.months_between(
+                F.col("dte_fin_periode"),
+                F.col("dte_debut_periode"),
+            )
+        ).cast("integer"),
+    )
+)
+x_tva = all_tva.na.fill(value=0, subset=sf_datalake.utils.numerical_columns(all_tva))
+x_tva = x_tva.withColumn("d_tca_total", F.col("d3310_29") + F.col("d3517s_55_i"))
 x_tva = x_tva.withColumn(
     "d_tva_ni_b0032_export", F.col("d3517s_02_b") + F.col("d3310_04")
 )
