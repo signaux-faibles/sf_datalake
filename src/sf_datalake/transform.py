@@ -405,18 +405,19 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             Transformed DataFrame at a SIREN level.
 
         """
-        assert {"IDENTIFIERS", "FEATURES", "AGG_DICT"} <= set(self.config)
+        assert {"IDENTIFIERS", "FEATURES", "VARIABLE_AGGREGATION"} <= set(self.config)
         assert {"siren", "periode"} <= set(dataset.columns)
 
         siren_lvl_colnames = [
             feat
             for feat in self.config["FEATURES"]
-            if (feat not in self.config["AGG_DICT"]) and (feat in dataset.columns)
+            if (feat not in self.config["VARIABLE_AGGREGATION"])
+            and (feat in dataset.columns)
         ]
         gb_colnames = self.config["IDENTIFIERS"] + siren_lvl_colnames
 
-        dataset = dataset.groupBy(gb_colnames).agg(self.config["AGG_DICT"])
-        for colname, func in self.config["AGG_DICT"].items():
+        dataset = dataset.groupBy(gb_colnames).agg(self.config["VARIABLE_AGGREGATION"])
+        for colname, func in self.config["VARIABLE_AGGREGATION"].items():
             dataset = dataset.withColumnRenamed(f"{func}({colname})", colname)
 
         return dataset

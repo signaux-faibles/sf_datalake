@@ -39,7 +39,7 @@
         "paydex_nb_jours": "StandardScaler",
         "paydex_yoy": "StandardScaler"
     },
-    "AGG_DICT": {
+    "VARIABLE_AGGREGATION": {
         "cotisation": "sum",
         "cotisation_moy12m": "sum",
         "montant_part_ouvriere": "sum",

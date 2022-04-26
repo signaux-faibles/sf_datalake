@@ -140,7 +140,7 @@
             "r2": 0.9994210784203903
         }
     },
-    "AGG_DICT": {
+    "VARIABLE_AGGREGATION": {
         "cotisation": "sum",
         "cotisation_moy12m": "sum",
         "montant_part_ouvriere": "sum",
