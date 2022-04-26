@@ -1,0 +1,181 @@
+{
+    "DATASET": "/projets/TSF/donnees/agg/dataset_has_paydex",
+    "IDENTIFIERS": [
+        "periode",
+        "siren",
+        "code_naf",
+        "time_til_failure"
+    ],
+    "FEATURES": {
+        "mnt_af_bfonc_bfr": "StandardScaler",
+        "mnt_af_bfonc_tresorerie": "StandardScaler",
+        "rto_af_ratio_rent_mbe": "StandardScaler",
+        "mnt_af_bfonc_frng": "StandardScaler",
+        "mnt_af_ca": "StandardScaler",
+        "mnt_af_sig_ebe_ret": "StandardScaler",
+        "rto_af_rent_eco": "StandardScaler",
+        "rto_af_solidite_financiere": "StandardScaler",
+        "rto_invest_ca": "StandardScaler",
+        "cotisation": "StandardScaler",
+        "cotisation_moy12m": "StandardScaler",
+        "montant_part_ouvriere": "StandardScaler",
+        "montant_part_ouvriere_past_1": "StandardScaler",
+        "montant_part_ouvriere_past_12": "StandardScaler",
+        "montant_part_ouvriere_past_2": "StandardScaler",
+        "montant_part_ouvriere_past_3": "StandardScaler",
+        "montant_part_ouvriere_past_6": "StandardScaler",
+        "montant_part_patronale": "StandardScaler",
+        "montant_part_patronale_past_1": "StandardScaler",
+        "montant_part_patronale_past_12": "StandardScaler",
+        "montant_part_patronale_past_2": "StandardScaler",
+        "montant_part_patronale_past_3": "StandardScaler",
+        "montant_part_patronale_past_6": "StandardScaler",
+        "effectif": "StandardScaler",
+        "apart_heures_consommees_cumulees": "StandardScaler",
+        "apart_heures_consommees": "StandardScaler",
+        "ratio_dette_moy12m": "StandardScaler",
+        "ratio_dette": "StandardScaler",
+        "avg_delta_dette_par_effectif": "StandardScaler",
+        "paydex_bin": "OneHotEncoder",
+        "paydex_yoy": "StandardScaler"
+    },
+    "DEFAULT_VALUES": {
+        "time_til_failure": 9999,
+        "paydex_nb_jours": 0,
+        "paydex_nb_jours_past_12": 0,
+        "paydex_bin": 0.0,
+        "paydex_yoy": 0,
+        "montant_part_ouvriere_past_12": 0.0,
+        "montant_part_patronale_past_12": 0.0,
+        "montant_part_ouvriere_past_6": 0.0,
+        "montant_part_patronale_past_6": 0.0,
+        "montant_part_ouvriere_past_3": 0.0,
+        "montant_part_patronale_past_3": 0.0,
+        "montant_part_ouvriere_past_2": 0.0,
+        "montant_part_patronale_past_2": 0.0,
+        "montant_part_ouvriere_past_1": 0.0,
+        "montant_part_patronale_past_1": 0.0,
+        "cotisation": 0.0,
+        "montant_part_ouvriere": 0.0,
+        "montant_part_patronale": 0.0,
+        "cotisation_moy12m": 0.0,
+        "ratio_dette": 0.0,
+        "ratio_dette_moy12m": 0.0,
+        "apart_heures_consommees_cumulees": 0.0,
+        "apart_heures_consommees": 0.0,
+        "avg_delta_dette_par_effectif": 0.0,
+        "effectif": 0,
+        "mnt_af_bfonc_bfr": 0.0,
+        "mnt_af_bfonc_tresorerie": 0.0,
+        "mnt_af_bfonc_frng": 0.0,
+        "mnt_af_ca": 0.0,
+        "mnt_af_sig_ebe_ret": 0.0,
+        "rto_af_ratio_rent_mbe": 0.0,
+        "rto_af_rent_eco": 0.0,
+        "rto_af_solidite_financiere": 0.0,
+        "rto_invest_ca": 0.0
+    },
+    "ONE_HOT_CATEGORIES": {
+        "paydex_bin": [
+            [
+                "-inf",
+                "0"
+            ],
+            [
+                "0",
+                "15"
+            ],
+            [
+                "15",
+                "30"
+            ],
+            [
+                "30",
+                "60"
+            ],
+            [
+                "60",
+                "90"
+            ],
+            [
+                "90",
+                "inf"
+            ]
+        ]
+    },
+    "TARGET": [
+        "failure_within_18m"
+    ],
+    "MICRO_SCORES_COLUMNS": [
+        "1st_concerning_val",
+        "2nd_concerning_val",
+        "3rd_concerning_val",
+        "1st_concerning_feat",
+        "2nd_concerning_feat",
+        "3rd_concerning_feat"
+    ],
+    "MACRO_SCORES_COLUMNS": [
+        "sante_financiere_macro_score",
+        "dette_urssaf_macro_score",
+        "activite_partielle_macro_score",
+        "retards_paiement_macro_score",
+        "misc_macro_score"
+    ],
+    "MESO_GROUPS": {
+        "cotisation_urssaf": [
+            "cotisation",
+            "cotisation_moy12m"
+        ],
+        "part_ouvriere": [
+            "montant_part_ouvriere",
+            "montant_part_ouvriere_past_1",
+            "montant_part_ouvriere_past_2",
+            "montant_part_ouvriere_past_3",
+            "montant_part_ouvriere_past_6",
+            "montant_part_ouvriere_past_12"
+        ],
+        "part_patronale": [
+            "montant_part_patronale",
+            "montant_part_patronale_past_1",
+            "montant_part_patronale_past_2",
+            "montant_part_patronale_past_3",
+            "montant_part_patronale_past_6",
+            "montant_part_patronale_past_12"
+        ],
+        "dette": [
+            "ratio_dette",
+            "ratio_dette_moy12m",
+            "avg_delta_dette_par_effectif"
+        ]
+    },
+    "FEATURE_GROUPS": {
+        "sante_financiere": [
+            "mnt_af_bfonc_bfr",
+            "mnt_af_bfonc_frng",
+            "mnt_af_bfonc_tresorerie",
+            "mnt_af_ca",
+            "mnt_af_sig_ebe_ret",
+            "rto_af_ratio_rent_mbe",
+            "rto_af_rent_eco",
+            "rto_af_solidite_financiere",
+            "rto_invest_ca"
+        ],
+        "activite_partielle": [
+            "apart_heures_consommees",
+            "apart_heures_consommees_cumulees"
+        ],
+        "dette_urssaf": [
+            "cotisation_urssaf",
+            "part_ouvriere",
+            "part_patronale",
+            "dette"
+        ],
+        "retards_paiement": [
+            "paydex_bin",
+            "paydex_yoy"
+        ],
+        "misc": [
+            "effectif"
+        ]
+    }
+}
