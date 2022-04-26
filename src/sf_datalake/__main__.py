@@ -29,8 +29,8 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
 
     # Parse configuration files and possibly override parameters.
     # Then, dump all used configuration inside the output directory.
-    parameters = sf_datalake.io.load_parameters(args.configuration)
-    variables = sf_datalake.io.load_variables(args.configuration)
+    parameters = sf_datalake.io.load_parameters(args.parameters)
+    variables = sf_datalake.io.load_variables(args.variables)
     config = {**parameters, **variables}
     override_args = {
         k: v for k, v in vars(args).items() if k in config and v is not None
@@ -109,22 +109,31 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="""
         Run a 'Signaux Faibles' distributed prediction with the chosen set of
-        parameters.
+        parameters and variables.
         """
     )
     parser.add_argument(
-        "--configuration",
+        "--parameters",
         help="""
-        Configuration file name (including '.json' extension). If not provided,
-        'base.json' will be used.
+        Parameters file name (including '.json' extension). If not provided,
+        'standard.json' will be used.
         """,
-        default="base.json",
+        default="standard.json",
+    )
+    parser.add_argument(
+        "--variables",
+        help="""
+        File name (including '.json' extension) containing variables and features to
+        use in the run as well as default values and transformations to be applied on
+        features. If not provided, 'standard.json' will be used.
+        """,
+        default="standard.json",
     )
     parser.add_argument(
         "--dataset",
         dest="DATASET",
         type=str,
-        help="Path to the dataset that will be used both for training.",
+        help="Path to the dataset that will be used for training, test and prediction.",
     )
     parser.add_argument(
         "--output_directory",
