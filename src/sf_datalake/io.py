@@ -1,6 +1,7 @@
 """Utility functions for data handling."""
 
 import argparse
+import json
 import logging
 from os import path
 from typing import Dict, Iterable, Optional
@@ -138,6 +139,40 @@ def write_explanations(
     macro_scores_df.repartition(n_rep).write.csv(
         path.join(explanation_output_path), header=True
     )
+
+
+def load_parameters(fname: str) -> dict:
+    """Loads a model run parameters from a preset config json file.
+
+    Args:
+        fname: Basename of a config file (including .json extension).
+
+    Returns:
+        The parameters to be used.
+
+    """
+
+    with pkg_resources.resource_stream(
+        "sf_datalake", f"config/parameters/{fname}"
+    ) as f:
+        config = json.load(f)
+    return config
+
+
+def load_variables(fname: str) -> dict:
+    """Loads a list of variables / features from a preset config json file.
+
+    Args:
+        fname: Basename of a config file (including .json extension).
+
+    Returns:
+        The variables, features and corresponding values .
+
+    """
+
+    with pkg_resources.resource_stream("sf_datalake", f"config/variables/{fname}") as f:
+        config = json.load(f)
+    return config
 
 
 def dump_configuration(
