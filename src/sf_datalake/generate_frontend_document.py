@@ -19,6 +19,21 @@ import sf_datalake.predictions
 import sf_datalake.utils
 
 
+def tailoring_rule(row) -> int:
+    """Explicit how predictions should evolve based on tailoring.
+
+    The tailoring rule will return an int (-1, 0, or 1) that describes alert level
+    evolution based on the truth values of some of `row`'s given elements.
+
+    Args:
+        row: Any object that has a `__getitem__` method.
+
+    """
+    if row["urssaf_debt"]:
+        return 1
+    return 0
+
+
 def main(
     args: Union[argparse.Namespace, dict],
 ):  # pylint: disable=too-many-locals
@@ -106,9 +121,10 @@ def main(
         "contribution": ["cotisation_start", "cotisation_end"],
     }
 
-    tailoring = [
+    tailoring_steps = [
         (
-            sf_datalake.predictions.debt_tailoring,
+            "urssaf_debt",
+            sf_datalake.predictions.urssaf_debt_tailoring,
             {
                 "siren_index": prediction_set.index,
                 "debt_df": debt_data,
@@ -118,7 +134,8 @@ def main(
     ]
     prediction_set = sf_datalake.predictions.tailor_alert(
         prediction_set,
-        tailoring,
+        tailoring_steps,
+        tailoring_rule,
         pre_alert_col="alertPreRedressements",
         post_alert_col="alert",
     )
