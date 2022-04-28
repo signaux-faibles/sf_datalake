@@ -10,7 +10,6 @@ This module offers tools for:
 import logging
 from typing import Callable, Dict, Iterable, List, Tuple
 
-import numpy as np
 import pandas as pd
 
 
@@ -74,12 +73,10 @@ def tailor_alert(
         level.
 
     """
-
-    assert pre_tailoring_alert_col in predictions_df.columns
-
     for name, function, kwargs in tailoring_steps:
-        predictions_df.loc[function(**kwargs), name] = True
-        predictions_df.fillna({name: False}, inplace=True)
+        tailoring_index = function(**kwargs).intersection(predictions_df.index)
+        predictions_df[name] = False
+        predictions_df.loc[tailoring_index, name] = True
 
     predictions_df[post_tailoring_alert_col] = (
         predictions_df[pre_tailoring_alert_col]
@@ -93,20 +90,18 @@ def partial_unemployment_tailoring():
     """Computes if alert level should be modified based on partial unemployment."""
 
 
-def urssaf_debt_tailoring(
-    siren_index: pd.Index,
+def urssaf_debt_change(
     debt_df: pd.DataFrame,
     debt_cols: Dict[str, List[str]],
+    increasing: bool = True,
     tol: float = 0.2,
 ) -> pd.Index:
-    """Computes if alert level should be modified based on social debt.
+    """States if some debt value has increased/decreased.
 
-    For a given company, if social debt evolution over time exceeds the input threshold,
-    the corresponding index will be included in the rows for which alert should be
-    updated.
+    States if companies debt change over time, relative to the company's contributions
+    exceeds some input threshold.
 
     Args:
-        siren_index: An index of the analyzed companies SIRENs.
         debt_df: Debt data, used to decide whether or not alert level should be
           upgraded.
         debt_cols : A dict mapping names to lists of columns to be summed / averaged:
@@ -116,6 +111,9 @@ def urssaf_debt_tailoring(
           change.
           - "contribution": These columns will be used to compute an average monthly
           contribution.
+        increasing: if `True`, points out cases where computed change is greater than
+          `tol`. If `False`, points out cases where the opposite of computed change is
+           greater than `tol`.
         tol: the threshold, as a percentage of (normalized) debt evolution, above which
           alert level is upgraded.
 
@@ -125,10 +123,9 @@ def urssaf_debt_tailoring(
     """
     debt_start = debt_df.loc[:, debt_cols["start"]].sum(axis="columns")
     debt_end = debt_df.loc[:, debt_cols["end"]].sum(axis="columns")
-    contribution_average = (
-        debt_df.loc[:, debt_cols["contribution"]]
-        .mean(axis="columns")
-        .replace(0, np.nan)
+    contribution_average = debt_df.loc[:, debt_cols["contribution"]].mean(
+        axis="columns"
     )
-    debt_evolution = ((debt_end - debt_start) / (contribution_average * 12)).fillna(0)
-    return debt_df[debt_evolution > tol].index.intersection(siren_index)
+    debt_change = ((debt_end - debt_start) / (contribution_average * 12)).fillna(0)
+    sign = 1 if increasing else -1
+    return debt_df[(sign * debt_change) > tol].index

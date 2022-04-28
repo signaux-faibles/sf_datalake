@@ -36,7 +36,7 @@ def tailoring_rule(row) -> int:
         of the alert level.
 
     """
-    if row["urssaf_debt"]:
+    if row["urssaf_debt_increase"]:
         return 1
     return 0
 
@@ -129,12 +129,13 @@ def main(
     ### Apply tailoring
     tailoring_steps = [
         (
-            "urssaf_debt",
-            sf_datalake.predictions.urssaf_debt_tailoring,
+            "urssaf_debt_increase",
+            sf_datalake.predictions.urssaf_debt_change,
             {
-                "siren_index": prediction_set.index,
                 "debt_df": debt_data,
                 "debt_cols": debt_cols,
+                "increasing": True,
+                "tol": 0.2,
             },
         )
     ]
