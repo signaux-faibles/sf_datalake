@@ -2,7 +2,10 @@
 
 This script produces a JSON document that can be used by the front-end component of the
 Signaux Faibles website to display info about selected companies. It requires data
-output by the prediction model, as well as URSSAF debt / contributions data.
+output by the prediction model, as well as tailoring data:
+- URSSAF debt / contributions data
+- partial unemployment data
+- ...
 
 See the command-line interface for more details on expected inputs.
 
@@ -20,13 +23,17 @@ import sf_datalake.utils
 
 
 def tailoring_rule(row) -> int:
-    """Explicit how predictions should evolve based on tailoring.
+    """Details how predictions should evolve based on tailorings.
 
     The tailoring rule will return an int (-1, 0, or 1) that describes alert level
     evolution based on the truth values of some of `row`'s given elements.
 
     Args:
         row: Any object that has a `__getitem__` method.
+
+    Returns:
+        Either -1, 0, or 1, respectively corresponding to decrease, no change, increase
+        of the alert level.
 
     """
     if row["urssaf_debt"]:
@@ -57,7 +64,7 @@ def main(
         for micro in micros
     }
 
-    ## Load lists produced in the data lake.
+    # Load prediction lists
     def normalize_siren_index(ix: pd.Index) -> pd.Index:
         return ix.astype(str).str.zfill(9).astype(int)
 
@@ -77,20 +84,18 @@ def main(
     concerning_data = pd.read_csv(args["concerning_data"], index_col="siren")
     concerning_data.index = normalize_siren_index(concerning_data.index)
 
-    ## Compute thresholds
+    # Compute alert level thresholds
     score_threshold = sf_datalake.evaluation.optimal_beta_thresholds(
         predictions=test_set["probability"], outcomes=test_set["failure_within_18m"]
     )
-    prediction_set["alertPreRedressements"] = (
-        prediction_set["probability"]
-        .apply(
-            sf_datalake.predictions.name_alert_group,
-            args=(score_threshold[0.5], score_threshold[2]),
-        )
-        .astype("category")
+
+    # Create encoded alert groups
+    prediction_set["pre_tailoring_alert_group"] = prediction_set["probability"].apply(
+        lambda x: 2 - (x < score_threshold[0.5]) - (x < score_threshold[2])
     )
 
-    ## A posteriori alert tailoring
+    ### A posteriori alert tailoring
+    # Urssaf tailoring
     urssaf_data = pd.read_csv(
         args["urssaf_data"],
         index_col="siren",
@@ -121,6 +126,7 @@ def main(
         "contribution": ["cotisation_start", "cotisation_end"],
     }
 
+    ### Apply tailoring
     tailoring_steps = [
         (
             "urssaf_debt",
@@ -136,8 +142,19 @@ def main(
         prediction_set,
         tailoring_steps,
         tailoring_rule,
-        pre_alert_col="alertPreRedressements",
-        post_alert_col="alert",
+        pre_tailoring_alert_col="pre_tailoring_alert_group",
+        post_tailoring_alert_col="post_tailoring_alert_group",
+    )
+
+    # Decode alert groups
+    alert_categories = pd.CategoricalDtype(
+        categories=["Pas d'alerte", "Alerte seuil F2", "Alerte seuil F1"], ordered=True
+    )
+    prediction_set["alertPreRedressement"] = pd.Categorical.from_codes(
+        codes=prediction_set["pre_tailoring_alert_group"], dtype=alert_categories
+    )
+    prediction_set["alert"] = pd.Categorical.from_codes(
+        codes=prediction_set["post_tailoring_alert_group"], dtype=alert_categories
     )
     tailor_index = prediction_set[
         prediction_set["alert"] != prediction_set["alertPreRedressements"]
@@ -175,6 +192,7 @@ def main(
         output_entry[siren].update(
             {
                 "macroRadar": macro_explanation.loc[siren].to_dict(),
+                # TODO: update this list using "tailoring switches" column names.
                 "redressements": ["detteUrssaf"] if siren in tailor_index else [],
                 "explSelection": {
                     "selectConcerning": [
