@@ -65,8 +65,10 @@ def main(
     }
 
     # Load prediction lists
-    def normalize_siren_index(ix: pd.Index) -> pd.Index:
-        return ix.astype(str).str.zfill(9).astype(int)
+    def normalize_siren_index(ix: pd.Index, from_siret=False) -> pd.Index:
+        if from_siret:
+            return ix.astype(str).str.zfill(13).str[:9]
+        return ix.astype(str).str.zfill(9)
 
     test_set = pd.read_csv(args["test_set"], index_col="siren")
     test_set.index = normalize_siren_index(test_set.index)
@@ -96,12 +98,11 @@ def main(
 
     ### A posteriori alert tailoring
     # Urssaf tailoring
-    urssaf_data = pd.read_csv(
-        args["urssaf_data"],
-        index_col="siren",
-        parse_dates=["periode"],
+    urssaf_data = pd.read_csv(args["urssaf_data"], parse_dates=["periode"]).drop(
+        "siren", axis=1
     )
-    urssaf_data.index = normalize_siren_index(urssaf_data.index)
+    urssaf_data["siren"] = normalize_siren_index(urssaf_data.siret, from_siret=True)
+    urssaf_data.set_index("siren", inplace=True)
     debt_start_data = urssaf_data[urssaf_data.periode == args["debt_start_date"]]
     debt_end_data = urssaf_data[urssaf_data.periode == args["debt_end_date"]]
 
@@ -151,7 +152,7 @@ def main(
     alert_categories = pd.CategoricalDtype(
         categories=["Pas d'alerte", "Alerte seuil F2", "Alerte seuil F1"], ordered=True
     )
-    prediction_set["alertPreRedressement"] = pd.Categorical.from_codes(
+    prediction_set["alertPreRedressements"] = pd.Categorical.from_codes(
         codes=prediction_set["pre_tailoring_alert_group"], dtype=alert_categories
     )
     prediction_set["alert"] = pd.Categorical.from_codes(
