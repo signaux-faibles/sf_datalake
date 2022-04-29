@@ -44,7 +44,7 @@ def merge_predictions(predictions: List[pd.DataFrame]) -> pd.DataFrame:
 def tailor_alert(
     predictions_df: pd.DataFrame,
     tailoring_steps: Iterable[Tuple[str, Callable, Dict]],
-    tailoring_rule: Callable[pd.DataFrame, int],
+    tailoring_rule: Callable[[pd.DataFrame], int],
     pre_tailoring_alert_col: str,
     post_tailoring_alert_col: str,
 ) -> pd.DataFrame:
@@ -62,7 +62,7 @@ def tailor_alert(
           where the corresponding tailoring condition is met.
         tailoring_rule: A mapping associating tailoring conditions to a post-tailoring
           alert level evolution (-1, 0 or 1). It should have a single argument in order
-          to be called using `pd.df.apply`.
+          to be called using `pd.df.apply` over a row's columns.
         pre_tailoring_alert_col: Name of the column holding before-tailoring alerts (as
           an int level).
         post_tailoring_alert_col: Name of the column in which to output after-tailoring
