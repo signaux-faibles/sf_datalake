@@ -158,9 +158,6 @@ def main(
     prediction_set["alert"] = pd.Categorical.from_codes(
         codes=prediction_set["post_tailoring_alert_group"], dtype=alert_categories
     )
-    tailor_index = prediction_set[
-        prediction_set["alert"] != prediction_set["alertPreRedressements"]
-    ].index
 
     ## Score explanation per categories
     if args["metadata"] is not None:
@@ -194,8 +191,11 @@ def main(
         output_entry[siren].update(
             {
                 "macroRadar": macro_explanation.loc[siren].to_dict(),
-                # TODO: update this list using "tailoring switches" column names.
-                "redressements": ["detteUrssaf"] if siren in tailor_index else [],
+                "redressements": [
+                    tailoring
+                    for tailoring in tailoring_steps
+                    if output_entry[tailoring]
+                ],
                 "explSelection": {
                     "selectConcerning": [
                         [micro_macro[micro], micro]
