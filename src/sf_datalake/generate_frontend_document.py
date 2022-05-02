@@ -36,8 +36,10 @@ def tailoring_rule(row) -> int:
         of the alert level.
 
     """
-    if row["urssaf_debt_increase"]:
+    if row["urssaf_new_debt_increase"]:
         return 1
+    if row["urssaf_previous_debt_decrease"] and not row["urssaf_new_debt_increase"]:
+        return -1
     return 0
 
 
@@ -97,48 +99,68 @@ def main(
     )
 
     ### A posteriori alert tailoring
-    # Urssaf tailoring
-    urssaf_data = pd.read_csv(args["urssaf_data"], parse_dates=["periode"]).drop(
-        "siren", axis=1
+    tailoring_data = pd.read_csv(args["tailoring_data"], parse_dates=["periode"])
+    tailoring_data["siren"] = normalize_siren_index(
+        tailoring_data.siret, from_siret=True
     )
-    urssaf_data["siren"] = normalize_siren_index(urssaf_data.siret, from_siret=True)
-    urssaf_data.set_index("siren", inplace=True)
-    debt_start_data = urssaf_data[urssaf_data.periode == args["debt_start_date"]]
-    debt_end_data = urssaf_data[urssaf_data.periode == args["debt_end_date"]]
+    tailoring_data = tailoring_data.set_index("siren")
 
-    debt_start_agg = debt_start_data.groupby("siren").agg(
-        {
-            "cotisation": sum,
-            "montant_part_ouvriere": sum,
-            "montant_part_patronale": sum,
-        }
+    # Urssaf tailoring
+    debt_gb = tailoring_data.drop(["total_demande_ap", "siret"], axis=1).groupby(
+        ["siren", "periode"]
     )
-    debt_end_agg = debt_end_data.groupby("siren").agg(
-        {
-            "cotisation": sum,
-            "montant_part_ouvriere": sum,
-            "montant_part_patronale": sum,
-        }
+    debt_data = debt_gb.agg(sum).loc[(slice(None), args["debt_end_date"]), :]
+    debt_data["dette_recente_reference"] = 0.0
+    debt_data["dette_recente_courante"] = (
+        debt_data["montant_part_patronale_recente_courante"]
+        + debt_data["montant_part_ouvriere_recente_courante"]
     )
-    debt_data = debt_start_agg.join(debt_end_agg, lsuffix="_start", rsuffix="_end")
-    debt_cols = {
-        "start": ["montant_part_ouvriere_start", "montant_part_patronale_start"],
-        "end": ["montant_part_ouvriere_end", "montant_part_patronale_end"],
-        "contribution": ["cotisation_start", "cotisation_end"],
+    debt_data["dette_ancicenne_courante"] = (
+        debt_data["montant_part_patronale_ancienne_courante"]
+        + debt_data["montant_part_ouvriere_ancienne_courante"]
+    )
+    debt_data["dette_ancicenne_reference"] = (
+        debt_data["montant_part_patronale_ancienne_reference"]
+        + debt_data["montant_part_ouvriere_ancienne_reference"]
+    )
+    new_debt_cols = {
+        "start": "dette_recente_reference",
+        "end": "dette_recente_courante",
+        "contribution": "cotisation_moyenne_12m",
+    }
+    previous_debt_cols = {
+        "start": "dette_ancienne_reference",
+        "end": "dette_ancienne_courante",
+        "contribution": "cotisation_moyenne_12m",
     }
 
     ### Apply tailoring
     tailoring_steps = [
         (
-            "urssaf_debt_increase",
+            "urssaf_previous_debt_decrease",
             sf_datalake.predictions.urssaf_debt_change,
             {
                 "debt_df": debt_data,
-                "debt_cols": debt_cols,
+                "debt_cols": previous_debt_cols,
+                "increasing": False,
+                "tol": 0.2,
+            },
+        ),
+        (
+            "urssaf_new_debt_increase",
+            sf_datalake.predictions.urssaf_debt_change,
+            {
+                "debt_df": debt_data,
+                "debt_cols": new_debt_cols,
                 "increasing": True,
                 "tol": 0.2,
             },
-        )
+        ),
+        # (
+        #     "partial_unemployment",
+        #     sf_datalake.predictions.partial_unemployment_tailoring,
+        #     {},
+        # ),
     ]
     prediction_set = sf_datalake.predictions.tailor_alert(
         prediction_set,
@@ -266,9 +288,9 @@ if __name__ == "__main__":
         features (i.e., the ones with highest values) values.""",
     )
     path_group.add_argument(
-        "--urssaf_data",
+        "--tailoring_data",
         required=True,
-        help="Path to a csv containing URSSAF debt data.",
+        help="Path to a csv containing required tailoring data.",
     )
     parser.add_argument(
         "--start_date",

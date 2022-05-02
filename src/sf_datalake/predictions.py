@@ -98,34 +98,30 @@ def urssaf_debt_change(
 ) -> pd.Index:
     """States if some debt value has increased/decreased.
 
-    States if companies debt change over time, relative to the company's contributions
-    exceeds some input threshold.
+    States if companies debt change over time, relative to the company's annual
+    contributions, exceeds some input threshold.
 
     Args:
         debt_df: Debt data, used to decide whether or not alert level should be
           upgraded.
-        debt_cols : A dict mapping names to lists of columns to be summed / averaged:
-          - "start": The sum of these columns will be considered the starting point of
-          debt change.
-          - "end": The sum of these columns will be considered the ending point of debt
-          change.
-          - "contribution": These columns will be used to compute an average monthly
-          contribution.
+        debt_cols : A dict mapping names to lists of columns to be compared:
+          - "start": The starting point of debt change.
+          - "end": The ending point of debt change.
+          - "contribution": An average annual contribution value.
         increasing: if `True`, points out cases where computed change is greater than
           `tol`. If `False`, points out cases where the opposite of computed change is
            greater than `tol`.
-        tol: the threshold, as a percentage of (normalized) debt evolution, above which
-          alert level is upgraded.
+        tol: the threshold, as a percentage of debt / contributions change, above which
+          the alert level should be updated.
 
     Returns:
         The (siren) indexes where an alert update should take place.
 
     """
-    debt_start = debt_df.loc[:, debt_cols["start"]].sum(axis="columns")
-    debt_end = debt_df.loc[:, debt_cols["end"]].sum(axis="columns")
-    contribution_average = debt_df.loc[:, debt_cols["contribution"]].mean(
-        axis="columns"
-    )
-    debt_change = ((debt_end - debt_start) / (contribution_average * 12)).fillna(0)
     sign = 1 if increasing else -1
-    return debt_df[(sign * debt_change) > tol].index
+    debt_change = (
+        sign
+        * (debt_df[debt_cols["end"]] - debt_df[debt_cols["start"]])
+        / (debt_df[debt_cols["contribution"]] * 12)
+    )
+    return debt_df[debt_change > tol].index
