@@ -8,7 +8,7 @@ This module offers tools for:
 """
 
 import logging
-from typing import Callable, Dict, Iterable, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import pandas as pd
 
@@ -43,7 +43,7 @@ def merge_predictions(predictions: List[pd.DataFrame]) -> pd.DataFrame:
 
 def tailor_alert(
     predictions_df: pd.DataFrame,
-    tailoring_steps: Iterable[Tuple[str, Callable, Dict]],
+    tailoring_steps: Dict[str, Tuple[Callable, Dict]],
     tailoring_rule: Callable[[pd.DataFrame], int],
     pre_tailoring_alert_col: str,
     post_tailoring_alert_col: str,
@@ -56,7 +56,7 @@ def tailor_alert(
 
     Args:
         predictions_df: Prediction data.
-        tailoring_steps: An iterable of (name, function, kwargs) tuples of tailoring
+        tailoring_steps: A dict of {name: (function, **kwargs)} tuples of tailoring
           functions and their associated kwargs as a dict. Each function should take the
           predictions DataFrame as first argument and return a pd.Index that points rows
           where the corresponding tailoring condition is met.
@@ -73,9 +73,9 @@ def tailor_alert(
         level.
 
     """
-    for name, function, kwargs in tailoring_steps:
-        tailoring_index = function(**kwargs).intersection(predictions_df.index)
+    for name, (function, kwargs) in tailoring_steps.items():
         predictions_df[name] = False
+        tailoring_index = function(**kwargs).intersection(predictions_df.index)
         predictions_df.loc[tailoring_index, name] = True
 
     predictions_df[post_tailoring_alert_col] = (
@@ -86,13 +86,36 @@ def tailor_alert(
     return predictions_df
 
 
-def partial_unemployment_tailoring():
-    """Computes if alert level should be modified based on partial unemployment."""
+def partial_unemployment_tailoring(
+    pu_df: pd.DataFrame,
+    pu_col: str,
+    threshold: int,
+) -> pd.Index:
+    """Computes if alert level should be modified based on partial unemployment.
+
+    The input DataFrame is indexed at the SIRET (entity) level, and this function helps
+    determine if any of the company's entities has filed requests amounting to a maximal
+    allowed value.
+
+    Args:
+        pu_df: Partial unemployment data, used to decide whether or not alert level
+          should be updated. Index should be a list of SIRETs, not SIRENs.
+        pu_col: Name of the column holding allowed partial unemployment duration.
+        threshold: A number of months above which the tailoring switch is triggered.
+
+    Returns:
+        The (siren) indexes where an alert update should take place.
+
+    """
+    assert pu_df.index.name == "siret"
+    pu_df["above_threshold"] = pu_df[pu_col] > threshold
+    siren_mask = pu_df.groupby("siren")["above_threshold"].sum() > 0
+    return siren_mask[siren_mask].index
 
 
 def urssaf_debt_change(
     debt_df: pd.DataFrame,
-    debt_cols: Dict[str, List[str]],
+    debt_cols: Dict[str, str],
     increasing: bool = True,
     tol: float = 0.2,
 ) -> pd.Index:

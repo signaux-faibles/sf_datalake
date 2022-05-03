@@ -43,6 +43,16 @@ def tailoring_rule(row) -> int:
     return 0
 
 
+def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
+    """Left pad an iterable SIREN with zeroes if needed."""
+    return x.astype(str).str.zfill(9)
+
+
+def normalize_siret(x: Union[pd.Series, pd.Index]) -> pd.Series:
+    """Left pad an iterable of SIRET with zeroes if needed."""
+    return x.astype(str).str.zfill(13).str[:9]
+
+
 def main(
     args: Union[argparse.Namespace, dict],
 ):  # pylint: disable=too-many-locals
@@ -59,7 +69,6 @@ def main(
         args = vars(args)
 
     pred_config = sf_datalake.utils.get_config(args["configuration"])
-
     micro_macro = {
         micro: macro
         for macro, micros in pred_config["FEATURE_GROUPS"].items()
@@ -67,26 +76,25 @@ def main(
     }
 
     # Load prediction lists
-    def normalize_siren_index(ix: pd.Index, from_siret=False) -> pd.Index:
-        if from_siret:
-            return ix.astype(str).str.zfill(13).str[:9]
-        return ix.astype(str).str.zfill(9)
+    test_set = pd.read_csv(args["test_set"])
+    test_set = test_set.set_index(normalize_siren(test_set["siren"]))
 
-    test_set = pd.read_csv(args["test_set"], index_col="siren")
-    test_set.index = normalize_siren_index(test_set.index)
+    prediction_set = pd.read_csv(args["prediction_set"])
+    prediction_set = prediction_set.set_index(normalize_siren(prediction_set["siren"]))
 
-    prediction_set = pd.read_csv(args["prediction_set"], index_col="siren")
-    prediction_set.index = normalize_siren_index(prediction_set.index)
-
-    macro_explanation = pd.read_csv(args["explanation_data"], index_col="siren")
-    macro_explanation.index = normalize_siren_index(macro_explanation.index)
+    macro_explanation = pd.read_csv(args["explanation_data"])
+    macro_explanation = macro_explanation.set_index(
+        normalize_siren(macro_explanation["siren"])
+    )
     macro_explanation.columns = [
         col.replace("_macro_score", "") for col in macro_explanation.columns
     ]
     macro_explanation.drop(columns="misc", inplace=True, errors="ignore")
 
-    concerning_data = pd.read_csv(args["concerning_data"], index_col="siren")
-    concerning_data.index = normalize_siren_index(concerning_data.index)
+    concerning_data = pd.read_csv(args["concerning_data"])
+    concerning_data = concerning_data.set_index(
+        normalize_siren(concerning_data["siren"])
+    )
 
     # Compute alert level thresholds
     score_threshold = sf_datalake.evaluation.optimal_beta_thresholds(
@@ -99,27 +107,25 @@ def main(
     )
 
     ### A posteriori alert tailoring
-    tailoring_data = pd.read_csv(args["tailoring_data"], parse_dates=["periode"])
-    tailoring_data["siren"] = normalize_siren_index(
-        tailoring_data.siret, from_siret=True
-    )
-    tailoring_data = tailoring_data.set_index("siren")
+    tailoring_data = pd.read_csv(args["tailoring_data"])
+    tailoring_data["siret"] = normalize_siret(tailoring_data["siret"])
+    tailoring_data["siren"] = tailoring_data["siret"].str[:9]
 
     # Urssaf tailoring
     debt_gb = tailoring_data.drop(["total_demande_ap", "siret"], axis=1).groupby(
-        ["siren", "periode"]
+        ["siren"]
     )
-    debt_data = debt_gb.agg(sum).loc[(slice(None), args["debt_end_date"]), :]
+    debt_data = debt_gb.agg(sum)
     debt_data["dette_recente_reference"] = 0.0
     debt_data["dette_recente_courante"] = (
         debt_data["montant_part_patronale_recente_courante"]
         + debt_data["montant_part_ouvriere_recente_courante"]
     )
-    debt_data["dette_ancicenne_courante"] = (
+    debt_data["dette_ancienne_courante"] = (
         debt_data["montant_part_patronale_ancienne_courante"]
         + debt_data["montant_part_ouvriere_ancienne_courante"]
     )
-    debt_data["dette_ancicenne_reference"] = (
+    debt_data["dette_ancienne_reference"] = (
         debt_data["montant_part_patronale_ancienne_reference"]
         + debt_data["montant_part_ouvriere_ancienne_reference"]
     )
@@ -135,9 +141,8 @@ def main(
     }
 
     ### Apply tailoring
-    tailoring_steps = [
-        (
-            "urssaf_previous_debt_decrease",
+    tailoring_steps = {
+        "urssaf_previous_debt_decrease": (
             sf_datalake.predictions.urssaf_debt_change,
             {
                 "debt_df": debt_data,
@@ -146,8 +151,7 @@ def main(
                 "tol": 0.2,
             },
         ),
-        (
-            "urssaf_new_debt_increase",
+        "urssaf_new_debt_increase": (
             sf_datalake.predictions.urssaf_debt_change,
             {
                 "debt_df": debt_data,
@@ -156,12 +160,15 @@ def main(
                 "tol": 0.2,
             },
         ),
-        # (
-        #     "partial_unemployment",
-        #     sf_datalake.predictions.partial_unemployment_tailoring,
-        #     {},
-        # ),
-    ]
+        "partial_unemployment_request": (
+            sf_datalake.predictions.partial_unemployment_tailoring,
+            {
+                "pu_df": tailoring_data.set_index("siret"),
+                "pu_col": "total_demande_ap",
+                "threshold": args["n_months"],
+            },
+        ),
+    }
     prediction_set = sf_datalake.predictions.tailor_alert(
         prediction_set,
         tailoring_steps,
@@ -216,7 +223,7 @@ def main(
                 "redressements": [
                     tailoring
                     for tailoring in tailoring_steps
-                    if output_entry[tailoring]
+                    if output_entry[siren][tailoring]
                 ],
                 "explSelection": {
                     "selectConcerning": [
@@ -292,21 +299,11 @@ if __name__ == "__main__":
         required=True,
         help="Path to a csv containing required tailoring data.",
     )
-    parser.add_argument(
-        "--start_date",
-        dest="debt_start_date",
-        type=str,
-        default="2020-07-01",
-        help="""The start date over which debt evolution will be computed
-        (YYYY-MM-DD format).""",
-    )
-    parser.add_argument(
-        "--end_date",
-        dest="debt_end_date",
-        type=str,
-        default="2021-06-01",
-        help="""The start date over which debt evolution will be computed
-        (YYYY-MM-DD format).""",
+    path_group.add_argument(
+        "--n_months",
+        help="""Number of months to consider as upper threshold for partial unemployment
+        tailoring.""",
+        default=13,
     )
     parser.add_argument(
         "--concerning_threshold",
