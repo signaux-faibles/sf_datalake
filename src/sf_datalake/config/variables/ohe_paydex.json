@@ -3,7 +3,6 @@
     "IDENTIFIERS": [
         "periode",
         "siren",
-        "code_naf",
         "time_til_failure"
     ],
     "FEATURES": {
