@@ -124,9 +124,9 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     """
     stages = [
         MissingValuesHandler(config),
+        DatasetFilter(),
         PaydexColumnsAdder(config),
         SirenAggregator(config),
-        DatasetFilter(),
         AvgDeltaDebtPerSizeColumnAdder(config),
         DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
@@ -454,8 +454,20 @@ class DatasetFilter(Transformer):  # pylint: disable=R0903
 
         """
         assert {"effectif", "code_naf"} <= set(dataset.columns)
+        dataset_for_filtering = (
+            dataset.filter("code_naf NOT IN ('O', 'P')")
+            .select(["siren", "periode", "effectif"])
+            .groupBy(["siren", "periode"])
+            .agg({"effectif": "sum"})
+            .filter("sum(effectif) >= 10")
+            .drop("sum(effectif)")
+        )
 
-        return dataset.filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
+        df = dataset.join(
+            dataset_for_filtering, on=["siren", "periode"], how="inner"
+        ).filter("code_naf NOT IN ('O', 'P')")
+
+        return df
 
 
 class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
