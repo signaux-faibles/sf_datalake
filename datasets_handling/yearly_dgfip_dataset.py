@@ -17,9 +17,6 @@ import os
 import sys
 from os import path
 
-import pyspark.sql.functions as F
-from pyspark.sql.window import Window
-
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
@@ -69,11 +66,8 @@ df = declarations.join(
 )
 
 # Drop accounting year duplicates
-df_nodup = df.withColumn(
-    "per_rank",
-    F.dense_rank().over(Window.partitionBy("siren").orderBy("date_deb_exercice")),
-).drop_duplicates(subset=["siren", "per_rank"])
-# TODO: review this drop. Here, we only keep one "date_deb_exercice" whenever there is
-# more than one value associated with the same "date_fin_exercice".
+df_nodup = df.orderBy(
+    ["siren", "date_deb_exercice", "date_fin_exercice"]
+).dropDuplicates(subset=["siren", "date_fin_exercice"])
 
 df_nodup.write.format("orc").save(args.output)
