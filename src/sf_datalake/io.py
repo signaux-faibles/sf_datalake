@@ -151,9 +151,8 @@ def load_parameters(fname: str) -> dict:
         The parameters to be used.
 
     """
-
     with pkg_resources.resource_stream(
-        "sf_datalake", f"config/parameters/{fname}"
+        "sf_datalake", f"src/sf_datalake/config/parameters/{fname}"
     ) as f:
         config = json.load(f)
     return config
@@ -169,8 +168,9 @@ def load_variables(fname: str) -> dict:
         The variables, features and corresponding values .
 
     """
-
-    with pkg_resources.resource_stream("sf_datalake", f"config/variables/{fname}") as f:
+    with pkg_resources.resource_stream(
+        "sf_datalake", f"src/sf_datalake/config/variables/{fname}"
+    ) as f:
         config = json.load(f)
     return config
 
