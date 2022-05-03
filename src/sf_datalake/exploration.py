@@ -196,7 +196,7 @@ def covid19_adapter_params(
     Args:
         df: input DataFrame.
         features: name of the features to run the fit on.
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         A dict with features as keys. For each feature, the structure is as follows:

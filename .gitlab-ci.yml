@@ -9,7 +9,6 @@ variables:
   LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
   LAKE_ENTRYPOINT: "${LAKE_MODULES_DIR}/main.py"
   DEPLOYMENT_TYPE: "null"
-  PREDICTION_CONFIG_FILE: "base.json"
 
 ### Workflow: defines when branch and merge request pipelines should run.
 

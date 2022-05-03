@@ -27,10 +27,15 @@ import sf_datalake.utils
 def main(args: argparse.Namespace):  # pylint: disable=R0914
     """Processes datasets according to configuration to make predictions."""
 
-    # Parse a configuration file and possibly override parameters.
-    config = sf_datalake.utils.get_config(args.configuration)
-    config_args = {k: v for k, v in vars(args).items() if k in config and v is not None}
-    for param, value in config_args.items():
+    # Parse configuration files and possibly override parameters.
+    # Then, dump all used configuration inside the output directory.
+    parameters = sf_datalake.io.load_parameters(args.parameters)
+    variables = sf_datalake.io.load_variables(args.variables)
+    config = {**parameters, **variables}
+    override_args = {
+        k: v for k, v in vars(args).items() if k in config and v is not None
+    }
+    for param, value in override_args.items():
         config[param] = value
     if args.output_directory is None:
         output_directory = path.join(
@@ -66,14 +71,6 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     ) = sf_datalake.sampler.train_test_predict_split(yearly_data, config)
 
     # Build and run Pipeline
-    logging.info(
-        "Training %s \
-        %.3f and %d iterations (maximum).",
-        config["MODEL"]["NAME"],
-        config["MODEL"]["REGULARIZATION_COEFF"],
-        config["MODEL"]["MAX_ITER"],
-    )
-
     transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
     model_stages = sf_datalake.model.generate_stages(config)
     postprocessing_stages = [sf_datalake.transform.ProbabilityFormatter()]
@@ -112,22 +109,31 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="""
         Run a 'Signaux Faibles' distributed prediction with the chosen set of
-        parameters.
+        parameters and variables.
         """
     )
     parser.add_argument(
-        "--configuration",
+        "--parameters",
         help="""
-        Configuration file name (including '.json' extension). If not provided,
-        'base.json' will be used.
+        Parameters file name (including '.json' extension). If not provided,
+        'standard.json' will be used.
         """,
-        default="base.json",
+        default="standard.json",
+    )
+    parser.add_argument(
+        "--variables",
+        help="""
+        File name (including '.json' extension) containing variables and features to
+        use in the run as well as default values and transformations to be applied on
+        features. If not provided, 'standard.json' will be used.
+        """,
+        default="standard.json",
     )
     parser.add_argument(
         "--dataset",
         dest="DATASET",
         type=str,
-        help="Path to the dataset that will be used both for training.",
+        help="Path to the dataset that will be used for training, test and prediction.",
     )
     parser.add_argument(
         "--output_directory",

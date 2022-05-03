@@ -16,7 +16,7 @@ def generate_stages(config: dict) -> List[pyspark.ml.Model]:
     The returned list is ready to be included into a pyspark.ml.Pipeline object.
 
     Args:
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         A prepared Model.
@@ -87,7 +87,7 @@ def explain(
     May depend on used model type.
 
     Args:
-        config: Model configuration, as loaded by utils.get_config().
+        config: Model configuration, as loaded by io.load_parameters().
         pipeline_model: A fitted pipeline.
         df: The prediction samples.
 
@@ -113,7 +113,7 @@ def explain_logistic_regression(
     scale (individual features).
 
     Args:
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
         model: the LogisticRegression model fit in the pipeline.
         df: the prediction samples.
 

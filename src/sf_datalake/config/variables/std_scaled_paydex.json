@@ -1,28 +1,5 @@
 {
-    "OUTPUT_ROOT_DIR": "/projets/TSF/predictions",
-    "DATASET": "/projets/TSF/donnees/agg/full_dataset_has_paydex",
-    "FILL_MISSING_VALUES": true,
-    "USE_COVID19ADAPTER": false,
-    "SAMPLE_RATIO": 1.0,
-    "TRAIN_TEST_SPLIT_RATIO": 0.8,
-    "TARGET_OVERSAMPLING_RATIO": 0.2,
-    "N_CONCERNING_MICRO": 3,
-    "TRAIN_DATES": [
-        "2016-01-01",
-        "2019-05-31"
-    ],
-    "TEST_DATES": [
-        "2019-06-01",
-        "2020-01-31"
-    ],
-    "PREDICTION_DATE": "2020-02-01",
-    "PANDEMIC_EVENT_DATE": "2020-02-29",
-    "MODEL": {
-        "NAME": "LogisticRegression",
-        "REGULARIZATION_COEFF": 0.12,
-        "MAX_ITER": 50,
-        "TOL": 1e-05
-    },
+    "DATASET": "/projets/TSF/donnees/agg/dataset_has_paydex",
     "IDENTIFIERS": [
         "periode",
         "siren",
@@ -62,7 +39,7 @@
         "paydex_nb_jours": "StandardScaler",
         "paydex_yoy": "StandardScaler"
     },
-    "AGG_DICT": {
+    "VARIABLE_AGGREGATION": {
         "cotisation": "sum",
         "cotisation_moy12m": "sum",
         "montant_part_ouvriere": "sum",

@@ -1,28 +1,5 @@
 {
-    "OUTPUT_ROOT_DIR": "/projets/TSF/predictions",
     "DATASET": "/projets/TSF/donnees/agg/full_dataset",
-    "FILL_MISSING_VALUES": true,
-    "USE_COVID19ADAPTER": false,
-    "SAMPLE_RATIO": 1.0,
-    "TRAIN_TEST_SPLIT_RATIO": 0.8,
-    "TARGET_OVERSAMPLING_RATIO": 0.2,
-    "N_CONCERNING_MICRO": 3,
-    "TRAIN_DATES": [
-        "2016-01-01",
-        "2019-05-31"
-    ],
-    "TEST_DATES": [
-        "2019-06-01",
-        "2020-01-31"
-    ],
-    "PREDICTION_DATE": "2020-02-01",
-    "PANDEMIC_EVENT_DATE": "2020-02-29",
-    "MODEL": {
-        "NAME": "LogisticRegression",
-        "REGULARIZATION_COEFF": 0.12,
-        "MAX_ITER": 50,
-        "TOL": 1e-05
-    },
     "IDENTIFIERS": [
         "periode",
         "siren",
@@ -58,9 +35,11 @@
         "apart_heures_consommees": "StandardScaler",
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
-        "avg_delta_dette_par_effectif": "StandardScaler"
+        "avg_delta_dette_par_effectif": "StandardScaler",
+        "paydex_nb_jours": "StandardScaler",
+        "paydex_yoy": "StandardScaler"
     },
-    "AGG_DICT": {
+    "VARIABLE_AGGREGATION": {
         "cotisation": "sum",
         "cotisation_moy12m": "sum",
         "montant_part_ouvriere": "sum",
@@ -82,6 +61,9 @@
     },
     "DEFAULT_VALUES": {
         "time_til_failure": 9999,
+        "paydex_nb_jours": 0,
+        "paydex_nb_jours_past_12": 0,
+        "paydex_yoy": 0,
         "montant_part_ouvriere_past_12": 0.0,
         "montant_part_patronale_past_12": 0.0,
         "montant_part_ouvriere_past_6": 0.0,
@@ -127,6 +109,7 @@
         "sante_financiere_macro_score",
         "dette_urssaf_macro_score",
         "activite_partielle_macro_score",
+        "retards_paiement_macro_score",
         "misc_macro_score"
     ],
     "MESO_GROUPS": {
@@ -177,6 +160,10 @@
             "part_ouvriere",
             "part_patronale",
             "dette"
+        ],
+        "retards_paiement": [
+            "paydex_nb_jours",
+            "paydex_yoy"
         ],
         "misc": [
             "effectif"
