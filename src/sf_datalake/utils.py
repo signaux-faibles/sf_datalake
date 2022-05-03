@@ -38,7 +38,7 @@ def feature_index(config: dict) -> List[str]:
     handy in the explanation stage.
 
     Args:
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         A list of features ordered as they are inside the features matrix.

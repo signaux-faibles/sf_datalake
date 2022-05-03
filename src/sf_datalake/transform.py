@@ -112,7 +112,7 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
     The stages are ready to be included in a pyspark.ml.Pipeline.
 
     Args:
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         List of prepared Transformers.
@@ -153,7 +153,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     preprocessing and feature engineering.
 
     Args:
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         A list of the preprocessing stages.

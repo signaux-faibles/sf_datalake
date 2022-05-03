@@ -182,7 +182,7 @@ def dump_configuration(
 
     Args:
         output_dir: The path where configuration should be dumped.
-        config: Model configuration, as loaded by utils.get_config().
+        config: Model configuration, as loaded by io.load_parameters().
         dump_keys: An Iterable of configuration parameters that should be dumped.
           All elements of `dump_keys` must be part of `config`'s keys.
 
