@@ -1,7 +1,7 @@
 """Utility functions for data exploration using spark DataFrame objects.
 """
 
-from typing import Iterable, List, Tuple
+from typing import List, Tuple
 
 import pyspark
 import pyspark.sql
@@ -29,14 +29,11 @@ def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
 
 def count_nan_values(
     df: pyspark.sql.DataFrame,
-    omit_type: Iterable[str] = ("timestamp", "string", "date", "bool"),
 ) -> pyspark.sql.DataFrame:
     """Counts number of NaN values in numerical columns.
 
     Args:
         df: The input DataFrame.
-        omit_type: An iterable containing the names of types that should not be looked
-          for.
 
     Returns:
         A DataFrame specifying the number of NaN values in numerical fields.
@@ -45,8 +42,7 @@ def count_nan_values(
     return df.select(
         [
             F.count(F.when(F.isnull(c), c)).alias(c)
-            for (c, c_type) in df.dtypes
-            if c_type not in omit_type
+            for c in sf_datalake.utils.numerical_columns(df)
         ]
     )
 

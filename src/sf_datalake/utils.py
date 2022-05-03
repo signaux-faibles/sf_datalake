@@ -4,6 +4,7 @@ import json
 from typing import Dict, List
 
 import pkg_resources
+import pyspark.sql
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.sql import SparkSession
@@ -31,6 +32,32 @@ def get_config(config_fname: str) -> dict:
     with pkg_resources.resource_stream("sf_datalake", f"config/{config_fname}") as f:
         config = json.load(f)
     return config
+
+
+def numerical_columns(df: pyspark.sql.DataFrame) -> List[str]:
+    """Returns a DataFrame's numerical data column names.
+
+    Args:
+        df: The input DataFrame.
+
+    Returns:
+        A list of column names.
+
+    """
+    numerical_types = (
+        T.ByteType,
+        T.DecimalType,
+        T.DoubleType,
+        T.FloatType,
+        T.IntegerType,
+        T.LongType,
+        T.ShortType,
+    )
+    return [
+        field.name
+        for field in df.schema.fields
+        if isinstance(field.dataType, numerical_types)
+    ]
 
 
 def transformer_features_mapping(config: dict) -> Dict[str, List[str]]:

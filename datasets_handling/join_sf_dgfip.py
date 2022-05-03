@@ -65,7 +65,7 @@ datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format
 ## Join datasets
 
 df_dgfip = datasets["dgfip"].withColumn(
-    "join_date", F.year(datasets["dgfip"].date_fin_exercice)
+    "join_date", F.year(datasets["dgfip"]["date_fin_exercice"])
 )
 df_sf = stringify_and_pad_siren(datasets["sf"]).withColumn(
     "join_date",

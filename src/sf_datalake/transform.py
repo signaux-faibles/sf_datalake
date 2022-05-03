@@ -11,7 +11,6 @@ import pyspark.sql.functions as F
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.sql.types import FloatType, StringType
-from pyspark.sql.window import Window
 
 
 def parse_date(
@@ -45,42 +44,6 @@ def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     assert "siren" in df.columns, "Input DataFrame doesn't have a 'siren' column."
     df = df.withColumn("siren", df["siren"].cast("string"))
     df = df.withColumn("siren", F.lpad(df["siren"], 9, "0"))
-    return df
-
-
-def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Computes the number of payments.
-
-    Args:
-        df: A DataFrame containing payment data.
-
-    Returns:
-        A DataFrame with a new "nb_paiement" column.
-
-    """
-    df = df.withColumn("mvt_djc_int", F.unix_timestamp(F.col("mvt_djc")))
-    df = df.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
-        ["frp", "art_cleart", "mvt_deff"]
-    )
-    df = (
-        df.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
-        .select(["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"])
-        .withColumnRenamed("min(mvt_djc_int)", "min_mvt_djc_int")
-        .withColumnRenamed("sum(mvt_mcrd)", "sum_mvt_mcrd")
-        .dropDuplicates()
-    )
-
-    windowval = (
-        Window.partitionBy("art_cleart")
-        .orderBy(["frp", "min_mvt_djc_int"])
-        .rangeBetween(Window.unboundedPreceding, 0)
-    )
-    df = (
-        df.filter("sum_mvt_mcrd != 0")
-        .withColumn("mnt_paiement_cum", F.sum("sum_mvt_mcrd").over(windowval))
-        .withColumn("nb_paiement", F.count("sum_mvt_mcrd").over(windowval))
-        .dropDuplicates()
-    )
     return df
 
 
