@@ -473,16 +473,15 @@ class DatasetFilter(Transformer):  # pylint: disable=R0903
 
         """
         assert {"effectif", "code_naf"} <= set(dataset.columns)
-        dataset_for_filtering = (
-            dataset.filter("code_naf NOT IN ('O', 'P')")
-            .select(["siren", "periode", "effectif"])
+        company_size_filter = (
+            dataset.select(["siren", "periode", "effectif"])
             .groupBy(["siren", "periode"])
             .agg({"effectif": "sum"})
             .filter("sum(effectif) >= 10")
         )
 
         df = dataset.join(
-            dataset_for_filtering, on=["siren", "periode"], how="left_semi"
+            company_size_filter, on=["siren", "periode"], how="left_semi"
         ).filter("code_naf NOT IN ('O', 'P')")
 
         return df
