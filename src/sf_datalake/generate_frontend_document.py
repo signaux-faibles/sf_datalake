@@ -44,13 +44,13 @@ def tailoring_rule(row) -> int:
 
 
 def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
-    """Left pad an iterable SIREN with zeroes if needed."""
+    """Left pad an iterable of SIREN with zeroes if needed."""
     return x.astype(str).str.zfill(9)
 
 
 def normalize_siret(x: Union[pd.Series, pd.Index]) -> pd.Series:
     """Left pad an iterable of SIRET with zeroes if needed."""
-    return x.astype(str).str.zfill(13).str[:9]
+    return x.astype(str).str.zfill(13)
 
 
 def main(
