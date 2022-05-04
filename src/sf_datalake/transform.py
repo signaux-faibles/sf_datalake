@@ -475,11 +475,10 @@ class DatasetFilter(Transformer):  # pylint: disable=R0903
             .groupBy(["siren", "periode"])
             .agg({"effectif": "sum"})
             .filter("sum(effectif) >= 10")
-            .drop("sum(effectif)")
         )
 
         df = dataset.join(
-            dataset_for_filtering, on=["siren", "periode"], how="inner"
+            dataset_for_filtering, on=["siren", "periode"], how="left_semi"
         ).filter("code_naf NOT IN ('O', 'P')")
 
         return df
