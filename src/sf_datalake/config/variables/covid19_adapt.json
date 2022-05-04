@@ -33,7 +33,7 @@
         "apart_heures_consommees_cumulees": "StandardScaler",
         "apart_heures_consommees": "StandardScaler",
         "ratio_dette_moy12m": "StandardScaler",
-        "ratio_dette": "StandardScaler",
+        "ratio_dette_siren": "StandardScaler",
         "avg_delta_dette_par_effectif": "StandardScaler"
     },
     "FEATURES_TO_ADAPT": [
@@ -175,7 +175,7 @@
         "montant_part_ouvriere": 0.0,
         "montant_part_patronale": 0.0,
         "cotisation_moy12m": 0.0,
-        "ratio_dette": 0.0,
+        "ratio_dette_siren": 0.0,
         "ratio_dette_moy12m": 0.0,
         "apart_heures_consommees_cumulees": 0.0,
         "apart_heures_consommees": 0.0,
@@ -230,7 +230,7 @@
             "montant_part_patronale_past_12"
         ],
         "dette": [
-            "ratio_dette",
+            "ratio_dette_siren",
             "ratio_dette_moy12m",
             "avg_delta_dette_par_effectif"
         ]
