@@ -211,7 +211,7 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
             dataset: DataFrame to transform.
 
         Returns:
-            Transformed DataFrame with an extra `ratio_dette_siren` column.
+            Transformed DataFrame with an extra `ratio_dette` column.
 
         """
 
@@ -222,20 +222,16 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
         } <= set(dataset.columns)
 
         dataset = dataset.withColumn(
-            "ratio_dette_siren",
+            "ratio_dette",
             (dataset.montant_part_ouvriere + dataset.montant_part_patronale)
             / dataset.cotisation_moy12m,
         )
         if self.config["FILL_MISSING_VALUES"]:
             dataset = dataset.fillna(
-                {
-                    "ratio_dette_siren": self.config["DEFAULT_VALUES"][
-                        "ratio_dette_siren"
-                    ]
-                }
+                {"ratio_dette": self.config["DEFAULT_VALUES"]["ratio_dette"]}
             )
         else:
-            dataset = dataset.dropna(subset=["ratio_dette_siren"])
+            dataset = dataset.dropna(subset=["ratio_dette"])
 
         return dataset
 
