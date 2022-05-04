@@ -377,6 +377,21 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             if (feat not in self.config["VARIABLE_AGGREGATION"])
             and (feat in dataset.columns)
         ]
+
+        # check if siren level features have a unique value by (siren, periode)
+        n_duplicates = (
+            dataset.select(["siren", "periode"] + siren_lvl_colnames)
+            .dropDuplicates()
+            .groupBy(["siren", "periode"])
+            .count()
+            .filter("count > 1")
+            .count()
+        )
+        assert n_duplicates == 0, (
+            "One or more siren level features have multiple values by "
+            f"(siren, periode). siren level features: {siren_lvl_colnames}"
+        )
+
         gb_colnames = self.config["IDENTIFIERS"] + siren_lvl_colnames
 
         dataset = dataset.groupBy(gb_colnames).agg(self.config["VARIABLE_AGGREGATION"])
