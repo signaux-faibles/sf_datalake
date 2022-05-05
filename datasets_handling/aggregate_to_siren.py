@@ -44,3 +44,4 @@ aggregator = sf_datalake.transform.SirenAggregator(
     sf_datalake.io.load_variables("aggregation.json")
 )
 siren_level_ds = aggregator.transform(siret_level_ds)
+siren_level_ds.write.format("orc").save(args.output)

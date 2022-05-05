@@ -84,4 +84,4 @@ df_joined = df_sf.join(
     how="full_outer",
 )
 
-df_joined.write.format("orc").save(path.join(args.output))
+df_joined.write.format("orc").save(args.output)
