@@ -10,7 +10,7 @@ import os
 import sys
 from os import path
 
-from pyspark.ml import Pipeline
+from pyspark.ml import PipelineModel
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -50,5 +50,7 @@ naf_filter = sf_datalake.transform.PrivateCompanyFilter()
 aggregator = sf_datalake.transform.SirenAggregator(
     sf_datalake.io.load_variables("aggregation.json")
 )
-siren_level_ds = Pipeline(stages=[naf_filter, aggregator]).transform(siret_level_ds)
+siren_level_ds = PipelineModel(stages=[naf_filter, aggregator]).transform(
+    siret_level_ds
+)
 siren_level_ds.write.format("orc").save(args.output)
