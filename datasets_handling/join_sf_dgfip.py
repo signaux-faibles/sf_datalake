@@ -65,7 +65,7 @@ datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format
 df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"]).withColumn(
     "join_date", F.year(datasets["dgfip"]["date_fin_exercice"])
 )
-df_sf = sf_datalake.transform.extract_siren_from_siret(datasets["sf"]).withColumn(
+df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
     "join_date",
     F.year(
         F.coalesce(

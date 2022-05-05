@@ -36,6 +36,9 @@ siret_level_ds = sf_datalake.io.load_data(data_paths, file_format="orc")["input_
 # Set every column name to lower case (if not already).
 siret_level_ds = siret_level_ds.toDF(*(col.lower() for col in siret_level_ds.columns))
 
+# Generate a clean SIREN column
+siret_level_ds = sf_datalake.transform.extract_siren_from_siret(siret_level_ds)
+
 #####################
 # Make aggregation  #
 #####################
