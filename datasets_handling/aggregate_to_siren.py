@@ -10,6 +10,8 @@ import os
 import sys
 from os import path
 
+from pyspark.ml import Pipeline
+
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
@@ -43,8 +45,10 @@ siret_level_ds = sf_datalake.transform.extract_siren_from_siret(siret_level_ds)
 # Make aggregation  #
 #####################
 
+# Filter out public institutions and companies and aggregate at SIREN level
+naf_filter = sf_datalake.transform.PrivateCompanyFilter()
 aggregator = sf_datalake.transform.SirenAggregator(
     sf_datalake.io.load_variables("aggregation.json")
 )
-siren_level_ds = aggregator.transform(siret_level_ds)
+siren_level_ds = Pipeline(stages=[naf_filter, aggregator]).transform(siret_level_ds)
 siren_level_ds.write.format("orc").save(args.output)

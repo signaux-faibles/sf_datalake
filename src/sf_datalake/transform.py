@@ -138,6 +138,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
 
     """
     stages = [
+        WorkforceFilter(),
         MissingValuesHandler(config),
         PaydexColumnsAdder(config),
         AvgDeltaDebtPerSizeColumnAdder(config),
@@ -454,34 +455,44 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
         return dataset
 
 
-class DatasetFilter(Transformer):  # pylint: disable=R0903
-    """A transformer to filter the dataset."""
+class PrivateCompanyFilter(Transformer):  # pylint: disable=R0903
+    """A transformer that filters a dataset according to its public/private nature."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Filters out small companies or public institution from a dataset.
+        """Filters out public institutions from a dataset.
 
-        Only keeps private companies with more than 10 employees.
+        Only keeps private companies using `code_naf` variable.
 
         Args:
-            dataset: DataFrame to transform/filter.
+            dataset: DataFrame to filter.
 
         Returns:
-            Transformed/filtered DataFrame.
+            Filtered DataFrame.
 
         """
-        assert {"effectif", "code_naf"} <= set(dataset.columns)
-        company_size_filter = (
-            dataset.select(["siren", "periode", "effectif"])
-            .groupBy(["siren", "periode"])
-            .agg({"effectif": "sum"})
-            .filter("sum(effectif) >= 10")
-        )
+        if "code_naf" not in dataset.columns:
+            raise KeyError("Dataset has no 'code_naf' column.")
+        return dataset.filter("code_naf NOT IN ('O', 'P')")
 
-        df = dataset.join(
-            company_size_filter, on=["siren", "periode"], how="left_semi"
-        ).filter("code_naf NOT IN ('O', 'P')")
 
-        return df
+class WorkforceFilter(Transformer):  # pylint: disable=R0903
+    """A transformer to filter the dataset according to workforce size."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Filters out small companies
+
+        Only keeps companies with more than 10 employees.
+
+        Args:
+            dataset: DataFrame to filter.
+
+        Returns:
+            Filtered DataFrame.
+
+        """
+        if "effectif" not in dataset.columns:
+            raise KeyError("Dataset has no 'effectif' column.")
+        return dataset.filter(F.col("effectif") >= 10)
 
 
 class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
