@@ -1,0 +1,30 @@
+{
+    "IDENTIFIERS": [
+        "siren",
+        "periode"
+    ],
+    "SIREN_AGGREGATION": {
+        "cotisation": "sum",
+        "cotisation_moy12m": "sum",
+        "montant_part_ouvriere": "sum",
+        "montant_part_ouvriere_past_1": "sum",
+        "montant_part_ouvriere_past_12": "sum",
+        "montant_part_ouvriere_past_2": "sum",
+        "montant_part_ouvriere_past_3": "sum",
+        "montant_part_ouvriere_past_6": "sum",
+        "montant_part_patronale": "sum",
+        "montant_part_patronale_past_1": "sum",
+        "montant_part_patronale_past_12": "sum",
+        "montant_part_patronale_past_2": "sum",
+        "montant_part_patronale_past_3": "sum",
+        "montant_part_patronale_past_6": "sum",
+        "effectif": "sum",
+        "apart_heures_consommees_cumulees": "sum",
+        "apart_heures_consommees": "sum",
+        "ratio_dette_moy12m": "avg"
+    },
+    "NO_AGGREGATION": [
+        "paydex_nb_jours",
+        "paydex_nb_jours_past_12"
+    ]
+}

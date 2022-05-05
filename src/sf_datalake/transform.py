@@ -140,9 +140,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     """
     stages = [
         MissingValuesHandler(config),
-        DatasetFilter(),
         PaydexColumnsAdder(config),
-        SirenAggregator(config),
         AvgDeltaDebtPerSizeColumnAdder(config),
         DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
@@ -384,37 +382,23 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             Transformed DataFrame at a SIREN level.
 
         """
-        assert {"IDENTIFIERS", "FEATURES", "VARIABLE_AGGREGATION"} <= set(self.config)
-        assert {"siren", "periode"} <= set(dataset.columns)
-
-        siren_lvl_colnames = [
-            feat
-            for feat in self.config["FEATURES"]
-            if (feat not in self.config["VARIABLE_AGGREGATION"])
-            and (feat in dataset.columns)
-        ]
-
-        # check if siren level features have a unique value by (siren, periode)
-        n_duplicates = (
-            dataset.select(["siren", "periode"] + siren_lvl_colnames)
-            .dropDuplicates()
-            .groupBy(["siren", "periode"])
-            .count()
-            .filter("count > 1")
-            .count()
-        )
-        assert n_duplicates == 0, (
-            "One or more siren level features have multiple values by "
-            f"(siren, periode). siren level features: {siren_lvl_colnames}"
+        assert {"IDENTIFIERS", "SIREN_AGGREGATION", "NO_AGGREGATION"} <= set(
+            self.config
         )
 
-        gb_colnames = self.config["IDENTIFIERS"] + siren_lvl_colnames
-
-        dataset = dataset.groupBy(gb_colnames).agg(self.config["VARIABLE_AGGREGATION"])
-        for colname, func in self.config["VARIABLE_AGGREGATION"].items():
-            dataset = dataset.withColumnRenamed(f"{func}({colname})", colname)
-
-        return dataset
+        aggregated = dataset.groupBy(self.config["IDENTIFIERS"]).agg(
+            self.config["SIREN_AGGREGATION"]
+        )
+        for colname, func in self.config["SIREN_AGGREGATION"].items():
+            aggregated = aggregated.withColumnRenamed(f"{func}({colname})", colname)
+        siren_level = dataset.select(
+            self.config["NO_AGGREGATION"] + self.config["IDENTIFIERS"]
+        ).distinct()
+        return aggregated.join(
+            siren_level,
+            on=["siren", "periode"],
+            how="left",
+        )
 
 
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
