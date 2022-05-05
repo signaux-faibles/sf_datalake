@@ -26,6 +26,7 @@
     "NO_AGGREGATION": [
         "paydex_nb_jours",
         "paydex_nb_jours_past_12",
-        "arrete_bilan_diane"
+        "arrete_bilan_diane",
+        "time_til_failure"
     ]
 }
