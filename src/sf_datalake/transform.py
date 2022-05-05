@@ -47,6 +47,22 @@ def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     return df
 
 
+def extract_siren_from_siret(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+    """Infer the SIREN number from a SIRET column.
+
+    Args:
+        df: A DataFrame with a "siret" column, whose type can be cast to string.
+
+    Returns:
+        A DataFrame with zeros-left-padded SIREN data, as string type.
+
+    """
+    assert "siret" in df.columns, "Input DataFrame doesn't have a 'siret' column."
+    return df.withColumn("siret", F.lpad(F.col("siret"), 14, "0")).withColumn(
+        "siren", F.col("siret").substr(1, 9)
+    )
+
+
 def get_transformer(name: str) -> Transformer:
     """Gets a pre-configured Transformer object by specifying its name.
 
