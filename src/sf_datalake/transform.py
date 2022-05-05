@@ -42,8 +42,7 @@ def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
 
     """
     assert "siren" in df.columns, "Input DataFrame doesn't have a 'siren' column."
-    df = df.withColumn("siren", df["siren"].cast("string"))
-    df = df.withColumn("siren", F.lpad(df["siren"], 9, "0"))
+    df = df.withColumn("siren", F.lpad(df["siren"].cast("string"), 9, "0"))
     return df
 
 
@@ -58,9 +57,9 @@ def extract_siren_from_siret(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame
 
     """
     assert "siret" in df.columns, "Input DataFrame doesn't have a 'siret' column."
-    return df.withColumn("siret", F.lpad(F.col("siret"), 14, "0")).withColumn(
-        "siren", F.col("siret").substr(1, 9)
-    )
+    return df.withColumn(
+        "siret", F.lpad(F.col("siret").cast("string"), 14, "0")
+    ).withColumn("siren", F.col("siret").substr(1, 9))
 
 
 def get_transformer(name: str) -> Transformer:
