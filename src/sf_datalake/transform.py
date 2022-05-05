@@ -1,7 +1,7 @@
 """Utilities and classes for handling and transforming datasets."""
 
+import itertools
 import logging
-from itertools import chain
 from typing import Iterable, List
 
 import numpy as np
@@ -289,7 +289,9 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
 
         ## Binned paydex delay
         days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
-        days_splits = np.unique(np.array([float(v) for v in chain(*days_bins)]))
+        days_splits = np.unique(
+            np.array([float(v) for v in itertools.chain(*days_bins)])
+        )
 
         bucketizer = pyspark.ml.feature.Bucketizer(
             splits=days_splits,
