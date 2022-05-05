@@ -21,12 +21,12 @@
         "effectif": "sum",
         "apart_heures_consommees_cumulees": "sum",
         "apart_heures_consommees": "sum",
-        "ratio_dette_moy12m": "avg"
+        "ratio_dette_moy12m": "avg",
+        "time_til_failure": "min"
     },
     "NO_AGGREGATION": [
         "paydex_nb_jours",
         "paydex_nb_jours_past_12",
-        "arrete_bilan_diane",
-        "time_til_failure"
+        "arrete_bilan_diane"
     ]
 }
