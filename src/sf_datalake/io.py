@@ -111,9 +111,9 @@ def write_predictions(
     prediction_output_path = path.join(output_dir, "prediction_data.csv")
 
     logging.info("Writing test data to file %s", test_output_path)
-    test_data.select(
-        ["siren", "time_til_failure", "failure_within_18m", "probability"]
-    ).repartition(n_rep).write.csv(test_output_path, header=True)
+    test_data.select(["siren", "failure_within_18m", "probability"]).repartition(
+        n_rep
+    ).write.csv(test_output_path, header=True)
 
     logging.info("Writing prediction data to file %s", prediction_output_path)
     prediction_data.select(["siren", "probability"]).repartition(n_rep).write.csv(
