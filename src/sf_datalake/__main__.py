@@ -50,25 +50,25 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
     sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
 
     # Prepare data.
-    yearly_data = sf_datalake.io.load_data(
-        {"yearly_data": config["DATASET"]},
+    dataset = sf_datalake.io.load_data(
+        {"dataset": config["DATASET"]},
         file_format="orc",
         spl_ratio=config["SAMPLE_RATIO"],
         seed=config["SEED"],
-    )["yearly_data"]
+    )["dataset"]
 
     pipeline_preprocessor = Pipeline(
         stages=sf_datalake.transform.generate_preprocessing_stages(config)
     )
-    yearly_data = pipeline_preprocessor.fit(yearly_data).transform(yearly_data)
-    assert yearly_data.dropna().count() == yearly_data.count()
+    dataset = pipeline_preprocessor.fit(dataset).transform(dataset)
+    assert dataset.dropna().count() == dataset.count()
 
     # Split the dataset into train, test, predict subsets.
     (
         train_data,
         test_data,
         prediction_data,
-    ) = sf_datalake.sampler.train_test_predict_split(yearly_data, config)
+    ) = sf_datalake.sampler.train_test_predict_split(dataset, config)
 
     # Build and run Pipeline
     transforming_stages = sf_datalake.transform.generate_transforming_stages(config)

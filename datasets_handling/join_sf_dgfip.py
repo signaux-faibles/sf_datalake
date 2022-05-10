@@ -20,8 +20,8 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint: disable=C0413
+import sf_datalake.transform
 from sf_datalake.io import load_data
-from sf_datalake.transform import stringify_and_pad_siren
 
 parser = argparse.ArgumentParser(
     description="Merge DGFiP and Signaux Faibles datasets into a single one."
@@ -59,15 +59,13 @@ args = parser.parse_args()
 # }
 
 ## Load datasets
-
 datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format="orc")
 
-## Join datasets
-
-df_dgfip = datasets["dgfip"].withColumn(
+## Join datasets over SIREN and (supposed) end of accounting year.
+df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"]).withColumn(
     "join_date", F.year(datasets["dgfip"]["date_fin_exercice"])
 )
-df_sf = stringify_and_pad_siren(datasets["sf"]).withColumn(
+df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
     "join_date",
     F.year(
         F.coalesce(
@@ -86,4 +84,4 @@ df_joined = df_sf.join(
     how="full_outer",
 )
 
-df_joined.write.format("orc").save(path.join(args.output))
+df_joined.write.format("orc").save(args.output)
