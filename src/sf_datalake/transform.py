@@ -278,6 +278,7 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             return dataset
 
         assert {"paydex_nb_jours", "paydex_nb_jours_past_12"} <= set(dataset.columns)
+        paydex_features = ["paydex_yoy"]
 
         ## Paydex variation
         dataset = dataset.withColumn(
@@ -285,38 +286,33 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
         )
 
-        if not "paydex_bin" in self.config["FEATURES"]:
-            return dataset
+        ## Binned paydex
+        if "paydex_bin" in self.config["FEATURES"]:
+            paydex_features.append("paydex_bin")
+            days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
+            days_splits = np.unique(
+                np.array([float(v) for v in itertools.chain(*days_bins)])
+            )
+            bucketizer = pyspark.ml.feature.Bucketizer(
+                splits=days_splits,
+                handleInvalid="error",
+                inputCol="paydex_nb_jours",
+                outputCol="paydex_bin",
+            )
+            dataset = bucketizer.transform(dataset)
 
-        ## Binned paydex delay
-        days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
-        days_splits = np.unique(
-            np.array([float(v) for v in itertools.chain(*days_bins)])
-        )
-
-        bucketizer = pyspark.ml.feature.Bucketizer(
-            splits=days_splits,
-            handleInvalid="error",
-            inputCol="paydex_nb_jours",
-            outputCol="paydex_bin",
-        )
-        dataset = bucketizer.transform(dataset)
-
-        ## Add corresponding 'meso' column names to the configuration.
-        self.config["MESO_GROUPS"]["paydex_bin"] = [
-            f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
-        ]
+            ## Add corresponding 'meso' column names to the configuration.
+            self.config["MESO_GROUPS"]["paydex_bin"] = [
+                f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
+            ]
 
         ## Fill missing values
         if self.config["FILL_MISSING_VALUES"]:
             dataset = dataset.fillna(
-                {
-                    "paydex_bin": self.config["DEFAULT_VALUES"]["paydex_bin"],
-                    "paydex_yoy": self.config["DEFAULT_VALUES"]["paydex_yoy"],
-                }
+                {feat: self.config["DEFAULT_VALUES"][feat] for feat in paydex_features}
             )
         else:
-            dataset = dataset.dropna(subset=["paydex_bin", "paydex_yoy"])
+            dataset = dataset.dropna(subset=paydex_features)
         return dataset
 
 
