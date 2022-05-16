@@ -147,6 +147,9 @@ def explain_logistic_regression(
         ).drop(*features)
 
     # 'Macro' scores per group
+    macro_scores_columns = [
+        f"{group}_macro_score" for group in config["FEATURE_GROUPS"]
+    ]
     for group, features in config["FEATURE_GROUPS"].items():
         explanation_df = explanation_df.withColumn(
             f"{group}_macro_score",
@@ -154,6 +157,14 @@ def explain_logistic_regression(
         )
 
     # 'Micro' scores
+    micro_scores_columns = [
+        "1st_concerning_val",
+        "2nd_concerning_val",
+        "3rd_concerning_val",
+        "1st_concerning_feat",
+        "2nd_concerning_feat",
+        "3rd_concerning_feat",
+    ]
     explanation_df = (
         explanation_df.withColumn(
             "1st_concerning_val",
@@ -192,6 +203,6 @@ def explain_logistic_regression(
         )
     )
 
-    micro_scores_df = explanation_df.select(["siren"] + config["MICRO_SCORES_COLUMNS"])
-    macro_scores_df = explanation_df.select(["siren"] + config["MACRO_SCORES_COLUMNS"])
+    micro_scores_df = explanation_df.select(["siren"] + micro_scores_columns)
+    macro_scores_df = explanation_df.select(["siren"] + macro_scores_columns)
     return macro_scores_df, micro_scores_df

@@ -177,20 +177,6 @@
     "TARGET": [
         "failure_within_18m"
     ],
-    "MICRO_SCORES_COLUMNS": [
-        "1st_concerning_val",
-        "2nd_concerning_val",
-        "3rd_concerning_val",
-        "1st_concerning_feat",
-        "2nd_concerning_feat",
-        "3rd_concerning_feat"
-    ],
-    "MACRO_SCORES_COLUMNS": [
-        "sante_financiere_macro_score",
-        "dette_urssaf_macro_score",
-        "activite_partielle_macro_score",
-        "misc_macro_score"
-    ],
     "MESO_GROUPS": {
         "cotisation_urssaf": [
             "cotisation",
