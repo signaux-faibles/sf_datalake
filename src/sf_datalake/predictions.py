@@ -87,7 +87,7 @@ def tailor_alert(
     return predictions_df
 
 
-def partial_unemployment_tailoring(
+def partial_unemployment_signal(
     pu_df: pd.DataFrame,
     pu_col: str,
     threshold: int,
@@ -105,12 +105,11 @@ def partial_unemployment_tailoring(
         threshold: A number of months above which the tailoring switch is triggered.
 
     Returns:
-        The (siren) indexes where an alert update should take place.
+        The (siren) indexes where partial unemployment requests level is deemed high.
 
     """
     assert pu_df.index.name == "siret"
-    pu_df["above_threshold"] = pu_df[pu_col] > threshold
-    siren_mask = pu_df.groupby("siren")["above_threshold"].sum() > 0
+    siren_mask = pu_df.groupby("siren")[pu_df[pu_col] > threshold].agg(pd.Series.any)
     return siren_mask[siren_mask].index
 
 
@@ -139,7 +138,7 @@ def urssaf_debt_change(
           the alert level should be updated.
 
     Returns:
-        The (siren) indexes where an alert update should take place.
+        The (siren) indexes where urssaf debt change is significant.
 
     """
     sign = 1 if increasing else -1
@@ -149,3 +148,18 @@ def urssaf_debt_change(
         / (debt_df[debt_cols["contribution"]] * 12)
     )
     return debt_df[debt_change > tol].index
+
+
+def urssaf_debt_prevails(
+    macro_df: pd.DataFrame,
+) -> pd.Index:
+    """States if URSSAF debt prevails among concerning predictors groups.
+
+    Args:
+        macro_df: Prediction macro-level influence for each variable category.
+
+    Returns:
+        The (siren) indexes where social debt prevails.
+
+    """
+    return macro_df[(macro_df - macro_df["dette_urssaf"] <= 0).all(axis=1)].index

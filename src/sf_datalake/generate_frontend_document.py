@@ -36,11 +36,19 @@ def tailoring_rule(row) -> int:
         of the alert level.
 
     """
-    if row["urssaf_new_debt_increase"]:
-        return 1
-    if row["urssaf_previous_debt_decrease"] and not row["urssaf_new_debt_increase"]:
-        return -1
-    return 0
+    tailoring = 0
+    if row["recent_urssaf_debt_increased"]:
+        tailoring += 1
+    if (
+        row["previous_urssaf_debt_decreased"]
+        and not row["urssaf_recent_debt_increased"]
+        and row["prevailing_urssaf_debt"]
+    ):
+        tailoring -= 1
+    if row["high_partial_unemployment_request"]:
+        tailoring -= 1
+
+    return max(min(tailoring, -1), 1)
 
 
 def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
@@ -130,7 +138,7 @@ def main(
         debt_data["montant_part_patronale_ancienne_reference"]
         + debt_data["montant_part_ouvriere_ancienne_reference"]
     )
-    new_debt_cols = {
+    recent_debt_cols = {
         "start": "dette_recente_reference",
         "end": "dette_recente_courante",
         "contribution": "cotisation_moyenne_12m",
@@ -142,8 +150,8 @@ def main(
     }
 
     ### Apply tailoring
-    tailoring_steps = {
-        "urssaf_previous_debt_decrease": (
+    tailoring_signals = {
+        "previous_urssaf_debt_decreased": (
             sf_datalake.predictions.urssaf_debt_change,
             {
                 "debt_df": debt_data,
@@ -152,27 +160,31 @@ def main(
                 "tol": 0.2,
             },
         ),
-        "urssaf_new_debt_increase": (
+        "recent_urssaf_debt_increased": (
             sf_datalake.predictions.urssaf_debt_change,
             {
                 "debt_df": debt_data,
-                "debt_cols": new_debt_cols,
+                "debt_cols": recent_debt_cols,
                 "increasing": True,
                 "tol": 0.2,
             },
         ),
-        "partial_unemployment_request": (
-            sf_datalake.predictions.partial_unemployment_tailoring,
+        "high_partial_unemployment_request": (
+            sf_datalake.predictions.partial_unemployment_signal,
             {
                 "pu_df": tailoring_data.set_index("siret"),
                 "pu_col": "total_demande_ap",
                 "threshold": args["n_months"],
             },
         ),
+        "prevailing_urssaf_debt": (
+            sf_datalake.predictions.urssaf_debt_prevails,
+            {"macro_df": macro_explanation},
+        ),
     }
     prediction_set = sf_datalake.predictions.tailor_alert(
         prediction_set,
-        tailoring_steps,
+        tailoring_signals,
         tailoring_rule,
         pre_tailoring_alert_col="pre_tailoring_alert_group",
         post_tailoring_alert_col="post_tailoring_alert_group",
@@ -222,9 +234,9 @@ def main(
             {
                 "macroRadar": macro_explanation.loc[siren].to_dict(),
                 "redressements": [
-                    tailoring
-                    for tailoring in tailoring_steps
-                    if output_entry[siren][tailoring]
+                    signal
+                    for signal in tailoring_signals
+                    if output_entry[siren][signal]
                 ],
                 "explSelection": {
                     "selectConcerning": [
