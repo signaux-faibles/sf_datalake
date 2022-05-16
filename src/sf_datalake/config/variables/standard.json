@@ -68,9 +68,7 @@
         "apart_heures_consommees": "StandardScaler",
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
-        "avg_delta_dette_par_effectif": "StandardScaler",
-        "paydex_nb_jours": "StandardScaler",
-        "paydex_yoy": "StandardScaler"
+        "avg_delta_dette_par_effectif": "StandardScaler"
     },
     "TARGET": [
         "failure_within_18m"
@@ -138,10 +136,6 @@
             "part_ouvriere",
             "part_patronale",
             "dette"
-        ],
-        "retards_paiement": [
-            "paydex_nb_jours",
-            "paydex_yoy"
         ],
         "misc": [
             "effectif"

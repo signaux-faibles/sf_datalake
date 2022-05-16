@@ -70,7 +70,6 @@
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
         "avg_delta_dette_par_effectif": "StandardScaler",
-        "paydex_nb_jours": "StandardScaler",
         "paydex_yoy": "StandardScaler",
         "paydex_bin": "OneHotEncoder"
     },
