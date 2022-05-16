@@ -7,38 +7,39 @@ This module offers tools for:
 
 """
 
-import logging
+import json
 from typing import Callable, Dict, List, Tuple
 
 import pandas as pd
 
 
-def merge_predictions(predictions: List[pd.DataFrame]) -> pd.DataFrame:
-    """Builds a list of predicted probabilities based on several model outputs.
+def merge_predictions_lists(predictions_paths: List[str], output_path: str):
+    """Builds a front-end-ready predictions list based on multiple model outputs.
 
-    The available scores are picked by decreasing order of priority, that is, if a
-    prediction is found for a given SIREN in the first model output, any subsequent
-    prediction for this SIREN will be ignored.
+    The latest available information is used, that is, if a prediction is found for a
+    given SIREN in any prediction list, it will replace any previous prediction for this
+    same SIREN.
 
     Args:
-        predictions: A list of pandas DataFrame with the same set of columns, indexed by
-          SIREN.
-
-    Returns:
-        A DataFrame with merged predicted probabilities.
+        predictions: A list of paths to predictions JSON documents. Each entry in these
+          documents should have at least a "siren" key.
+        output_path: A path where the merged predictions list will be written.
 
     """
-    merged = predictions.pop(0)
-    if not predictions:
-        logging.warning("Predictions contains a single model output.")
-        return merged
-    assert all(merged.columns.equals(pred.columns) for pred in predictions)
-    assert all(merged.index.name == pred.index.name for pred in predictions)
+    predictions = []
+    for path in predictions_paths:
+        with open(path, encoding="utf-8") as f:
+            predictions.append({entry["siren"]: entry for entry in json.load(f)})
+    merged = predictions[0].copy()
+    for prediction in predictions[1:]:
+        merged.update(prediction)
 
-    for prediction in predictions:
-        diff_ix = prediction.index.difference(merged.index)
-        merged = merged.append(prediction.loc[diff_ix], verify_integrity=True)
-    return merged
+    with open(output_path, mode="w", encoding="utf-8") as f:
+        json.dump(
+            list(merged.values()),
+            f,
+            indent=4,
+        )
 
 
 def tailor_alert(
