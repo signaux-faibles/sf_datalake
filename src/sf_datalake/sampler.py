@@ -22,7 +22,7 @@ def train_test_predict_split(
 
     Args:
         df: the DataFrame to sample
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         A tuple of three DataFrame, each associated with the following stages: learn,

@@ -1,7 +1,7 @@
 """Utilities and classes for handling and transforming datasets."""
 
+import itertools
 import logging
-from itertools import chain
 from typing import Iterable, List
 
 import numpy as np
@@ -11,7 +11,6 @@ import pyspark.sql.functions as F
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.sql.types import FloatType, StringType
-from pyspark.sql.window import Window
 
 
 def parse_date(
@@ -43,45 +42,24 @@ def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
 
     """
     assert "siren" in df.columns, "Input DataFrame doesn't have a 'siren' column."
-    df = df.withColumn("siren", df["siren"].cast("string"))
-    df = df.withColumn("siren", F.lpad(df["siren"], 9, "0"))
+    df = df.withColumn("siren", F.lpad(df["siren"].cast("string"), 9, "0"))
     return df
 
 
-def process_payment(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Computes the number of payments.
+def extract_siren_from_siret(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+    """Infer the SIREN number from a SIRET column.
 
     Args:
-        df: A DataFrame containing payment data.
+        df: A DataFrame with a "siret" column, whose type can be cast to string.
 
     Returns:
-        A DataFrame with a new "nb_paiement" column.
+        A DataFrame with zeros-left-padded SIREN data, as string type.
 
     """
-    df = df.withColumn("mvt_djc_int", F.unix_timestamp(F.col("mvt_djc")))
-    df = df.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
-        ["frp", "art_cleart", "mvt_deff"]
-    )
-    df = (
-        df.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
-        .select(["frp", "art_cleart", "min(mvt_djc_int)", "sum(mvt_mcrd)"])
-        .withColumnRenamed("min(mvt_djc_int)", "min_mvt_djc_int")
-        .withColumnRenamed("sum(mvt_mcrd)", "sum_mvt_mcrd")
-        .dropDuplicates()
-    )
-
-    windowval = (
-        Window.partitionBy("art_cleart")
-        .orderBy(["frp", "min_mvt_djc_int"])
-        .rangeBetween(Window.unboundedPreceding, 0)
-    )
-    df = (
-        df.filter("sum_mvt_mcrd != 0")
-        .withColumn("mnt_paiement_cum", F.sum("sum_mvt_mcrd").over(windowval))
-        .withColumn("nb_paiement", F.count("sum_mvt_mcrd").over(windowval))
-        .dropDuplicates()
-    )
-    return df
+    assert "siret" in df.columns, "Input DataFrame doesn't have a 'siret' column."
+    return df.withColumn(
+        "siret", F.lpad(F.col("siret").cast("string"), 14, "0")
+    ).withColumn("siren", F.col("siret").substr(1, 9))
 
 
 def get_transformer(name: str) -> Transformer:
@@ -112,7 +90,7 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
     The stages are ready to be included in a pyspark.ml.Pipeline.
 
     Args:
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         List of prepared Transformers.
@@ -153,17 +131,16 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     preprocessing and feature engineering.
 
     Args:
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         A list of the preprocessing stages.
 
     """
     stages = [
+        WorkforceFilter(),
         MissingValuesHandler(config),
         PaydexColumnsAdder(config),
-        SirenAggregator(config),
-        DatasetFilter(),
         AvgDeltaDebtPerSizeColumnAdder(config),
         DebtRatioColumnAdder(config),
         TargetVariableColumnAdder(),
@@ -301,6 +278,7 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             return dataset
 
         assert {"paydex_nb_jours", "paydex_nb_jours_past_12"} <= set(dataset.columns)
+        paydex_features = ["paydex_yoy"]
 
         ## Paydex variation
         dataset = dataset.withColumn(
@@ -308,36 +286,33 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
         )
 
-        if not "paydex_bin" in self.config["FEATURES"]:
-            return dataset
+        ## Binned paydex
+        if "paydex_bin" in self.config["FEATURES"]:
+            paydex_features.append("paydex_bin")
+            days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
+            days_splits = np.unique(
+                np.array([float(v) for v in itertools.chain(*days_bins)])
+            )
+            bucketizer = pyspark.ml.feature.Bucketizer(
+                splits=days_splits,
+                handleInvalid="error",
+                inputCol="paydex_nb_jours",
+                outputCol="paydex_bin",
+            )
+            dataset = bucketizer.transform(dataset)
 
-        ## Binned paydex delay
-        days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
-        days_splits = np.unique(np.array([float(v) for v in chain(*days_bins)]))
-
-        bucketizer = pyspark.ml.feature.Bucketizer(
-            splits=days_splits,
-            handleInvalid="error",
-            inputCol="paydex_nb_jours",
-            outputCol="paydex_bin",
-        )
-        dataset = bucketizer.transform(dataset)
-
-        ## Add corresponding 'meso' column names to the configuration.
-        self.config["MESO_GROUPS"]["paydex_bin"] = [
-            f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
-        ]
+            ## Add corresponding 'meso' column names to the configuration.
+            self.config["MESO_GROUPS"]["paydex_bin"] = [
+                f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
+            ]
 
         ## Fill missing values
         if self.config["FILL_MISSING_VALUES"]:
             dataset = dataset.fillna(
-                {
-                    "paydex_bin": self.config["DEFAULT_VALUES"]["paydex_bin"],
-                    "paydex_yoy": self.config["DEFAULT_VALUES"]["paydex_yoy"],
-                }
+                {feat: self.config["DEFAULT_VALUES"][feat] for feat in paydex_features}
             )
         else:
-            dataset = dataset.dropna(subset=["paydex_bin", "paydex_yoy"])
+            dataset = dataset.dropna(subset=paydex_features)
         return dataset
 
 
@@ -405,21 +380,23 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
             Transformed DataFrame at a SIREN level.
 
         """
-        assert {"IDENTIFIERS", "FEATURES", "AGG_DICT"} <= set(self.config)
-        assert {"siren", "periode"} <= set(dataset.columns)
+        assert {"IDENTIFIERS", "SIREN_AGGREGATION", "NO_AGGREGATION"} <= set(
+            self.config
+        )
 
-        siren_lvl_colnames = [
-            feat
-            for feat in self.config["FEATURES"]
-            if (feat not in self.config["AGG_DICT"]) and (feat in dataset.columns)
-        ]
-        gb_colnames = self.config["IDENTIFIERS"] + siren_lvl_colnames
-
-        dataset = dataset.groupBy(gb_colnames).agg(self.config["AGG_DICT"])
-        for colname, func in self.config["AGG_DICT"].items():
-            dataset = dataset.withColumnRenamed(f"{func}({colname})", colname)
-
-        return dataset
+        aggregated = dataset.groupBy(self.config["IDENTIFIERS"]).agg(
+            self.config["SIREN_AGGREGATION"]
+        )
+        for colname, func in self.config["SIREN_AGGREGATION"].items():
+            aggregated = aggregated.withColumnRenamed(f"{func}({colname})", colname)
+        siren_level = dataset.select(
+            self.config["NO_AGGREGATION"] + self.config["IDENTIFIERS"]
+        ).distinct()
+        return aggregated.join(
+            siren_level,
+            on=["siren", "periode"],
+            how="left",
+        )
 
 
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
@@ -474,24 +451,44 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
         return dataset
 
 
-class DatasetFilter(Transformer):  # pylint: disable=R0903
-    """A transformer to filter the dataset."""
+class PrivateCompanyFilter(Transformer):  # pylint: disable=R0903
+    """A transformer that filters a dataset according to its public/private nature."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Filters out small companies or public institution from a dataset.
+        """Filters out public institutions from a dataset.
 
-        Only keeps private companies with more than 10 employees.
+        Only keeps private companies using `code_naf` variable.
 
         Args:
-            dataset: DataFrame to transform/filter.
+            dataset: DataFrame to filter.
 
         Returns:
-            Transformed/filtered DataFrame.
+            Filtered DataFrame.
 
         """
-        assert {"effectif", "code_naf"} <= set(dataset.columns)
+        if "code_naf" not in dataset.columns:
+            raise KeyError("Dataset has no 'code_naf' column.")
+        return dataset.filter("code_naf NOT IN ('O', 'P')")
 
-        return dataset.filter("effectif >= 10 AND code_naf NOT IN ('O', 'P')")
+
+class WorkforceFilter(Transformer):  # pylint: disable=R0903
+    """A transformer to filter the dataset according to workforce size."""
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Filters out small companies
+
+        Only keeps companies with more than 10 employees.
+
+        Args:
+            dataset: DataFrame to filter.
+
+        Returns:
+            Filtered DataFrame.
+
+        """
+        if "effectif" not in dataset.columns:
+            raise KeyError("Dataset has no 'effectif' column.")
+        return dataset.filter(F.col("effectif") >= 10)
 
 
 class ProbabilityFormatter(Transformer):  # pylint: disable=R0903

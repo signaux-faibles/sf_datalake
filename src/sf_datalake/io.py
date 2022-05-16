@@ -1,6 +1,7 @@
 """Utility functions for data handling."""
 
 import argparse
+import json
 import logging
 from os import path
 from typing import Dict, Iterable, Optional
@@ -110,9 +111,9 @@ def write_predictions(
     prediction_output_path = path.join(output_dir, "prediction_data.csv")
 
     logging.info("Writing test data to file %s", test_output_path)
-    test_data.select(
-        ["siren", "time_til_failure", "failure_within_18m", "probability"]
-    ).repartition(n_rep).write.csv(test_output_path, header=True)
+    test_data.select(["siren", "failure_within_18m", "probability"]).repartition(
+        n_rep
+    ).write.csv(test_output_path, header=True)
 
     logging.info("Writing prediction data to file %s", prediction_output_path)
     prediction_data.select(["siren", "probability"]).repartition(n_rep).write.csv(
@@ -140,6 +141,39 @@ def write_explanations(
     )
 
 
+def load_parameters(fname: str) -> dict:
+    """Loads a model run parameters from a preset config json file.
+
+    Args:
+        fname: Basename of a config file (including .json extension).
+
+    Returns:
+        The model parameters to use during the learning procedure and prediction.
+
+    """
+    with pkg_resources.resource_stream(
+        "sf_datalake", f"config/parameters/{fname}"
+    ) as f:
+        config = json.load(f)
+    return config
+
+
+def load_variables(fname: str) -> dict:
+    """Loads a list of variables / features from a preset config json file.
+
+    Args:
+        fname: Basename of a config file (including .json extension).
+
+    Returns:
+        The variables, features and corresponding default values to use during the
+          learning procedure and prediction.
+
+    """
+    with pkg_resources.resource_stream("sf_datalake", f"config/variables/{fname}") as f:
+        config = json.load(f)
+    return config
+
+
 def dump_configuration(
     output_dir: str, config: dict, dump_keys: Optional[Iterable] = None
 ):
@@ -147,7 +181,7 @@ def dump_configuration(
 
     Args:
         output_dir: The path where configuration should be dumped.
-        config: Model configuration, as loaded by utils.get_config().
+        config: Model configuration, as loaded by io.load_parameters().
         dump_keys: An Iterable of configuration parameters that should be dumped.
           All elements of `dump_keys` must be part of `config`'s keys.
 

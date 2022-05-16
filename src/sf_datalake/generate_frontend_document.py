@@ -68,10 +68,11 @@ def main(
     if isinstance(args, argparse.Namespace):
         args = vars(args)
 
-    pred_config = sf_datalake.utils.get_config(args["configuration"])
+    pred_vars = sf_datalake.io.load_variables(args["variables"])
+
     micro_macro = {
         micro: macro
-        for macro, micros in pred_config["FEATURE_GROUPS"].items()
+        for macro, micros in pred_vars["FEATURE_GROUPS"].items()
         for micro in micros
     }
 
@@ -283,9 +284,9 @@ if __name__ == "__main__":
         added to every entry in the output document.""",
     )
     path_group.add_argument(
-        "-c",
-        "--configuration",
-        help="Path to the prediction run configuration file.",
+        "-v",
+        "--variables",
+        help="Path to the variables configuration file.",
         required=True,
     )
     path_group.add_argument(
@@ -303,7 +304,7 @@ if __name__ == "__main__":
         "--n_months",
         help="""Number of months to consider as upper threshold for partial unemployment
         tailoring.""",
-        default=13,
+        default=10,
     )
     parser.add_argument(
         "--concerning_threshold",

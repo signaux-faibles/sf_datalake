@@ -1,44 +1,55 @@
 {
-    "OUTPUT_ROOT_DIR": "/projets/TSF/predictions",
-    "DATASET": "/projets/TSF/donnees/agg/full_dataset_has_paydex",
-    "FILL_MISSING_VALUES": true,
-    "USE_COVID19ADAPTER": false,
-    "SAMPLE_RATIO": 1.0,
-    "TRAIN_TEST_SPLIT_RATIO": 0.8,
-    "TARGET_OVERSAMPLING_RATIO": 0.2,
-    "N_CONCERNING_MICRO": 3,
-    "TRAIN_DATES": [
-        "2016-01-01",
-        "2019-05-31"
-    ],
-    "TEST_DATES": [
-        "2019-06-01",
-        "2020-01-31"
-    ],
-    "PREDICTION_DATE": "2020-02-01",
-    "PANDEMIC_EVENT_DATE": "2020-02-29",
-    "MODEL": {
-        "NAME": "LogisticRegression",
-        "REGULARIZATION_COEFF": 0.12,
-        "MAX_ITER": 50,
-        "TOL": 1e-05
-    },
+    "DATASET": "/projets/TSF/donnees/agg/full_dataset",
     "IDENTIFIERS": [
         "periode",
-        "siren",
-        "code_naf",
-        "time_til_failure"
+        "siren"
     ],
+    "DEFAULT_VALUES": {
+        "time_til_failure": 9999,
+        "paydex_nb_jours": 0,
+        "paydex_nb_jours_past_12": 0,
+        "paydex_yoy": 0,
+        "paydex_bin": 0.0,
+        "montant_part_ouvriere_past_12": 0.0,
+        "montant_part_patronale_past_12": 0.0,
+        "montant_part_ouvriere_past_6": 0.0,
+        "montant_part_patronale_past_6": 0.0,
+        "montant_part_ouvriere_past_3": 0.0,
+        "montant_part_patronale_past_3": 0.0,
+        "montant_part_ouvriere_past_2": 0.0,
+        "montant_part_patronale_past_2": 0.0,
+        "montant_part_ouvriere_past_1": 0.0,
+        "montant_part_patronale_past_1": 0.0,
+        "cotisation": 0.0,
+        "montant_part_ouvriere": 0.0,
+        "montant_part_patronale": 0.0,
+        "cotisation_moy12m": 0.0,
+        "ratio_dette": 0.0,
+        "ratio_dette_moy12m": 0.0,
+        "apart_heures_consommees_cumulees": 0.0,
+        "apart_heures_consommees": 0.0,
+        "avg_delta_dette_par_effectif": 0.0,
+        "effectif": 0,
+        "mnt_af_bfonc_bfr": 0.0,
+        "mnt_af_bfonc_tresorerie": 0.0,
+        "mnt_af_bfonc_frng": 0.0,
+        "mnt_af_ca": 0.0,
+        "mnt_af_sig_ebe_ret": 0.0,
+        "rto_af_ratio_rent_mbe": 0.0,
+        "rto_af_rent_eco": 0.0,
+        "rto_af_solidite_financiere": 0.0,
+        "rto_invest_ca": 0.0
+    },
     "FEATURES": {
-        "MNT_AF_BFONC_BFR": "StandardScaler",
-        "MNT_AF_BFONC_TRESORERIE": "StandardScaler",
-        "RTO_AF_RATIO_RENT_MBE": "StandardScaler",
-        "MNT_AF_BFONC_FRNG": "StandardScaler",
-        "MNT_AF_CA": "StandardScaler",
-        "MNT_AF_SIG_EBE_RET": "StandardScaler",
-        "RTO_AF_RENT_ECO": "StandardScaler",
-        "RTO_AF_SOLIDITE_FINANCIERE": "StandardScaler",
-        "RTO_INVEST_CA": "StandardScaler",
+        "mnt_af_bfonc_bfr": "StandardScaler",
+        "mnt_af_bfonc_tresorerie": "StandardScaler",
+        "rto_af_ratio_rent_mbe": "StandardScaler",
+        "mnt_af_bfonc_frng": "StandardScaler",
+        "mnt_af_ca": "StandardScaler",
+        "mnt_af_sig_ebe_ret": "StandardScaler",
+        "rto_af_rent_eco": "StandardScaler",
+        "rto_af_solidite_financiere": "StandardScaler",
+        "rto_invest_ca": "StandardScaler",
         "cotisation": "StandardScaler",
         "cotisation_moy12m": "StandardScaler",
         "montant_part_ouvriere": "StandardScaler",
@@ -58,25 +69,23 @@
         "apart_heures_consommees": "StandardScaler",
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
-        "avg_delta_dette_par_effectif": "StandardScaler",
-        "paydex_nb_jours": "StandardScaler",
-        "paydex_yoy": "StandardScaler"
+        "avg_delta_dette_par_effectif": "StandardScaler"
     },
     "FEATURES_TO_ADAPT": [
-        "MNT_AF_BFONC_BFR",
-        "MNT_AF_BFONC_TRESORERIE",
-        "RTO_AF_RATIO_RENT_MBE",
-        "MNT_AF_BFONC_FRNG",
-        "MNT_AF_CA",
-        "MNT_AF_SIG_EBE_RET",
-        "RTO_AF_RENT_ECO",
-        "RTO_AF_SOLIDITE_FINANCIERE",
-        "RTO_INVEST_CA",
+        "mnt_af_bfonc_bfr",
+        "mnt_af_bfonc_tresorerie",
+        "rto_af_ratio_rent_mbe",
+        "mnt_af_bfonc_frng",
+        "mnt_af_ca",
+        "mnt_af_sig_ebe_ret",
+        "rto_af_rent_eco",
+        "rto_af_solidite_financiere",
+        "rto_invest_ca",
         "cotisation",
         "effectif"
     ],
     "COVID_ADAPTER_PARAMETERS": {
-        "MNT_AF_BFONC_BFR": {
+        "mnt_af_bfonc_bfr": {
             "params": [
                 23623.665674728258,
                 0.5629694326657564
@@ -84,7 +93,7 @@
             "rmse": 70571.22084858362,
             "r2": 0.9940361612169091
         },
-        "MNT_AF_BFONC_TRESORERIE": {
+        "mnt_af_bfonc_tresorerie": {
             "params": [
                 22236.184117106088,
                 0.5841292614339604
@@ -92,7 +101,7 @@
             "rmse": 42171.00682101867,
             "r2": 0.9944725281058036
         },
-        "RTO_AF_RATIO_RENT_MBE": {
+        "rto_af_ratio_rent_mbe": {
             "params": [
                 -0.0015722972109895586,
                 1.0464419929184383
@@ -100,7 +109,7 @@
             "rmse": 0.0014390084193837763,
             "r2": 0.999422153539393
         },
-        "MNT_AF_BFONC_FRNG": {
+        "mnt_af_bfonc_frng": {
             "params": [
                 59213.016524039755,
                 0.5729557297737937
@@ -108,7 +117,7 @@
             "rmse": 95524.35412399008,
             "r2": 0.9952842529340152
         },
-        "MNT_AF_CA": {
+        "mnt_af_ca": {
             "params": [
                 960810.9153172815,
                 0.41353858849763436
@@ -116,7 +125,7 @@
             "rmse": 972975.2806476083,
             "r2": 0.9817355692218368
         },
-        "MNT_AF_SIG_EBE_RET": {
+        "mnt_af_sig_ebe_ret": {
             "params": [
                 38680.8834803771,
                 0.5160236404276309
@@ -124,7 +133,7 @@
             "rmse": 63670.270806772,
             "r2": 0.9778103093621975
         },
-        "RTO_AF_RENT_ECO": {
+        "rto_af_rent_eco": {
             "params": [
                 -0.009450544412868727,
                 1.1473067958388148
@@ -132,7 +141,7 @@
             "rmse": 0.005281719432831142,
             "r2": 0.9992802110584927
         },
-        "RTO_AF_SOLIDITE_FINANCIERE": {
+        "rto_af_solidite_financiere": {
             "params": [
                 -0.03858807453691644,
                 1.0472144997536623
@@ -140,7 +149,7 @@
             "rmse": 0.005608115232355715,
             "r2": 0.9991168735366558
         },
-        "RTO_INVEST_CA": {
+        "rto_invest_ca": {
             "params": [
                 -0.004315476083762521,
                 0.9939477218690744
@@ -165,61 +174,6 @@
             "r2": 0.9994210784203903
         }
     },
-    "AGG_DICT": {
-        "cotisation": "sum",
-        "cotisation_moy12m": "sum",
-        "montant_part_ouvriere": "sum",
-        "montant_part_ouvriere_past_1": "sum",
-        "montant_part_ouvriere_past_12": "sum",
-        "montant_part_ouvriere_past_2": "sum",
-        "montant_part_ouvriere_past_3": "sum",
-        "montant_part_ouvriere_past_6": "sum",
-        "montant_part_patronale": "sum",
-        "montant_part_patronale_past_1": "sum",
-        "montant_part_patronale_past_12": "sum",
-        "montant_part_patronale_past_2": "sum",
-        "montant_part_patronale_past_3": "sum",
-        "montant_part_patronale_past_6": "sum",
-        "effectif": "sum",
-        "apart_heures_consommees_cumulees": "sum",
-        "apart_heures_consommees": "sum",
-        "ratio_dette_moy12m": "avg"
-    },
-    "DEFAULT_VALUES": {
-        "time_til_failure": 9999,
-        "paydex_nb_jours": 0,
-        "paydex_nb_jours_past_12": 0,
-        "paydex_yoy": 0,
-        "montant_part_ouvriere_past_12": 0.0,
-        "montant_part_patronale_past_12": 0.0,
-        "montant_part_ouvriere_past_6": 0.0,
-        "montant_part_patronale_past_6": 0.0,
-        "montant_part_ouvriere_past_3": 0.0,
-        "montant_part_patronale_past_3": 0.0,
-        "montant_part_ouvriere_past_2": 0.0,
-        "montant_part_patronale_past_2": 0.0,
-        "montant_part_ouvriere_past_1": 0.0,
-        "montant_part_patronale_past_1": 0.0,
-        "cotisation": 0.0,
-        "montant_part_ouvriere": 0.0,
-        "montant_part_patronale": 0.0,
-        "cotisation_moy12m": 0.0,
-        "ratio_dette": 0.0,
-        "ratio_dette_moy12m": 0.0,
-        "apart_heures_consommees_cumulees": 0.0,
-        "apart_heures_consommees": 0.0,
-        "avg_delta_dette_par_effectif": 0.0,
-        "effectif": 0,
-        "MNT_AF_BFONC_BFR": 0.0,
-        "MNT_AF_BFONC_TRESORERIE": 0.0,
-        "MNT_AF_BFONC_FRNG": 0.0,
-        "MNT_AF_CA": 0.0,
-        "MNT_AF_SIG_EBE_RET": 0.0,
-        "RTO_AF_RATIO_RENT_MBE": 0.0,
-        "RTO_AF_RENT_ECO": 0.0,
-        "RTO_AF_SOLIDITE_FINANCIERE": 0.0,
-        "RTO_INVEST_CA": 0.0
-    },
     "TARGET": [
         "failure_within_18m"
     ],
@@ -235,7 +189,6 @@
         "sante_financiere_macro_score",
         "dette_urssaf_macro_score",
         "activite_partielle_macro_score",
-        "retards_paiement_macro_score",
         "misc_macro_score"
     ],
     "MESO_GROUPS": {
@@ -267,15 +220,15 @@
     },
     "FEATURE_GROUPS": {
         "sante_financiere": [
-            "MNT_AF_BFONC_BFR",
-            "MNT_AF_BFONC_FRNG",
-            "MNT_AF_BFONC_TRESORERIE",
-            "MNT_AF_CA",
-            "MNT_AF_SIG_EBE_RET",
-            "RTO_AF_RATIO_RENT_MBE",
-            "RTO_AF_RENT_ECO",
-            "RTO_AF_SOLIDITE_FINANCIERE",
-            "RTO_INVEST_CA"
+            "mnt_af_bfonc_bfr",
+            "mnt_af_bfonc_frng",
+            "mnt_af_bfonc_tresorerie",
+            "mnt_af_ca",
+            "mnt_af_sig_ebe_ret",
+            "rto_af_ratio_rent_mbe",
+            "rto_af_rent_eco",
+            "rto_af_solidite_financiere",
+            "rto_invest_ca"
         ],
         "activite_partielle": [
             "apart_heures_consommees",
@@ -286,10 +239,6 @@
             "part_ouvriere",
             "part_patronale",
             "dette"
-        ],
-        "retards_paiement": [
-            "paydex_nb_jours",
-            "paydex_yoy"
         ],
         "misc": [
             "effectif"
