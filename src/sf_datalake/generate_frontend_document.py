@@ -94,12 +94,6 @@ path_group.add_argument(
     help="Generated JSON document output path.",
 )
 path_group.add_argument(
-    "--metadata",
-    default=None,
-    help="""Path to a JSON document containing additional metadata that will be
-    added to every entry in the output document.""",
-)
-path_group.add_argument(
     "-v",
     "--variables",
     help="Path to the variables configuration file.",
@@ -130,6 +124,8 @@ parser.add_argument(
     'concerning'.""",
 )
 
+# Parse CLI arguments, load predictions configuration and supplementary data
+
 args = parser.parse_args()
 pred_vars = sf_datalake.io.load_variables(args.variables)
 
@@ -137,6 +133,15 @@ micro_macro = {
     micro: macro
     for macro, micros in pred_vars["FEATURE_GROUPS"].items()
     for micro in micros
+}
+
+additional_data = {
+    "idListe": "Mai 2022",
+    "batch": "2203",
+    "algo": "avec_paydex"
+    if "retards_paiement" in pred_vars["FEATURE_GROUPS"]
+    else "sans_paydex",
+    "periode": "2022-05-01T00:00:00Z",
 }
 
 # Load prediction lists
@@ -258,11 +263,6 @@ prediction_set["alert"] = pd.Categorical.from_codes(
 )
 
 ## Score explanation per categories
-if args.metadata is not None:
-    with open(args.metadata, mode="r", encoding="utf-8") as md:
-        for field, value in json.load(md).items():
-            prediction_set[field] = value
-
 concerning_micro_threshold = args.concerning_threshold
 concerning_values_columns = [
     "1st_concerning_val",
@@ -283,6 +283,9 @@ else:
     concerning_micro_variables = concerning_data[concerning_feats_columns]
 
 ## Export
+for field, value in additional_data.items():
+    prediction_set[field] = value
+
 alert_siren = prediction_set[prediction_set["alert"] != "Pas d'alerte"].index
 output_entry = prediction_set.drop(
     list(tailoring_signals.keys()), axis="columns"
