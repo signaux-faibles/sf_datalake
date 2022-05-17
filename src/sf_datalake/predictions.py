@@ -2,147 +2,166 @@
 
 This module offers tools for:
 - Merging multiple models outputs as a single prediction.
-- Generate alert levels associated with scores.
-- Tailor alert levels based on "expert rules".
+- Generating alert levels associated with scores.
+- Tailoring alert levels based on "expert rules".
 
 """
 
-import logging
-from typing import Callable, Dict, Iterable, List, Tuple
+import json
+from typing import Callable, Dict, List, Tuple
 
-import numpy as np
 import pandas as pd
 
 
-def merge_predictions(predictions: List[pd.DataFrame]) -> pd.DataFrame:
-    """Builds a list of predicted probabilities based on several model outputs.
+def merge_predictions_lists(predictions_paths: List[str], output_path: str):
+    """Builds a front-end-ready predictions list based on multiple model outputs.
 
-    The available scores are picked by decreasing order of priority, that is, if a
-    prediction is found for a given SIREN in the first model output, any subsequent
-    prediction for this SIREN will be ignored.
-
-    Args:
-        model_list: A list of pandas DataFrame with the same set of columns, indexed by
-          SIREN.
-
-    Returns:
-        A DataFrame with merged predicted probabilities.
-
-    """
-    merged = predictions.pop(0)
-    if not predictions:
-        logging.warning("Predictions contains a single model output.")
-        return merged
-    assert all(merged.columns.equals(pred.columns) for pred in predictions)
-    assert all(merged.index.name == pred.index.name for pred in predictions)
-
-    for prediction in predictions:
-        diff_ix = prediction.index.difference(merged.index)
-        merged = merged.append(prediction.loc[diff_ix], verify_integrity=True)
-    return merged
-
-
-def name_alert_group(score: float, t_red: float, t_orange: float) -> str:
-    """Returns an alert string associated with a score based on risk thresholds.
+    The latest available information is used, that is, if a prediction is found for a
+    given SIREN in any prediction list, it will replace any previous prediction for this
+    same SIREN.
 
     Args:
-        score: The input score.
-        t_red: The highest risk threshold.
-        t_orange: The lowest risk threshold.
-
-    Returns:
-        A string associated with the corresponding risk level.
+        predictions: A list of paths to predictions JSON documents. Each entry in these
+          documents should have at least a "siren" key.
+        output_path: A path where the merged predictions list will be written.
 
     """
-    if score >= t_red:
-        return "Alerte seuil F1"
-    if score >= t_orange:
-        return "Alerte seuil F2"
-    return "Pas d'alerte"
+    predictions = []
+    for path in predictions_paths:
+        with open(path, encoding="utf-8") as f:
+            predictions.append({entry["siren"]: entry for entry in json.load(f)})
+    merged = predictions[0].copy()
+    for prediction in predictions[1:]:
+        merged.update(prediction)
+
+    with open(output_path, mode="w", encoding="utf-8") as f:
+        json.dump(
+            list(merged.values()),
+            f,
+            indent=4,
+        )
 
 
 def tailor_alert(
-    preds_df: pd.DataFrame,
-    tailoring_steps: Iterable[Tuple[Callable, Dict]],
-    pre_alert_col: str,
-    post_alert_col: str,
+    predictions_df: pd.DataFrame,
+    tailoring_steps: Dict[str, Tuple[Callable, Dict]],
+    tailoring_rule: Callable[[pd.DataFrame], int],
+    pre_tailoring_alert_col: str,
+    post_tailoring_alert_col: str,
 ) -> pd.DataFrame:
     """Updates alert levels using expert rules.
 
+    The `predictions_df` DataFrame should hold pre-computed data that can be fed, for
+    each row (SIREN), to functions that will determine if tailoring conditions are met,
+    which, in turn, will lead to a (potential) modification of alert levels.
+
     Args:
-        preds_df: Prediction data.
-        tailoring_steps: An iterable of (function, kwargs) tuples of tailoring functions
-          and their associated kwargs as a dict. Each function should return a pd.Index
-          of rows where the update rule should be applied.
-        pre_alert_col: Name of the column holding before tailoring alerts.
-        post_alert_col: Name of the column holding after tailoring alerts.
+        predictions_df: Prediction data.
+        tailoring_steps: A dict of {name: (function, **kwargs)} tuples of tailoring
+          functions and their associated kwargs as a dict. Each function should take the
+          predictions DataFrame as first argument and return a pd.Index that points rows
+          where the corresponding tailoring condition is met.
+        tailoring_rule: A mapping associating tailoring conditions to a post-tailoring
+          alert level evolution (-1, 0 or 1). It should have a single argument in order
+          to be called using `pd.df.apply` over a row's columns.
+        pre_tailoring_alert_col: Name of the column holding before-tailoring alerts (as
+          an int level).
+        post_tailoring_alert_col: Name of the column in which to output after-tailoring
+          alerts (as an int level).
 
     Returns:
         A prediction DataFrame with the `post_alert_col` containing a tailored alert
-          level.
+        level.
 
     """
-    # TODO: This update rule might be different depending on the tailoring steps.
-    update_rule = {
-        "Pas d'alerte": "Alerte seuil F2",
-        "Alerte seuil F2": "Alerte seuil F1",
-        "Alerte seuil F1": "Alerte seuil F1",
-    }
+    for name, (function, kwargs) in tailoring_steps.items():
+        predictions_df[name] = False
+        tailoring_index = function(**kwargs).intersection(predictions_df.index)
+        predictions_df.loc[tailoring_index, name] = True
 
-    assert pre_alert_col in preds_df.columns
-    assert (
-        preds_df[pre_alert_col]
-        .astype("category")
-        .cat.categories.isin(update_rule)
-        .all()
-    )
+    predictions_df[post_tailoring_alert_col] = (
+        predictions_df[pre_tailoring_alert_col]
+        + predictions_df.apply(tailoring_rule, axis=1)
+    ).clip(lower=0, upper=2)
 
-    preds_df.loc[:, post_alert_col] = preds_df.loc[:, pre_alert_col].copy()
-    for function, kwargs in tailoring_steps:
-        update_index = function(**kwargs)
-        preds_df.loc[update_index, post_alert_col] = (
-            preds_df.loc[update_index, post_alert_col].copy().map(update_rule)
-        )
-
-    return preds_df
+    return predictions_df
 
 
-def debt_tailoring(
-    siren_index: pd.Index,
-    debt_df: pd.DataFrame,
-    debt_cols: Dict[str, List[str]],
-    tol: float = 0.2,
+def partial_unemployment_signal(
+    pu_df: pd.DataFrame,
+    pu_col: str,
+    threshold: int,
 ) -> pd.Index:
-    """Computes indexes where alert level should be raised based on social debt.
+    """Computes if alert level should be modified based on partial unemployment.
 
-    For a given company, if social debt evolution over time exceeds the input threshold,
-    the corresponding index will be included in the rows for which alert should be
-    updated.
+    The input DataFrame is indexed at the SIRET (entity) level, and this function helps
+    determine if any of the company's entities has filed requests amounting to a maximal
+    allowed value.
 
     Args:
-        siren_index: An index of the analyzed companies SIRENs.
-        debt_df: Debt data, used to decide whether or not alert level should be
-          upgraded.
-        debt_cols : A dict mapping names to lists of columns to be summed / averaged:
-          - "start": The sum of these columns will be considered the starting point of
-          debt change.
-          - "end": The sum of these columns will be considered the ending point of debt
-          change.
-          - "contribution": These columns will be used to compute an average monthly
-          contribution.
-        tol: the threshold, as a percentage of (normalized) debt evolution, above which
-          alert level is upgraded.
+        pu_df: Partial unemployment data, used to decide whether or not alert level
+          should be updated. Index should be a list of SIRETs, not SIRENs.
+        pu_col: Name of the column holding allowed partial unemployment duration.
+        threshold: A number of months above which the tailoring switch is triggered.
 
     Returns:
-        The (siren) indexes where an alert update should take place.
+        The (siren) indexes where partial unemployment requests level is deemed high.
 
     """
-    debt_start = debt_df.loc[:, debt_cols["start"]].sum(axis="columns")
-    debt_end = debt_df.loc[:, debt_cols["end"]].sum(axis="columns")
-    contribution_average = (
-        debt_df.loc[:, debt_cols["contribution"]]
-        .mean(axis="columns")
-        .replace(0, np.nan)
+    assert pu_df.index.name == "siret"
+    pu_df["high_pu_request"] = pu_df[pu_col] > threshold
+    siren_mask = pu_df.groupby("siren")["high_pu_request"].agg(pd.Series.any)
+    return siren_mask[siren_mask].index
+
+
+def urssaf_debt_change(
+    debt_df: pd.DataFrame,
+    debt_cols: Dict[str, str],
+    increasing: bool = True,
+    tol: float = 0.2,
+) -> pd.Index:
+    """States if some debt value has increased/decreased.
+
+    States if companies debt change over time, relative to the company's annual
+    contributions, exceeds some input threshold.
+
+    Args:
+        debt_df: Debt data, used to decide whether or not alert level should be
+          upgraded.
+        debt_cols : A dict mapping names to lists of columns to be compared:
+          - "start": The starting point of debt change.
+          - "end": The ending point of debt change.
+          - "contribution": An average annual contribution value.
+        increasing: if `True`, points out cases where computed change is greater than
+          `tol`. If `False`, points out cases where the opposite of computed change is
+           greater than `tol`.
+        tol: the threshold, as a percentage of debt / contributions change, above which
+          the alert level should be updated.
+
+    Returns:
+        The (siren) indexes where urssaf debt change is significant.
+
+    """
+    sign = 1 if increasing else -1
+    debt_change = (
+        sign
+        * (debt_df[debt_cols["end"]] - debt_df[debt_cols["start"]])
+        / (debt_df[debt_cols["contribution"]] * 12)
     )
-    debt_evolution = ((debt_end - debt_start) / (contribution_average * 12)).fillna(0)
-    return debt_df[debt_evolution > tol].index.intersection(siren_index)
+    return debt_df[debt_change > tol].index
+
+
+def urssaf_debt_prevails(
+    macro_df: pd.DataFrame,
+) -> pd.Index:
+    """States if URSSAF debt prevails among concerning predictors groups.
+
+    Args:
+        macro_df: Prediction macro-level influence for each variable category.
+
+    Returns:
+        The (siren) indexes where social debt prevails.
+
+    """
+    prevailing_mask = (macro_df.sub(macro_df["dette_urssaf"], axis=0) <= 0).all(axis=1)
+    return macro_df[prevailing_mask].index
