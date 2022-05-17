@@ -286,12 +286,14 @@ else:
 for field, value in additional_data.items():
     prediction_set[field] = value
 
-alert_siren = prediction_set[prediction_set["alert"] != "Pas d'alerte"].index
-output_entry = prediction_set.drop(
-    list(tailoring_signals.keys()), axis="columns"
+output_entries = prediction_set.drop(
+    list(tailoring_signals.keys())
+    + ["pre_tailoring_alert_group", "post_tailoring_alert_group"],
+    axis="columns",
 ).to_dict(orient="index")
-for siren in alert_siren:
-    output_entry[siren].update(
+
+for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
+    output_entries[siren].update(
         {
             "macroRadar": macro_explanation.loc[siren].to_dict(),
             "redressements": [
@@ -312,7 +314,7 @@ for siren in alert_siren:
 
 with open(args.output_file, mode="w", encoding="utf-8") as f:
     json.dump(
-        [{"siren": siren, **props} for siren, props in output_entry.items()],
+        [{"siren": siren, **props} for siren, props in output_entries.items()],
         f,
         indent=4,
     )
