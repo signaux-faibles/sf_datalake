@@ -18,6 +18,7 @@ from typing import Union
 import pandas as pd
 
 import sf_datalake.evaluation
+import sf_datalake.io
 import sf_datalake.predictions
 import sf_datalake.utils
 
@@ -46,9 +47,9 @@ def tailoring_rule(row) -> int:
     ):
         tailoring -= 1
     if row["high_partial_unemployment_request"]:
-        tailoring -= 1
+        tailoring += 1
 
-    return max(min(tailoring, -1), 1)
+    return min(max(tailoring, -1), 1)
 
 
 def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:

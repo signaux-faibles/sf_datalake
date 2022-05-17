@@ -109,7 +109,8 @@ def partial_unemployment_signal(
 
     """
     assert pu_df.index.name == "siret"
-    siren_mask = pu_df.groupby("siren")[pu_df[pu_col] > threshold].agg(pd.Series.any)
+    pu_df["high_pu_request"] = pu_df[pu_col] > threshold
+    siren_mask = pu_df.groupby("siren")["high_pu_request"].agg(pd.Series.any)
     return siren_mask[siren_mask].index
 
 
@@ -162,4 +163,5 @@ def urssaf_debt_prevails(
         The (siren) indexes where social debt prevails.
 
     """
-    return macro_df[(macro_df - macro_df["dette_urssaf"] <= 0).all(axis=1)].index
+    prevailing_mask = (macro_df.sub(macro_df["dette_urssaf"], axis=0) <= 0).all(axis=1)
+    return macro_df[prevailing_mask].index
