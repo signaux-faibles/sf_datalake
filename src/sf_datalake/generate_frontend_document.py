@@ -38,15 +38,15 @@ def tailoring_rule(row) -> int:
 
     """
     tailoring = 0
-    if row["recent_urssaf_debt_increased"]:
+    if row["augmentation_dette_urssaf_recente"]:
         tailoring += 1
     if (
-        row["previous_urssaf_debt_decreased"]
-        and not row["urssaf_recent_debt_increased"]
-        and row["prevailing_urssaf_debt"]
+        row["diminution_dette_urssaf_ancienne"]
+        and not row["augmentation_dette_urssaf_recente"]
+        and row["dette_urssaf_macro_preponderante"]
     ):
         tailoring -= 1
-    if row["high_partial_unemployment_request"]:
+    if row["demande_activite_partielle_elevee"]:
         tailoring += 1
 
     return min(max(tailoring, -1), 1)
@@ -152,7 +152,7 @@ def main(
 
     ### Apply tailoring
     tailoring_signals = {
-        "previous_urssaf_debt_decreased": (
+        "diminution_dette_urssaf_ancienne": (
             sf_datalake.predictions.urssaf_debt_change,
             {
                 "debt_df": debt_data,
@@ -161,7 +161,7 @@ def main(
                 "tol": 0.2,
             },
         ),
-        "recent_urssaf_debt_increased": (
+        "augmentation_dette_urssaf_recente": (
             sf_datalake.predictions.urssaf_debt_change,
             {
                 "debt_df": debt_data,
@@ -170,7 +170,7 @@ def main(
                 "tol": 0.2,
             },
         ),
-        "high_partial_unemployment_request": (
+        "demande_activite_partielle_elevee": (
             sf_datalake.predictions.partial_unemployment_signal,
             {
                 "pu_df": tailoring_data.set_index("siret"),
@@ -178,7 +178,7 @@ def main(
                 "threshold": args["n_months"],
             },
         ),
-        "prevailing_urssaf_debt": (
+        "dette_urssaf_macro_preponderante": (
             sf_datalake.predictions.urssaf_debt_prevails,
             {"macro_df": macro_explanation},
         ),
