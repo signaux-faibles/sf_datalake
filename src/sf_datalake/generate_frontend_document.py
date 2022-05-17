@@ -177,7 +177,7 @@ tailoring_data["siren"] = tailoring_data["siret"].str[:9]
 
 # Urssaf tailoring
 debt_data = (
-    tailoring_data.drop(["total_demande_ap", "siret"], axis=1)
+    tailoring_data.drop(["total_demande_ap", "siret"], axis="columns")
     .groupby(["siren"])
     .agg(sum)
 )
@@ -284,13 +284,17 @@ else:
 
 ## Export
 alert_siren = prediction_set[prediction_set["alert"] != "Pas d'alerte"].index
-output_entry = prediction_set.to_dict(orient="index")
+output_entry = prediction_set.drop(
+    list(tailoring_signals.keys()), axis="columns"
+).to_dict(orient="index")
 for siren in alert_siren:
     output_entry[siren].update(
         {
             "macroRadar": macro_explanation.loc[siren].to_dict(),
             "redressements": [
-                signal for signal in tailoring_signals if output_entry[siren][signal]
+                signal
+                for signal in tailoring_signals
+                if prediction_set.loc[siren, signal]
             ],
             "explSelection": {
                 "selectConcerning": [
