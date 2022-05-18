@@ -167,7 +167,7 @@ concerning_data = concerning_data.set_index("siren")
 
 # Compute alert level thresholds
 score_threshold = sf_datalake.evaluation.optimal_beta_thresholds(
-    predictions=test_set["probability"], outcomes=test_set["failure_within_18m"]
+    y_true=test_set["failure_within_18m"], y_score=test_set["probability"]
 )
 
 # Create encoded alert groups
