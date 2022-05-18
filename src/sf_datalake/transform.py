@@ -53,6 +53,11 @@ def explode_between_dates(
     """
 
     assert {"siren", start_feature, end_feature} <= set(df.columns)
+    assert all(
+        type == "date"
+        for feat, type in df.dtypes
+        if feat in [start_feature, end_feature]
+    )
 
     df = (
         df.withColumn(
