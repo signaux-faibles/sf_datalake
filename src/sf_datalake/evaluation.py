@@ -15,8 +15,8 @@ from sklearn.metrics import (
 
 
 def optimal_beta_thresholds(
-    predictions: np.ndarray,
-    outcomes: np.ndarray,
+    y_true: np.ndarray,
+    y_score: np.ndarray,
     betas: Iterable[float] = (0.5, 2.0),
     n_thr: int = 101,
 ) -> Dict[float, float]:
@@ -28,13 +28,14 @@ def optimal_beta_thresholds(
     (e.g., :math:`\\beta = 0.5`).
 
     Args:
-        predictions: The computed probability of a failure state within the next
-          18 months.
-        outcomes: The true outcomes. 0 means "no failure within the next 18
+        y_true: The true outcomes. 0 means "no failure within the next 18
           months", while 1 means "failure within the next 18 months".
-        betas: The required :math:`\\beta` values for F-score thresholds computation.
-        n_thr: Size of an even-spaced array of values spanning the [0, 1] interval that
-          will be used as candidate threshold values.
+        y_score: The computed probability of a failure state within the next
+          18 months.
+        betas: The required :math:`\\beta` values for F-score thresholds
+          computation.
+        n_thr: Size of an even-spaced array of values spanning the [0, 1]
+          interval that will be used as candidate threshold values.
 
     Returns:
         A dict of (beta, threshold) couples associated with each :math:`\\beta` input
@@ -45,11 +46,9 @@ def optimal_beta_thresholds(
 
     f_beta = np.zeros((len(betas), n_thr))
     for n_t, threshold in enumerate(thresh_array):
-        above_thresh = predictions >= threshold
+        y_pred = y_score >= threshold
         for n_b, beta in enumerate(betas):
-            f_beta[n_b, n_t] = fbeta_score(
-                y_true=outcomes, y_pred=above_thresh, beta=beta
-            )
+            f_beta[n_b, n_t] = fbeta_score(y_true, y_pred, beta)
     thresholds = thresh_array[np.argmax(f_beta, axis=1)]
 
     return dict(zip(betas, thresholds))
@@ -65,12 +64,12 @@ def metrics(
 
     Args:
         y_true: An array containing the true values.
-        y_score: An array containing probabilities associated with each prediction.
-        beta: Optional. If provided, weighting of recall relative to precision for the
-          evaluation.
-        thresh: Optional. If provided, the model will classify an entry X as positive
-          if predict_proba(X)>=thresh. Otherwise, the model classifies X as positive if
-          predict(X)=1, ie predict_proba(X)>=0.5
+        y_score: The computed probability of a failure state within the next
+          18 months.
+        beta: Weighting of recall relative to precision for the evaluation.
+          Corresponds to the beta value of the F_beta score.
+        thresh: The probability above which a binary model should classify a
+          sample as positive.
 
     Returns:
         A dictionary containing the evaluation metrics.
