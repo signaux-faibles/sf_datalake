@@ -139,6 +139,7 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
     """
     stages = [
         WorkforceFilter(),
+        HasPaydexFilter(config),
         MissingValuesHandler(config),
         PaydexColumnsAdder(config),
         AvgDeltaDebtPerSizeColumnAdder(config),
@@ -469,6 +470,37 @@ class PrivateCompanyFilter(Transformer):  # pylint: disable=R0903
         if "code_naf" not in dataset.columns:
             raise KeyError("Dataset has no 'code_naf' column.")
         return dataset.filter("code_naf NOT IN ('O', 'P')")
+
+
+class HasPaydexFilter(Transformer):  # pylint: disable=R0903
+    """A transformer that filters according to paydex data availability."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+        """Filters out samples that do not have paydex data.
+
+        Args:
+            dataset: DataFrame to filter.
+
+        Returns:
+            Filtered DataFrame.
+
+        """
+        if {"paydex_bin", "paydex_yoy"} & set(self.config["FEATURES"]):
+            logging.info(
+                "Paydex data features were requested through the provided \
+                configuration file. The dataset will be filtered to only keep samples \
+                with available paydex data."
+            )
+            return dataset.filter(
+                F.col("paydex_nb_jours").isNotNull()
+                & F.col("paydex_nb_jours_past_12").isNotNull()
+            )
+
+        return dataset
 
 
 class WorkforceFilter(Transformer):  # pylint: disable=R0903
