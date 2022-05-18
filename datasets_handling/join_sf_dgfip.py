@@ -61,27 +61,20 @@ args = parser.parse_args()
 ## Load datasets
 datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format="orc")
 
-## Join datasets over SIREN and (supposed) end of accounting year.
-df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"]).withColumn(
-    "join_date", F.year(datasets["dgfip"]["date_fin_exercice"])
+## Join datasets on SIREN and monthly dates.
+df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"])
+df_dgfip = sf_datalake.transform.explode_between_dates(
+    df_dgfip, "date_deb_exercice", "date_fin_exercice"
 )
+
+### synchronizing features in time
 df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
-    "join_date",
-    F.year(
-        F.coalesce(
-            F.col("arrete_bilan_diane"),
-            F.last_day(F.date_add(F.col("periode"), args.bilan_periode_diff)),
-        )
+    "periode",
+    F.date_trunc(
+        "month", F.to_date(F.date_add(F.col("periode"), args.bilan_periode_diff))
     ),
 )
 
-df_joined = df_sf.join(
-    df_dgfip,
-    on=[
-        "join_date",
-        "siren",
-    ],
-    how="full_outer",
-)
+df_joined = df_sf.join(df_dgfip, on=["periode", "siren"], how="left")
 
 df_joined.write.format("orc").save(args.output)

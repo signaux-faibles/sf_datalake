@@ -12,6 +12,8 @@ from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.sql.types import FloatType, StringType
 
+import sf_datalake.utils
+
 
 def parse_date(
     df: pyspark.sql.DataFrame, colnames: Iterable[str]
@@ -28,6 +30,65 @@ def parse_date(
     """
     for name in colnames:
         df = df.withColumn(name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd"))
+    return df
+
+
+def explode_between_dates(
+    df: pyspark.sql.DataFrame, start_feature: str, end_feature: str
+) -> pyspark.sql.DataFrame:
+    """Repeats the information available for each month between `start_feature`
+    and `end_feature`. Keeps the most complete information in case of
+    overlapping periods. Normalizes the numerical features by the number of
+    months between `start_feature` and `end_feature`.
+
+    Args:
+        df: _description_
+        start_feature (str): Name of the feature representing the startings of
+        periods
+        end_feature (str): Name of the feature representing the end of periods
+
+    Returns:
+        A new DataFrame with a column `periode` representing the monthly dates.
+    """
+
+    assert {start_feature, end_feature} <= set(df.columns)
+
+    # [TODO] From pyspark >=2.4, the code below could be simplify as:
+    # .withColumn(
+    #     "periode",
+    #     F.explode(
+    #         F.expr(
+    #        'sequence(date_fin_exercice, date_deb_exercice, interval 1 month)')
+    #     )
+    # )
+    df = (
+        df.withColumn(
+            "percent_missing",
+            F.round(
+                sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df.columns])
+                / len(df.columns),
+                2,
+            ),
+        )
+        .withColumn("start", F.date_trunc("month", F.col(start_feature)))
+        .withColumn(
+            "n_months",
+            F.months_between(F.col(end_feature), F.col("start")).cast("int"),
+        )
+        .withColumn("repeat", F.expr("split(repeat(',', n_months), ',')"))
+        .select("*", F.posexplode("repeat").alias("periode", "val"))
+        .withColumn("periode", F.expr("add_months(start, periode)"))
+        .drop("start", "repeat", "val")
+        .orderBy("siren", "periode", "percent_missing")
+        .dropDuplicates()
+        .drop("percent_missing")
+    )
+
+    for c in sf_datalake.utils.numerical_columns(df):
+        df = df.withColumn(c, F.col(c) / (F.lit(1) + F.col("n_months")))
+
+    df = df.drop("n_months")
+
     return df
 
 
