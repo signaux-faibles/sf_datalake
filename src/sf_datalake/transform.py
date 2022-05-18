@@ -50,19 +50,19 @@ def explode_between_dates(
     Args:
         df: A DataFrame with "siren", `period_start_column ` and
         `period_end_column` as columns. `period_start_column ` and
-        `period_end_column` should be datetime.date type columns.
+        `period_end_column` should be Datetime.Date or Timestamp type columns.
 
         period_start_column: Name of the feature representing the startings of periods.
 
         period_end_column: Name of the feature representing the end of periods.
 
     Returns:
-        A new DataFrame with a monthly datetime.date column named `periode`.
+        A new DataFrame with a monthly Datetime.Date column named `periode`.
     """
 
     assert {"siren", period_start_column, period_end_column} <= set(df.columns)
     assert all(
-        type == "date"
+        type in ["date", "timestamp"]
         for feat, type in df.dtypes
         if feat in [period_start_column, period_end_column]
     )
