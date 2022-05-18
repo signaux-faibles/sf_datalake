@@ -153,11 +153,11 @@ def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
 class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
     """A transformer to compute the average change in social debt / nb of employees."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config):
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):
         """Computes the average change in social debt / nb of employees.
 
         Args:
@@ -214,11 +214,11 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
 class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
     """A transformer to compute the debt ratio."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config):
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):
         """Computes the debt ratio.
 
         Args:
@@ -253,11 +253,11 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
 class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
     """A transformer to compute features associated with Paydex data."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config):
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):
         """Computes the yearly variation and quantile bin of payment delay (in days).
 
         DataFrame to transform containing "paydex_nb_jours" and
@@ -319,11 +319,11 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
 class MissingValuesHandler(Transformer):  # pylint: disable=R0903
     """A transformer to handle missing values."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config):
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):
         """Fills or drop entries containing missing values.
 
         If `FILL_MISSING_VALUES` config field is true, missing data is filled with
@@ -366,11 +366,11 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
 class SirenAggregator(Transformer):  # pylint: disable=R0903
     """A transformer to aggregate data at a SIREN level."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config):
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):
         """Aggregate data at a SIREN level by sum or average.
 
         Args:
@@ -423,11 +423,11 @@ class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
 class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
     """A transformer to select the columns of the dataset used in the model."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config):
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):
         """Select the columns of the dataset used in the model.
 
         Args:
@@ -511,11 +511,11 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
 class Covid19Adapter(Transformer):  # pylint: disable=R0903
     """Adapt post-pandemic data using linear fits of features quantiles."""
 
-    def __init__(self, config) -> None:
+    def __init__(self, config):
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):
         """Adapts post-pandemic data using linear fits of features quantiles.
 
         Adapt post-pandemic event data through linear fits of the pre-pandemic quantiles
