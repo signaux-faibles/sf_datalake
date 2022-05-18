@@ -41,15 +41,6 @@ parser.add_argument(
     dest="output",
     help="Path to the output dataset.",
 )
-parser.add_argument(
-    "--diff",
-    dest="bilan_periode_diff",
-    help="""Difference between 'arrete_bilan_diane' and 'periode' that will be
-    used to complete missing diane accounting year end date (used as a join key).
-    """,
-    type=int,
-    default=-392,
-)
 
 args = parser.parse_args()
 # data_paths = {
@@ -70,9 +61,7 @@ df_dgfip = sf_datalake.transform.explode_between_dates(
 ### synchronizing features in time
 df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
     "periode",
-    F.date_trunc(
-        "month", F.to_date(F.date_add(F.col("periode"), args.bilan_periode_diff))
-    ),
+    F.date_trunc("month", F.to_date(F.col("periode"))),
 )
 
 df_joined = df_sf.join(df_dgfip, on=["periode", "siren"], how="left")
