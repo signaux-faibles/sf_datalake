@@ -42,25 +42,18 @@ def explode_between_dates(
     months between `start_feature` and `end_feature`.
 
     Args:
-        df: _description_
+        df: A DataFrame with "siren", `start_feature` and `end_feature` as
+        columns. `start_feature` and `end_feature` should be datetime.date type columns.
         start_feature (str): Name of the feature representing the startings of
-        periods
-        end_feature (str): Name of the feature representing the end of periods
+        periods.
+        end_feature (str): Name of the feature representing the end of periods.
 
     Returns:
-        A new DataFrame with a column `periode` representing the monthly dates.
+        A new DataFrame with a monthly datetime.date column named `periode`.
     """
 
-    assert {start_feature, end_feature} <= set(df.columns)
+    assert {"siren", start_feature, end_feature} <= set(df.columns)
 
-    # [TODO] From pyspark >=2.4, the code below could be simplify as:
-    # .withColumn(
-    #     "periode",
-    #     F.explode(
-    #         F.expr(
-    #        'sequence(date_fin_exercice, date_deb_exercice, interval 1 month)')
-    #     )
-    # )
     df = (
         df.withColumn(
             "percent_missing",
@@ -87,9 +80,7 @@ def explode_between_dates(
     for c in sf_datalake.utils.numerical_columns(df):
         df = df.withColumn(c, F.col(c) / (F.lit(1) + F.col("n_months")))
 
-    df = df.drop("n_months")
-
-    return df
+    return df.drop("n_months")
 
 
 def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
