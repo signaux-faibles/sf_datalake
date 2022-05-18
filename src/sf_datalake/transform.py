@@ -34,29 +34,37 @@ def parse_date(
 
 
 def explode_between_dates(
-    df: pyspark.sql.DataFrame, start_feature: str, end_feature: str
+    df: pyspark.sql.DataFrame, period_start_column: str, period_end_column: str
 ) -> pyspark.sql.DataFrame:
-    """Repeats the information available for each month between `start_feature`
-    and `end_feature`. Keeps the most complete information in case of
-    overlapping periods. Normalizes the numerical features by the number of
-    months between `start_feature` and `end_feature`.
+    """Repeats all the data available for each month between
+    `period_start_column `and `period_end_column`.
+
+    All the data available is duplicated along a sequence of monthly dates
+    generated between `period_start_column `and `period_end_column`.
+    Overlapping time spans can lead to multiple data for a given month. This is
+    solved by keeping the most complete information among the data.
+
+    Numerical features are normalized by the number of
+    months between `period_start_column ` and `period_end_column`.
 
     Args:
-        df: A DataFrame with "siren", `start_feature` and `end_feature` as
-        columns. `start_feature` and `end_feature` should be datetime.date type columns.
-        start_feature (str): Name of the feature representing the startings of
-        periods.
-        end_feature (str): Name of the feature representing the end of periods.
+        df: A DataFrame with "siren", `period_start_column ` and
+        `period_end_column` as columns. `period_start_column ` and
+        `period_end_column` should be datetime.date type columns.
+
+        period_start_column: Name of the feature representing the startings of periods.
+
+        period_end_column: Name of the feature representing the end of periods.
 
     Returns:
         A new DataFrame with a monthly datetime.date column named `periode`.
     """
 
-    assert {"siren", start_feature, end_feature} <= set(df.columns)
+    assert {"siren", period_start_column, period_end_column} <= set(df.columns)
     assert all(
         type == "date"
         for feat, type in df.dtypes
-        if feat in [start_feature, end_feature]
+        if feat in [period_start_column, period_end_column]
     )
 
     df = (
@@ -68,10 +76,10 @@ def explode_between_dates(
                 2,
             ),
         )
-        .withColumn("start", F.date_trunc("month", F.col(start_feature)))
+        .withColumn("start", F.date_trunc("month", F.col(period_start_column)))
         .withColumn(
             "n_months",
-            F.months_between(F.col(end_feature), F.col("start")).cast("int"),
+            F.months_between(F.col(period_end_column), F.col("start")).cast("int"),
         )
         .withColumn("repeat", F.expr("split(repeat(',', n_months), ',')"))
         .select("*", F.posexplode("repeat").alias("periode", "val"))
@@ -82,6 +90,11 @@ def explode_between_dates(
         .drop("percent_missing")
     )
 
+    # `n_months` is first used to generate the sequence of monthly dates from
+    # `period_start_column`+ 0 month to `period_start_column`+ `n_months` month.
+    # Since it starts by adding '0' month, meaning the first month is included,
+    # we need to normalize by `n_months` + 1 to be strictly correct according
+    # to the number of months in the time span.
     for c in sf_datalake.utils.numerical_columns(df):
         df = df.withColumn(c, F.col(c) / (F.lit(1) + F.col("n_months")))
 
