@@ -80,9 +80,6 @@ df_sf = df_sf.withColumn("periode", F.to_date(F.date_trunc("month", F.col("perio
 # Join datasets and drop duplicates based on the proportion of missing
 # informations
 
-df_joined = df_sf.join(df_dgfip, on=["periode", "siren"], how="left")
-
-
 df_joined = (
     df_sf.join(
         df_dgfip,
