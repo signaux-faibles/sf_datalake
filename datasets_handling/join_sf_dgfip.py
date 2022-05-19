@@ -52,18 +52,57 @@ args = parser.parse_args()
 ## Load datasets
 datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format="orc")
 
-## Join datasets on SIREN and monthly dates.
 df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"])
-df_dgfip = sf_datalake.transform.explode_between_dates(
-    df_dgfip, "date_deb_exercice", "date_fin_exercice"
+df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"])
+
+# Prepare datasets before join
+df_dgfip = (
+    df_dgfip.withColumn(
+        "percent_missing",
+        F.round(
+            sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip.columns])
+            / len(df_dgfip.columns),
+            2,
+        ),
+    )
+    .withColumn(
+        "date_deb_exercice",
+        F.to_date(F.date_trunc("month", F.col("date_deb_exercice"))),
+    )
+    .withColumn(
+        "date_fin_exercice",
+        F.add_months(F.to_date(F.date_trunc("month", F.col("date_fin_exercice"))), 1),
+    )
 )
 
-### synchronizing features in time
-df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
-    "periode",
-    F.date_trunc("month", F.to_date(F.col("periode"))),
-)
+df_sf = df_sf.withColumn("periode", F.to_date(F.date_trunc("month", F.col("periode"))))
+
+# Join datasets and drop duplicates based on the proportion of missing
+# informations
 
 df_joined = df_sf.join(df_dgfip, on=["periode", "siren"], how="left")
+
+
+df_joined = (
+    df_sf.join(
+        df_dgfip,
+        on=(
+            (df_sf.siren == df_dgfip.siren)
+            & (df_sf.periode >= df_dgfip.date_deb_exercice)
+            & (df_sf.periode < df_dgfip.date_fin_exercice)
+        ),
+        how="left",
+    )
+    .drop(df_dgfip.siren)
+    .orderBy("siren", "periode", "percent_missing")
+    .dropDuplicates()
+    .drop("percent_missing")
+)
+
+col_to_normalize = [
+    c for c in sf_datalake.utils.numerical_columns(df_joined) if c != "duree_exercice"
+]
+for c in col_to_normalize:
+    df_joined = df_joined.withColumn(c, F.col(c) / F.col("duree_exercice"))
 
 df_joined.write.format("orc").save(args.output)

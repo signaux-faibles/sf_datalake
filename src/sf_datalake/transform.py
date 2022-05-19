@@ -12,8 +12,6 @@ from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.sql.types import FloatType, StringType
 
-import sf_datalake.utils
-
 
 def parse_date(
     df: pyspark.sql.DataFrame, colnames: Iterable[str]
@@ -31,74 +29,6 @@ def parse_date(
     for name in colnames:
         df = df.withColumn(name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd"))
     return df
-
-
-def explode_between_dates(
-    df: pyspark.sql.DataFrame, period_start_column: str, period_end_column: str
-) -> pyspark.sql.DataFrame:
-    """Repeats all the data available for each month between
-    `period_start_column `and `period_end_column`.
-
-    All the data available is duplicated along a sequence of monthly dates
-    generated between `period_start_column `and `period_end_column`.
-    Overlapping time spans can lead to multiple data for a given month. This is
-    solved by keeping the most complete information among the data.
-
-    Numerical features are normalized by the number of
-    months between `period_start_column ` and `period_end_column`.
-
-    Args:
-        df: A DataFrame with "siren", `period_start_column ` and
-        `period_end_column` as columns. `period_start_column ` and
-        `period_end_column` should be Datetime.Date or Timestamp type columns.
-
-        period_start_column: Name of the feature representing the startings of periods.
-
-        period_end_column: Name of the feature representing the end of periods.
-
-    Returns:
-        A new DataFrame with a monthly Datetime.Date column named `periode`.
-    """
-
-    assert {"siren", period_start_column, period_end_column} <= set(df.columns)
-    assert all(
-        type in ["date", "timestamp"]
-        for feat, type in df.dtypes
-        if feat in [period_start_column, period_end_column]
-    )
-
-    df = (
-        df.withColumn(
-            "percent_missing",
-            F.round(
-                sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df.columns])
-                / len(df.columns),
-                2,
-            ),
-        )
-        .withColumn("start", F.date_trunc("month", F.col(period_start_column)))
-        .withColumn(
-            "n_months",
-            F.months_between(F.col(period_end_column), F.col("start")).cast("int"),
-        )
-        .withColumn("repeat", F.expr("split(repeat(',', n_months), ',')"))
-        .select("*", F.posexplode("repeat").alias("periode", "val"))
-        .withColumn("periode", F.expr("add_months(start, periode)"))
-        .drop("start", "repeat", "val")
-        .orderBy("siren", "periode", "percent_missing")
-        .dropDuplicates()
-        .drop("percent_missing")
-    )
-
-    # `n_months` is first used to generate the sequence of monthly dates from
-    # `period_start_column`+ 0 month to `period_start_column`+ `n_months` month.
-    # Since it starts by adding '0' month, meaning the first month is included,
-    # we need to normalize by `n_months` + 1 to be strictly correct according
-    # to the number of months in the time span.
-    for c in sf_datalake.utils.numerical_columns(df):
-        df = df.withColumn(c, F.col(c) / (F.lit(1) + F.col("n_months")))
-
-    return df.drop("n_months")
 
 
 def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
