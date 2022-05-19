@@ -92,7 +92,7 @@ df_joined = (
     )
     .drop(df_dgfip.siren)
     .orderBy("siren", "periode", "percent_missing")
-    .dropDuplicates()
+    .dropDuplicates(["siren", "periode"])
     .drop("percent_missing")
 )
 
