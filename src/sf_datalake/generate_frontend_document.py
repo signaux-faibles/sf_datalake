@@ -165,6 +165,18 @@ concerning_data = pd.read_csv(args.concerning_data)
 concerning_data["siren"] = normalize_siren(concerning_data["siren"])
 concerning_data = concerning_data.set_index("siren")
 
+# Check for duplicated values
+for name, df in {
+    "prediction": prediction_set,
+    "macro radar": macro_explanation,
+    "concerning values": concerning_data,
+}.items():
+    if df.index.duplicated().any():
+        raise ValueError(
+            f"{name} dataframe has duplicated index values: \n \
+            {df.index[df.index.duplicated()]}"
+        )
+
 # Compute alert level thresholds
 score_threshold = sf_datalake.evaluation.optimal_beta_thresholds(
     y_true=test_set["failure_within_18m"], y_score=test_set["probability"]
