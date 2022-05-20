@@ -8,7 +8,7 @@ import random
 import sys
 from os import path
 
-from pyspark.ml import Pipeline
+from pyspark.ml import Pipeline, PipelineModel
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -57,10 +57,10 @@ def main(args: argparse.Namespace):  # pylint: disable=R0914
         seed=config["SEED"],
     )["dataset"]
 
-    pipeline_preprocessor = Pipeline(
+    pipeline_preprocessor = PipelineModel(
         stages=sf_datalake.transform.generate_preprocessing_stages(config)
     )
-    dataset = pipeline_preprocessor.fit(dataset).transform(dataset)
+    dataset = pipeline_preprocessor.transform(dataset)
     assert dataset.dropna().count() == dataset.count()
 
     # Split the dataset into train, test, predict subsets.
