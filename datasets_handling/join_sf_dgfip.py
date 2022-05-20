@@ -43,13 +43,8 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
-# data_paths = {
-#     "sf": args.sf_data,
-#     "yearly": path.join(args.dgfip_dir, ""),
-#     "monthly": path.join(args.dgfip_dir, ""),
-# }
 
-## Load datasets
+# Load datasets
 datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format="orc")
 
 df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"])
@@ -71,15 +66,14 @@ df_dgfip = (
     )
     .withColumn(
         "date_fin_exercice",
+        # Hack to consider time periods that span whole months from beginning to end.
         F.add_months(F.to_date(F.date_trunc("month", F.col("date_fin_exercice"))), 1),
     )
 )
 
 df_sf = df_sf.withColumn("periode", F.to_date(F.date_trunc("month", F.col("periode"))))
 
-# Join datasets and drop duplicates based on the proportion of missing
-# informations
-
+# Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
 df_joined = (
     df_sf.join(
         df_dgfip,
