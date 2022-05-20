@@ -48,32 +48,31 @@ args = parser.parse_args()
 datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format="orc")
 
 df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"])
-df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"])
-
-# Prepare datasets before join
-df_dgfip = (
-    df_dgfip.withColumn(
-        "percent_missing",
-        F.round(
-            sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip.columns])
-            / len(df_dgfip.columns),
-            2,
-        ),
-    )
-    .withColumn(
-        "date_deb_exercice",
-        F.to_date(F.date_trunc("month", F.col("date_deb_exercice"))),
-    )
-    .withColumn(
-        "date_fin_exercice",
-        # Hack to consider time periods that span whole months from beginning to end.
-        F.add_months(F.to_date(F.date_trunc("month", F.col("date_fin_exercice"))), 1),
-    )
+df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
+    "periode", F.to_date(F.date_trunc("month", F.col("periode")))
 )
 
-df_sf = df_sf.withColumn("periode", F.to_date(F.date_trunc("month", F.col("periode"))))
+# Normalize accounting year by duration
+for c in sf_datalake.utils.numerical_columns(df_dgfip):
+    if c != "duree_exercice":
+        df_dgfip = df_dgfip.withColumn(c, F.col(c) / F.col("duree_exercice"))
+
+# Hack to consider time periods that span whole months from beginning to end.
+df_dgfip = df_dgfip.withColumn(
+    "date_fin_exercice",
+    F.add_months(F.to_date(F.date_trunc("month", F.col("date_fin_exercice"))), 1),
+).withColumn(
+    "date_deb_exercice",
+    F.to_date(F.date_trunc("month", F.col("date_deb_exercice"))),
+)
 
 # Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
+df_dgfip = df_dgfip.withColumn(
+    "null_ratio",
+    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip.columns])
+    / len(df_dgfip.columns),
+)
+
 df_joined = (
     df_sf.join(
         df_dgfip,
@@ -85,15 +84,9 @@ df_joined = (
         how="left",
     )
     .drop(df_dgfip.siren)
-    .orderBy("siren", "periode", "percent_missing")
+    .orderBy("siren", "periode", "null_ratio")
     .dropDuplicates(["siren", "periode"])
-    .drop("percent_missing")
+    .drop("null_ratio")
 )
-
-col_to_normalize = [
-    c for c in sf_datalake.utils.numerical_columns(df_joined) if c != "duree_exercice"
-]
-for c in col_to_normalize:
-    df_joined = df_joined.withColumn(c, F.col(c) / F.col("duree_exercice"))
 
 df_joined.write.format("orc").save(args.output)
