@@ -65,9 +65,4 @@ df = declarations.join(
     datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
 )
 
-# Drop accounting year duplicates
-df_nodup = df.orderBy(
-    ["siren", "date_deb_exercice", "date_fin_exercice"]
-).dropDuplicates(subset=["siren", "date_fin_exercice"])
-
-df_nodup.write.format("orc").save(args.output)
+df.write.format("orc").save(args.output)

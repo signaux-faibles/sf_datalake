@@ -4,7 +4,6 @@ from typing import Tuple
 
 import pyspark
 import pyspark.sql
-from pyspark.sql import functions as F
 
 
 def train_test_predict_split(
@@ -56,20 +55,20 @@ def train_test_predict_split(
 
     train = (
         oversampled_subset.filter(
-            oversampled_subset["periode"] > config["TRAIN_DATES"][0]
+            oversampled_subset["periode"] >= config["TRAIN_DATES"][0]
         )
-        .filter(oversampled_subset["periode"] < config["TRAIN_DATES"][1])
+        .filter(oversampled_subset["periode"] <= config["TRAIN_DATES"][1])
         .join(siren_train, how="inner", on="siren")
     ).persist(pyspark.StorageLevel.MEMORY_AND_DISK)
 
     test = (
-        df.filter(df["periode"] > config["TEST_DATES"][0])
-        .filter(df["periode"] < config["TEST_DATES"][1])
+        df.filter(df["periode"] >= config["TEST_DATES"][0])
+        .filter(df["periode"] <= config["TEST_DATES"][1])
         .join(siren_test, how="inner", on="siren")
     ).persist(pyspark.StorageLevel.MEMORY_AND_DISK)
 
-    prediction = df.filter(
-        F.to_date(df["periode"]) == config["PREDICTION_DATE"]
-    ).persist(pyspark.StorageLevel.MEMORY_AND_DISK)
+    prediction = df.filter(df["periode"] == config["PREDICTION_DATE"]).persist(
+        pyspark.StorageLevel.MEMORY_AND_DISK
+    )
 
     return train, test, prediction

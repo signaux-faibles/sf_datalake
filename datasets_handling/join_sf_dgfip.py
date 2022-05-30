@@ -41,47 +41,52 @@ parser.add_argument(
     dest="output",
     help="Path to the output dataset.",
 )
-parser.add_argument(
-    "--diff",
-    dest="bilan_periode_diff",
-    help="""Difference between 'arrete_bilan_diane' and 'periode' that will be
-    used to complete missing diane accounting year end date (used as a join key).
-    """,
-    type=int,
-    default=-392,
-)
 
 args = parser.parse_args()
-# data_paths = {
-#     "sf": args.sf_data,
-#     "yearly": path.join(args.dgfip_dir, ""),
-#     "monthly": path.join(args.dgfip_dir, ""),
-# }
 
-## Load datasets
+# Load datasets
 datasets = load_data({"sf": args.sf_data, "dgfip": args.dgfip_data}, file_format="orc")
 
-## Join datasets over SIREN and (supposed) end of accounting year.
-df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"]).withColumn(
-    "join_date", F.year(datasets["dgfip"]["date_fin_exercice"])
-)
+df_dgfip = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip"])
 df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
-    "join_date",
-    F.year(
-        F.coalesce(
-            F.col("arrete_bilan_diane"),
-            F.last_day(F.date_add(F.col("periode"), args.bilan_periode_diff)),
-        )
-    ),
+    "periode", F.to_date(F.date_trunc("month", F.col("periode")))
 )
 
-df_joined = df_sf.join(
-    df_dgfip,
-    on=[
-        "join_date",
-        "siren",
-    ],
-    how="full_outer",
+# Normalize accounting year by duration
+for c in sf_datalake.utils.numerical_columns(df_dgfip):
+    if c != "duree_exercice":
+        df_dgfip = df_dgfip.withColumn(c, F.col(c) / F.col("duree_exercice"))
+
+# Hack to consider time periods that span whole months from beginning to end.
+df_dgfip = df_dgfip.withColumn(
+    "date_fin_exercice",
+    F.add_months(F.to_date(F.date_trunc("month", F.col("date_fin_exercice"))), 1),
+).withColumn(
+    "date_deb_exercice",
+    F.to_date(F.date_trunc("month", F.col("date_deb_exercice"))),
+)
+
+# Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
+df_dgfip = df_dgfip.withColumn(
+    "null_ratio",
+    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip.columns])
+    / len(df_dgfip.columns),
+)
+
+df_joined = (
+    df_sf.join(
+        df_dgfip,
+        on=(
+            (df_sf.siren == df_dgfip.siren)
+            & (df_sf.periode >= df_dgfip.date_deb_exercice)
+            & (df_sf.periode < df_dgfip.date_fin_exercice)
+        ),
+        how="left",
+    )
+    .drop(df_dgfip.siren)
+    .orderBy("siren", "periode", "null_ratio")
+    .dropDuplicates(["siren", "periode"])
+    .drop("null_ratio")
 )
 
 df_joined.write.format("orc").save(args.output)
