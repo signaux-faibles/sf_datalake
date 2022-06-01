@@ -400,6 +400,40 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
         )
 
 
+class TimeNormalizer(Transformer):  # pylint: disable=R0903
+    """A transformer that normalizes data using corresponding time-spans."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+    def _transform(self, dataset: pyspark.sql.DataFrame):
+        """Normalize data by dividing variables by the associated time-span.
+
+        The duration associated with a data should be expressed in months. Columns that
+        should undergo normalization will be looked for in the configuration under the
+        "TIME_NORMALIZATION" key. The expected format is:
+
+        {duration_col: [data_cols]}, where duration_col is the name of a column that
+        holds duration (in number of months) associated with the variables under
+        [data_cols].
+
+        Args:
+            dataset: DataFrame to transform containing raw period-related data.
+
+        Returns:
+            DataFrame with some normalized columns.
+
+        """
+        assert {"TIME_NORMALIZATION"} <= set(self.config)
+
+        # Normalize accounting year by duration
+        for duration_col, var_cols in self.config["TIME_NORMALIZATION"].items():
+            for c in var_cols:
+                dataset = dataset.withColumn(c, F.col(c) / F.col(duration_col))
+        return dataset
+
+
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
     """A transformer to aggregate data at a SIREN level."""
 
