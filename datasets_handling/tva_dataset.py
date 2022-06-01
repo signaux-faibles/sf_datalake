@@ -16,6 +16,7 @@ USAGE
 """
 
 import os
+import re
 import sys
 from os import path
 
@@ -159,7 +160,7 @@ x_creances = creances.select(
         "art_naart",  # Nature de l'article
         "art_napmc",  # Nature mesure conservatoire
         "art_dori",  # Date d'origine
-        "art_didr",  # Date d'exibilité de l'impot
+        "art_didr",  # Date d'exigibilité de l'impot
         "art_datedcf",  # Date prise en compte de la notification de redressement (cf)
         "art_disc",  # Date d'inscription en RAR
         "art_icirrel",  # Indicateur de circuit de relance (souvent pas rempli)
@@ -193,6 +194,7 @@ rar_mois_article = rar_mois_article.withColumn(
 rar_mois_article = rar_mois_article.withColumn(
     "mnt_rar_hcf", F.col("mnt_rar") * F.col("ind_hcf")
 )
+rar_mois_article.write.format("orc").save(path.join(args.output, "rar"))
 
 # TVA can be declared either on a:
 # - monthly,
@@ -366,8 +368,13 @@ x_tva = x_tva.withColumn(
 x_tva = x_tva.withColumn(
     "d_tva_ded_i0059_autr", F.col("d3310_21") + F.col("d3517s_25_i")
 )  # D3310_2C
-# TODO if (D3310_22A=. AND D3517S_25A_TX_DED=.) then D_TVA_DED_TX_COEF_DED = 100; else
-# D_TVA_DED_TX_COEF_DED = SUM(D3310_22A,D3517S_25A_TX_DED) ;
+
+x_tva = x_tva.withColumn(
+    "d_tva_ded_tx_coef_ded",
+    F.when(
+        (F.col("d3310_22a") == 0.0) & (F.col("D3517S_25a_tx_ded") == 0.0), 100
+    ).otherwise(F.col("d3310_22a") + F.col("D3517S_25a_tx_ded")),
+)
 x_tva = x_tva.withColumn(
     "d_tva_ded_i0705_total", F.col("d3310_23") + F.col("d3517s_26_i")
 )
@@ -386,5 +393,13 @@ x_tva = x_tva.withColumn(
 x_tva = x_tva.withColumn("m_tva_net_due", F.col("d3310_28") + F.col("d3517s_28_i"))
 
 # Write file
-rar_mois_article.write.format("orc").save(path.join(args.output, "rar"))
-x_tva.write.format("orc").save(path.join(args.output, "tva"))
+raw_cols_re = re.compile("d3310*|d3517*")
+output_tva = x_tva.drop(
+    *(
+        [col for col in x_tva.columns if raw_cols_re.match(col)]
+        + ["no_ocfi", "mode_depot", "version_form", "dte_depot"]
+    )
+)
+output_tva.withColumnRenamed("dte_debut_periode", "date_deb_tva").withColumnRenamed(
+    "dte_fin_periode", "date_fin_tva"
+).write.format("orc").save(path.join(args.output, "tva"))
