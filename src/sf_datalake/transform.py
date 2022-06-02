@@ -435,10 +435,10 @@ class TimeNormalizer(Transformer):  # pylint: disable=R0903
 
 
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to aggregate data at a SIREN level."""
+    """A transformer to compute the company failure target variable."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Create the objective variable `failure_within_18m` and cast it as integer.
+        """Create the learning target variable `failure_within_18m`.
 
         Args:
             dataset: DataFrame to transform containing `time_til_failure` variable.
