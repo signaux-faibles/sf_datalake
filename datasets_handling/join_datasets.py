@@ -3,7 +3,8 @@
 The join is made along temporal and SIREN variables.
 
 USAGE
-    python join_sf_dgfip.py --sf <sf_dataset> --dgfip <DGFiP_dataset> \
+    python join_datasets.py --sf <sf_dataset> --dgfip_yearly <DGFiP_yearly_dataset> \
+    --dgfip_tva <DGFiP_TVA_dataset> --dgfip_rar <DGFiP_rar_dataset> \
     --output <output_directory>
 
 """
@@ -62,73 +63,69 @@ datasets = load_data(
     file_format="orc",
 )
 
+
+# Prepare datasets
 df_dgfip_yearly = sf_datalake.transform.stringify_and_pad_siren(
     datasets["dgfip_yearly"]
-)
-df_dgfip_tva = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip_tva"])
-df_dgfip_rar_ = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip_rar"])
+).withColumn("duree_exercice", F.date_diff("date_fin_exercice", "date_deb_exercice"))
+df_dgfip_tva = sf_datalake.transform.stringify_and_pad_siren(
+    datasets["dgfip_tva"]
+).withColumn("duree_tva", F.date_diff("date_fin_tva", "date_deb_tva"))
+df_dgfip_rar = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip_rar"])
 df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
     "periode", F.to_date(F.date_trunc("month", F.col("periode")))
 )
-
-# Hack to consider time periods that span whole months from beginning to end.
-df_dgfip_yearly = df_dgfip_yearly.withColumn(
-    "date_fin_exercice",
-    F.add_months(F.to_date(F.date_trunc("month", F.col("date_fin_exercice"))), 1),
-).withColumn(
-    "date_deb_exercice",
-    F.to_date(F.date_trunc("month", F.col("date_deb_exercice"))),
-)
-df_dgfip_tva = df_dgfip_tva.withColumn(
-    "date_fin_tva",
-    F.add_months(F.to_date(F.date_trunc("month", F.col("date_fin_tva"))), 1),
-).withColumn(
-    "date_deb_tva",
-    F.to_date(F.date_trunc("month", F.col("date_deb_tva"))),
-)
-
-# Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
 df_dgfip_yearly = df_dgfip_yearly.withColumn(
     "null_ratio",
     sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_yearly.columns])
     / len(df_dgfip_yearly.columns),
 )
-df_dgfip_tva = df_dgfip_tva.withColumn(
-    "null_ratio",
-    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_tva.columns])
-    / len(df_dgfip_yearly.columns),
+df_dgfip_rar = df_dgfip_rar.filter(
+    F.col("siren").isNotNull()
+    & F.col("art_didr").isNotNull()
+    & F.col("mvt_djc").isNotNull()
+    & F.col("mnt_creance").isNotNull()
 )
 
-df_joined = (
-    (
-        df_sf.join(
-            df_dgfip_yearly,
-            on=(
-                (df_sf.siren == df_dgfip_yearly.siren)
-                & (df_sf.periode >= df_dgfip_yearly.date_deb_exercice)
-                & (df_sf.periode < df_dgfip_yearly.date_fin_exercice)
-            ),
-            how="left",
-        )
-        .drop(df_dgfip_yearly.siren)
-        .orderBy("siren", "periode", "null_ratio")
-        .dropDuplicates(["siren", "periode"])
-        .drop("null_ratio")
-    )
-    .join(
-        df_dgfip_tva,
+# Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
+joined_df = (
+    df_sf.join(
+        df_dgfip_yearly,
         on=(
-            (df_sf.siren == df_dgfip_tva.siren)
-            & (df_sf.periode >= df_dgfip_tva.date_deb_tva)
-            & (df_sf.periode < df_dgfip_tva.date_fin_tva)
+            (df_sf.siren == df_dgfip_yearly.siren)
+            & (df_sf.periode >= df_dgfip_yearly.date_deb_exercice)
+            & (df_sf.periode < df_dgfip_yearly.date_fin_exercice)
         ),
         how="left",
     )
-    .drop(df_dgfip_tva.siren)
-    .orderBy("siren", "periode", "null_ratio")
+    .drop(df_dgfip_yearly.siren)
+    .orderBy("null_ratio")
     .dropDuplicates(["siren", "periode"])
     .drop("null_ratio")
 )
 
+joined_df = joined_df.join(
+    df_dgfip_tva,
+    on=(
+        (joined_df.siren == df_dgfip_tva.siren)
+        & (joined_df.periode >= df_dgfip_tva.date_deb_tva)
+        & (joined_df.periode < df_dgfip_tva.date_fin_tva)
+    ),
+    how="left",
+).drop(df_dgfip_tva.siren)
 
-df_joined.write.format("orc").save(args.output)
+joined_df = (
+    joined_df.join(
+        df_dgfip_rar,
+        on=(
+            (joined_df.siren == df_dgfip_rar.siren)
+            & (joined_df.periode >= df_dgfip_rar.mvt_djc)
+            & (joined_df.periode >= df_dgfip_rar.art_didr)
+        ),
+        how="left",
+    )
+    .sort(["mvt_djc", "mnt_paiement_cum_tot"], ascending=False)
+    .dropDuplicates(["siren", "periode"])
+)
+
+joined_df.write.format("orc").save(args.output)

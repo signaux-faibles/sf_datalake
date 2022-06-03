@@ -60,19 +60,10 @@ for name, ds in datasets.items():
 tva_join_columns = list(
     set(datasets["liasse_tva_ca3"].columns) & set(datasets["liasse_tva_ca12"].columns)
 )
-all_tva = (
-    datasets["liasse_tva_ca3"]
-    .join(datasets["liasse_tva_ca12"], on=tva_join_columns, how="outer")
-    .withColumn(
-        "duree_periode_tva",
-        F.round(
-            F.months_between(
-                F.col("dte_fin_periode"),
-                F.col("dte_debut_periode"),
-            )
-        ).cast("integer"),
-    )
+all_tva = datasets["liasse_tva_ca3"].join(
+    datasets["liasse_tva_ca12"], on=tva_join_columns, how="outer"
 )
+
 x_tva = all_tva.na.fill(value=0, subset=sf_datalake.utils.numerical_columns(all_tva))
 x_tva = x_tva.withColumn("d_tca_total", F.col("d3310_29") + F.col("d3517s_55_i"))
 x_tva = x_tva.withColumn(

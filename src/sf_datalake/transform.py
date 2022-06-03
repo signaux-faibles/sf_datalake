@@ -415,8 +415,7 @@ class TimeNormalizer(Transformer):  # pylint: disable=R0903
         "TIME_NORMALIZATION" key. The expected format is:
 
         {duration_col: [data_cols]}, where duration_col is the name of a column that
-        holds duration (in number of months) associated with the variables under
-        [data_cols].
+        holds a duration value associated with the variables in the `data_cols` list.
 
         Args:
             dataset: DataFrame to transform containing raw period-related data.
