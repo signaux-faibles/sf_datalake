@@ -1,5 +1,5 @@
 {
-    "DATASET": "/projets/TSF/donnees/agg/dataset_has_paydex",
+    "DATASET": "/projets/TSF/donnees/agg/full_dataset",
     "IDENTIFIERS": [
         "periode",
         "siren"
