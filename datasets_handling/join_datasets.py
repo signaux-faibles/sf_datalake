@@ -127,7 +127,7 @@ joined_df = (
         how="left",
     )
     .sort(["mvt_djc", "mnt_paiement_cum_tot"], ascending=False)
-    .dropDuplicates(["siren", "periode"])
+    .dropDuplicates(["siren", "periode", "art_cleart"])
 ).drop(df_dgfip_rar.siren)
 
 joined_df.write.format("orc").save(args.output)
