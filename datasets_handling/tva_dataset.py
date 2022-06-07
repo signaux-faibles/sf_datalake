@@ -243,4 +243,4 @@ output_tva = x_tva.drop(
 )
 output_tva.withColumnRenamed("dte_debut_periode", "date_deb_tva").withColumnRenamed(
     "dte_fin_periode", "date_fin_tva"
-).write.format("orc").save(path.join(args.output, "tva"))
+).write.format("orc").save(args.output)

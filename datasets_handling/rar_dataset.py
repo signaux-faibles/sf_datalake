@@ -188,4 +188,4 @@ rar_mois_article = rar_mois_article.withColumn(
 rar_mois_article = rar_mois_article.withColumn(
     "mnt_rar_hcf", F.col("mnt_rar") * F.col("ind_hcf")
 )
-rar_mois_article.write.format("orc").save(path.join(args.output, "rar"))
+rar_mois_article.write.format("orc").save(args.output)
