@@ -86,8 +86,12 @@ df_dgfip_rar = df_dgfip_rar.filter(
 )
 
 # Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
+overwritten_columns = (set(df_dgfip_yearly.columns) & set(df_dgfip_tva.columns)) - {
+    "siren"
+}
 joined_df = (
-    df_sf.join(
+    df_sf.drop(*overwritten_columns)
+    .join(
         df_dgfip_yearly,
         on=(
             (df_sf.siren == df_dgfip_yearly.siren)
