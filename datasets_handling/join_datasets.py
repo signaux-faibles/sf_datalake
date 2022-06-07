@@ -67,10 +67,8 @@ datasets = load_data(
 # Prepare datasets
 df_dgfip_yearly = sf_datalake.transform.stringify_and_pad_siren(
     datasets["dgfip_yearly"]
-).withColumn("duree_exercice", F.date_diff("date_fin_exercice", "date_deb_exercice"))
-df_dgfip_tva = sf_datalake.transform.stringify_and_pad_siren(
-    datasets["dgfip_tva"]
-).withColumn("duree_tva", F.date_diff("date_fin_tva", "date_deb_tva"))
+)
+df_dgfip_tva = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip_tva"])
 df_dgfip_rar = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip_rar"])
 df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
     "periode", F.to_date(F.date_trunc("month", F.col("periode")))

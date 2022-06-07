@@ -8,8 +8,10 @@ import numpy as np
 import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
+from pyspark import keyword_only
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
+from pyspark.ml.param.shared import HasInputCols, Param, Params
 from pyspark.sql.types import FloatType, StringType
 
 
@@ -400,36 +402,64 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
         )
 
 
-class TimeNormalizer(Transformer):  # pylint: disable=R0903
-    """A transformer that normalizes data using corresponding time-spans."""
+class TimeNormalizer(Transformer, HasInputCols):
+    """A transformer that normalizes data using corresponding time-spans.
 
-    def __init__(self, config):
+    The duration associated with a data will be expressed through the `start` and `end`
+    column names parameters. Columns that should undergo normalization are set using the
+    `inputCols` parameters and will be overwritten by the transformation.
+
+    Args:
+        inputCols: A list of the columns that will be normalized.
+        start: The columns that holds start dates of periods.
+        end: The columns that holds end dates of periods.
+
+    """
+
+    start = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "start",
+        "Column holding start dates",
+    )
+    end = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "end",
+        "Column holding end dates",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(inputCols=None, start=None, end=None)
+        self._set(**kwargs)
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
-        """Normalize data by dividing variables by the associated time-span.
-
-        The duration associated with a data should be expressed in months. Columns that
-        should undergo normalization will be looked for in the configuration under the
-        "TIME_NORMALIZATION" key. The expected format is:
-
-        {duration_col: [data_cols]}, where duration_col is the name of a column that
-        holds a duration value associated with the variables in the `data_cols` list.
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this TimeNormalizer.
 
         Args:
-            dataset: DataFrame to transform containing raw period-related data.
+            inputCols: A list of the columns that will be normalized.
+            start: The columns that holds start dates of periods.
+            end: The columns that holds end dates of periods.
 
         Returns:
-            DataFrame with some normalized columns.
+            DataFrame with the time-normalized columns.
 
         """
-        assert {"TIME_NORMALIZATION"} <= set(self.config)
+        return self._set(**kwargs)
 
-        # Normalize accounting year by duration
-        for duration_col, var_cols in self.config["TIME_NORMALIZATION"].items():
-            for c in var_cols:
-                dataset = dataset.withColumn(c, F.col(c) / F.col(duration_col))
+    def _transform(self, dataset):
+        for param in ["inputCols", "start", "end"]:
+            if self.getOrDefault(param) is None:
+                raise ValueError(f"Parameter {param} is not set.")
+        for col in self.getInputCols():
+            dataset = dataset.withColumn(
+                col,
+                F.col(col)
+                / F.date_diff(
+                    F.col(self.getOrDefault("end")), F.col(self.getOrDefault("start"))
+                ),
+            )
         return dataset
 
 
