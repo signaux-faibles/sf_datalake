@@ -26,7 +26,6 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable = C0413
 import sf_datalake.io
-import sf_datalake.transform
 import sf_datalake.utils
 
 ####################
