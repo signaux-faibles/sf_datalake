@@ -402,7 +402,7 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
         )
 
 
-class TimeNormalizer(Transformer, HasInputCols):
+class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
     """A transformer that normalizes data using corresponding time-spans.
 
     The duration associated with a data will be expressed through the `start` and `end`
