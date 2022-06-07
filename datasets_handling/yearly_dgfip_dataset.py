@@ -1,8 +1,7 @@
 """Build a dataset of yearly DGFiP data.
 
-This follows MRV's process, originally written in SAS. Source data should be stored
-beforehand inside an input directory which, in turn, contains 3 directories containing
-the data as (possibly multiple) orc file(s):
+Source data should be stored beforehand inside an input directory which, in turn,
+contains 3 directories containing the data as (possibly multiple) orc file(s):
 - etl_decla-declarations_indmap
 - etl_decla-declarations_af
 - rar.rar_tva_exercice
@@ -48,10 +47,10 @@ for name, ds in datasets.items():
 # Merge datasets  #
 ###################
 
+# Join keys, as recommended by data providers, see SJCF-1D confluence.
 join_columns = {"siren", "date_deb_exercice", "date_fin_exercice", "no_ocfi"}
 common_columns = set(datasets["af"].columns) & set(datasets["indmap"].columns)
 drop_columns = common_columns - join_columns
-# TODO: maybe we can drop less columns and still get a complete inner join,
 
 # Combine 'declarations' tables
 declarations = datasets["indmap"].join(

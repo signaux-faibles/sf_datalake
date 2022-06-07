@@ -8,8 +8,10 @@ import numpy as np
 import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
+from pyspark import keyword_only
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
+from pyspark.ml.param.shared import HasInputCols, Param, Params
 from pyspark.sql.types import FloatType, StringType
 
 
@@ -400,11 +402,72 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
         )
 
 
+class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
+    """A transformer that normalizes data using corresponding time-spans.
+
+    The duration associated with a data will be expressed through the `start` and `end`
+    column names parameters. Columns that should undergo normalization are set using the
+    `inputCols` parameters and will be overwritten by the transformation.
+
+    Args:
+        inputCols: A list of the columns that will be normalized.
+        start: The columns that holds start dates of periods.
+        end: The columns that holds end dates of periods.
+
+    """
+
+    start = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "start",
+        "Column holding start dates",
+    )
+    end = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "end",
+        "Column holding end dates",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCols=None, start=None, end=None)
+        self._set(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this TimeNormalizer.
+
+        Args:
+            inputCols: A list of the columns that will be normalized.
+            start: The columns that holds start dates of periods.
+            end: The columns that holds end dates of periods.
+
+        Returns:
+            DataFrame with the time-normalized columns.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset):
+        for param in ["inputCols", "start", "end"]:
+            if self.getOrDefault(param) is None:
+                raise ValueError(f"Parameter {param} is not set.")
+        for col in self.getInputCols():
+            dataset = dataset.withColumn(
+                col,
+                F.col(col)
+                / F.date_diff(
+                    F.col(self.getOrDefault("end")), F.col(self.getOrDefault("start"))
+                ),
+            )
+        return dataset
+
+
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to aggregate data at a SIREN level."""
+    """A transformer to compute the company failure target variable."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
-        """Create the objective variable `failure_within_18m` and cast it as integer.
+        """Create the learning target variable `failure_within_18m`.
 
         Args:
             dataset: DataFrame to transform containing `time_til_failure` variable.
