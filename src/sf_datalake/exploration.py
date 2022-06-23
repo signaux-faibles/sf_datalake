@@ -207,6 +207,7 @@ def covid19_adapter_params(
             }
 
     """
+    # pylint: disable=R0801
     preprocessing_pipeline = PipelineModel(
         stages=[
             # Filters, time-scale and missing values handling
