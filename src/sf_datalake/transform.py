@@ -126,33 +126,6 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
     return stages
 
 
-def generate_preprocessing_stages(config: dict) -> List[pyspark.ml.Transformer]:
-    """Generates preprocessing stages.
-
-    These stages are ready to be included in a pyspark.ml.Pipeline object for data
-    preprocessing and feature engineering.
-
-    Args:
-        config: model configuration, as loaded by io.load_parameters().
-
-    Returns:
-        A list of the preprocessing stages.
-
-    """
-    stages = [
-        WorkforceFilter(),
-        HasPaydexFilter(config),
-        MissingValuesHandler(config),
-        PaydexColumnsAdder(config),
-        AvgDeltaDebtPerSizeColumnAdder(config),
-        DebtRatioColumnAdder(config),
-        TargetVariableColumnAdder(),
-        Covid19Adapter(config),
-        DatasetColumnSelector(config),
-    ]
-    return stages
-
-
 class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
     """A transformer to compute the average change in social debt / nb of employees."""
 
