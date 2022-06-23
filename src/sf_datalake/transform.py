@@ -429,7 +429,7 @@ class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
             dataset = dataset.withColumn(
                 col,
                 F.col(col)
-                / F.date_diff(
+                / F.datediff(
                     F.col(self.getOrDefault("end")), F.col(self.getOrDefault("start"))
                 ),
             )
