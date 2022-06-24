@@ -406,7 +406,7 @@ class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
     def __init__(self, **kwargs):
         super().__init__()
         self._setDefault(inputCols=None, start=None, end=None)
-        self._set(**kwargs)
+        self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, **kwargs):
@@ -417,13 +417,16 @@ class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
             start: The columns that holds start dates of periods.
             end: The columns that holds end dates of periods.
 
-        Returns:
-            DataFrame with the time-normalized columns.
-
         """
         return self._set(**kwargs)
 
-    def _transform(self, dataset):
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Normalize data using associated time-spans.
+
+        Returns:
+            DataFrame with some time-normalized columns.
+
+        """
         for param in ["inputCols", "start", "end"]:
             if self.getOrDefault(param) is None:
                 raise ValueError(f"Parameter {param} is not set.")
