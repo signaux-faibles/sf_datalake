@@ -1,5 +1,6 @@
 """Utilities and classes for handling and transforming datasets."""
 
+import datetime as dt
 import itertools
 import logging
 from typing import Iterable, List
@@ -12,6 +13,7 @@ from pyspark import keyword_only
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.ml.param.shared import HasInputCols, Param, Params
+from pyspark.sql import Window
 from pyspark.sql.types import FloatType, StringType
 
 
@@ -434,6 +436,83 @@ class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
                 ),
             )
         return dataset
+
+
+class MovingAverage(Transformer, HasInputCols):  # pylint: disable=R0903
+    """A transformer that computes moving averages of time-series variables.
+
+    Args:
+        inputCols: A list of the columns that will be averaged.
+        n_months: Number of months over which the average is computed.
+
+    """
+
+    n_months = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_months",
+        "Number of months for moving average computation",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCols=None, n_months=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this TimeNormalizer.
+
+        Args:
+            inputCols: A list of the columns that will be averaged.
+            n_months: Number of months over which the average is computed.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Compute moving averages and add the corresponding new columns.
+
+        Variables for which moving averages should be computed are expected to be
+        described through the inputCols parameters. The number of months over which
+        the average is computed is
+
+        If `n_months` is a list, then for each list element, a moving average over the
+        associated number of months will be produced.
+
+        Args:
+            dataset: DataFrame to transform containing time-series data.
+
+        Returns:
+            DataFrame with new "var_moyXm" columns, where X is a number of months over
+            which `var`'s average is computed.
+
+        """
+        dataset = dataset.withColumn(
+            "periode_ts", F.to_timestamp("periode").cast("long")
+        )
+        n_months = self.getOrDefault("n_months")
+        if isinstance(n_months, (int, float)):
+            n_months = [n_months]
+
+        time_windows = {
+            n_m: Window()
+            .partitionBy("siren")
+            .orderBy("periode_ts")
+            .rangeBetween(
+                -int(dt.timedelta(30).total_seconds() * n_m), Window.currentRow
+            )
+            for n_m in n_months
+        }
+        for var, duration in itertools.product(
+            self.getOrDefault("inputCols"), n_months
+        ):
+            dataset = dataset.withColumn(
+                f"{var}_moy{duration}m",
+                F.avg(F.col(var)).over(time_windows[duration]),
+            )
+
+        return dataset.drop("periode_ts")
 
 
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
