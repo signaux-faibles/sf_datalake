@@ -6,7 +6,7 @@ from typing import List, Tuple
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
-from pyspark.ml import Pipeline
+from pyspark.ml import PipelineModel
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import LinearRegression
 
@@ -207,10 +207,28 @@ def covid19_adapter_params(
             }
 
     """
-    pipeline_preprocessor = Pipeline(
-        stages=sf_datalake.transform.generate_preprocessing_stages(config)
+    # pylint: disable=R0801
+    preprocessing_pipeline = PipelineModel(
+        stages=[
+            # Filters, time-scale and missing values handling
+            sf_datalake.transform.WorkforceFilter(),
+            sf_datalake.transform.HasPaydexFilter(config),
+            sf_datalake.transform.MissingValuesHandler(config),
+            sf_datalake.transform.TimeNormalizer(
+                inputCols=config["FEATURE_GROUPS"]["sante_financiere"],
+                start="date_deb_exercice",
+                end="date_fin_exercice",
+            ),
+            # Feature engineering
+            sf_datalake.transform.PaydexColumnsAdder(config),
+            sf_datalake.transform.AvgDeltaDebtPerSizeColumnAdder(config),
+            sf_datalake.transform.DebtRatioColumnAdder(config),
+            # Selection of features and target variable
+            sf_datalake.transform.TargetVariableColumnAdder(),
+            sf_datalake.transform.DatasetColumnSelector(config),
+        ]
     )
-    df = pipeline_preprocessor.fit(df).transform(df)
+    df = preprocessing_pipeline.transform(df)
 
     # Keep data from the first date of the learning period
     df = df.filter(df["periode"] >= config["TRAIN_DATES"][0])
