@@ -12,7 +12,7 @@ import pyspark.sql.functions as F
 from pyspark import keyword_only
 from pyspark.ml import Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
-from pyspark.ml.param.shared import HasInputCols, Param, Params
+from pyspark.ml.param.shared import HasInputCol, HasInputCols, Param, Params
 from pyspark.sql import Window
 from pyspark.sql.types import FloatType, StringType
 
@@ -150,8 +150,8 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
         mandatory_cols = {
             "montant_part_ouvriere",
             "montant_part_patronale",
-            "montant_part_ouvriere_past_3",
-            "montant_part_patronale_past_3",
+            "montant_part_ouvriere_lag3",
+            "montant_part_patronale_lag3",
             "effectif",
         }
         assert mandatory_cols <= set(dataset.columns)
@@ -162,18 +162,18 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
             / dataset["effectif"],
         )
         dataset = dataset.withColumn(
-            "dette_par_effectif_past_3",
+            "dette_par_effectif_lag3",
             (
-                dataset["montant_part_ouvriere_past_3"]
-                + dataset["montant_part_patronale_past_3"]
+                dataset["montant_part_ouvriere_lag3"]
+                + dataset["montant_part_patronale_lag3"]
             )
             / dataset["effectif"],
         )
         dataset = dataset.withColumn(
             "avg_delta_dette_par_effectif",
-            (dataset["dette_par_effectif"] - dataset["dette_par_effectif_past_3"]) / 3,
+            (dataset["dette_par_effectif"] - dataset["dette_par_effectif_lag3"]) / 3,
         )
-        drop_columns = ["dette_par_effectif", "dette_par_effectif_past_3"]
+        drop_columns = ["dette_par_effectif", "dette_par_effectif_lag3"]
 
         if self.config["FILL_MISSING_VALUES"]:
             dataset = dataset.fillna(
@@ -239,7 +239,7 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
         """Computes the yearly variation and quantile bin of payment delay (in days).
 
         DataFrame to transform containing "paydex_nb_jours" and
-        "paydex_nb_jours_past_12" columns.
+        "paydex_nb_jours_lag12" columns.
 
         Args:
             dataset: DataFrame to transform.
@@ -441,11 +441,11 @@ class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
         return dataset
 
 
-class MovingAverage(Transformer, HasInputCols):  # pylint: disable=R0903
+class MovingAverage(Transformer, HasInputCol):  # pylint: disable=R0903
     """A transformer that computes moving averages of time-series variables.
 
     Args:
-        inputCols: A list of the columns that will be averaged.
+        inputCol: The column that will be averaged.
         n_months: Number of months over which the average is computed.
 
     """
@@ -453,22 +453,27 @@ class MovingAverage(Transformer, HasInputCols):  # pylint: disable=R0903
     n_months = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "n_months",
-        "Number of months for moving average computation",
+        "Number of months for moving average computation.",
+    )
+    ref_date = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ref_date",
+        "A reference date, used to compute number of months between rows.",
     )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCols=None, n_months=None)
+        self._setDefault(inputCol=None, n_months=None, ref_date=dt.date(2014, 1, 1))
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this TimeNormalizer.
+        """Set parameters for this MovingAverage transformer.
 
         Args:
-            inputCols: A list of the columns that will be averaged.
-            n_months: Number of months over which the average is computed.
+            inputCol (str): The column that will be averaged.
+            n_months (int or list): Number of months over which the average is computed.
 
         """
         return self._set(**kwargs)
@@ -476,46 +481,131 @@ class MovingAverage(Transformer, HasInputCols):  # pylint: disable=R0903
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Compute moving averages and add the corresponding new columns.
 
-        Variables for which moving averages should be computed are expected to be
-        described through the inputCols parameters. The number of months over which
-        the average is computed is
-
-        If `n_months` is a list, then for each list element, a moving average over the
-        associated number of months will be produced.
+        The variable for which moving averages should be computed is expected to be
+        defined through the `inputCol` parameter. The number of months over which the
+        average is computed is defined through `n_months`. If `n_months` is a list, then
+        for each list element, a moving average over the associated number of months
+        will be produced.
 
         Args:
             dataset: DataFrame to transform containing time-series data.
 
         Returns:
-            DataFrame with new "var_moyXm" columns, where X is a number of months over
-            which `var`'s average is computed.
+            DataFrame with new "var_moy[n]m" columns, where [n] is a number of months
+            over which `var`'s average is computed.
 
         """
-        dataset = dataset.withColumn(
-            "periode_ts", F.to_timestamp("periode").cast("long")
-        )
         n_months = self.getOrDefault("n_months")
-        if isinstance(n_months, (int, float)):
+        if isinstance(n_months, int):
             n_months = [n_months]
+        elif isinstance(n_months, list):
+            pass
+        else:
+            raise ValueError("`n_months` should either be an int or a list of ints.")
+
+        dataset = dataset.withColumn(
+            "ref_date", F.lit(self.getOrDefault("ref_date"))
+        ).withColumn(
+            "months_from_ref", F.months_between("periode", "ref_date").cast("int")
+        )
 
         time_windows = {
             n_m: Window()
             .partitionBy("siren")
-            .orderBy("periode_ts")
-            .rangeBetween(
-                -int(dt.timedelta(30).total_seconds() * n_m), Window.currentRow
-            )
+            .orderBy(F.col("months_from_ref").asc())
+            .rangeBetween(-n_m, Window.currentRow)
             for n_m in n_months
         }
-        for var, duration in itertools.product(
-            self.getOrDefault("inputCols"), n_months
-        ):
+        feat = self.getOrDefault("inputCol")
+        for duration in n_months:
             dataset = dataset.withColumn(
-                f"{var}_moy{duration}m",
-                F.avg(F.col(var)).over(time_windows[duration]),
+                f"{feat}_moy{duration}m",
+                F.avg(F.col(feat)).over(time_windows[duration]),
             )
 
-        return dataset.drop("periode_ts")
+        return dataset.drop("ref_date", "months_from_ref")
+
+
+class LagOperator(Transformer, HasInputCol):
+    """A transformer that computes lagged values of a given time-indexed variable.
+
+    Args:
+        inputCol: The column that will be used to derive lagged variables.
+        n_months: Number of months that will be considered for lags.
+
+    """
+
+    n_months = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_months",
+        "Number of months for lag computation.",
+    )
+
+    ref_date = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ref_date",
+        "A reference date, used to compute number of months between rows.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCol=None, n_months=None, ref_date=dt.date(2014, 1, 1))
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this LagOperator transformer.
+
+        Args:
+            inputCol (str): The column that will be used to derive lagged variables.
+            n_months (int or list): Number of months that will be considered for lags.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Compute lagged values and add the corresponding new columns.
+
+        The variable for which lagged values should be computed is expected to be
+        defined through the `inputCol` parameter. The number of months over which the
+        lag is computed is defined through `n_months`. If `n_months` is a list, then
+        for each list element, an `n_months` lagged version of the `inputCol` will be
+        produced.
+
+        Args:
+            dataset: DataFrame to transform containing time-series data.
+
+        Returns:
+            DataFrame with new "var_lag[n]m" columns, where [n] is a number of months
+            over which `var`'s lag is computed.
+
+        """
+        input_col = self.getOrDefault("inputCol")
+        n_months = self.getOrDefault("n_months")
+        if isinstance(n_months, int):
+            n_months = [n_months]
+        elif isinstance(n_months, list):
+            pass
+        else:
+            raise ValueError("`n_months` should either be an int or a list of ints.")
+
+        dataset = dataset.withColumn(
+            "ref_date", F.lit(self.getOrDefault("ref_date"))
+        ).withColumn(
+            "months_from_ref", F.months_between("periode", "ref_date").cast("int")
+        )
+
+        lag_window = (
+            Window().partitionBy("siren").orderBy(F.col("months_from_ref").asc())
+        )
+        for duration in n_months:
+            dataset = dataset.withColumn(
+                f"{input_col}_lag{duration}m",
+                F.lag(F.col(input_col), duration, 0.0).over(lag_window),
+            )
+
+        return dataset.drop("ref_date", "months_from_ref")
 
 
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
@@ -615,7 +705,7 @@ class HasPaydexFilter(Transformer):  # pylint: disable=R0903
             )
             return dataset.filter(
                 F.col("paydex_nb_jours").isNotNull()
-                & F.col("paydex_nb_jours_past_12").isNotNull()
+                & F.col("paydex_nb_jours_lag12").isNotNull()
             )
 
         return dataset
