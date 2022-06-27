@@ -6,8 +6,6 @@
     ],
     "DEFAULT_VALUES": {
         "time_til_failure": 9999,
-        "paydex_nb_jours": 0,
-        "paydex_yoy": 0,
         "cotisation": 0.0,
         "montant_part_ouvriere": 0.0,
         "montant_part_patronale": 0.0,

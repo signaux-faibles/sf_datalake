@@ -10,7 +10,7 @@ import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
 from pyspark import keyword_only
-from pyspark.ml import Transformer
+from pyspark.ml import PipelineModel, Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.ml.param.shared import HasInputCol, HasInputCols, Param, Params
 from pyspark.sql import Window
@@ -245,23 +245,26 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
             dataset: DataFrame to transform.
 
         Returns:
-            Transformed DataFrame with extra `paydex_yoy` and `paydex_bins` columns.
+             Transformed DataFrame with extra `paydex_nb_jours_diff12m` and
+             `paydex_bins` columns.
 
         """
-        if not ({"paydex_bin", "paydex_yoy"} & set(self.config["FEATURES"])):
+        if not (
+            {"paydex_bin", "paydex_nb_jours_diff12m"} & set(self.config["FEATURES"])
+        ):
             logging.info(
                 "Paydex data was not requested as a feature inside the provided \
                 configuration file."
             )
             return dataset
 
-        assert {"paydex_nb_jours", "paydex_nb_jours_past_12"} <= set(dataset.columns)
-        paydex_features = ["paydex_yoy"]
+        assert {"paydex_nb_jours", "paydex_nb_jours_lag12m"} <= set(dataset.columns)
+        paydex_features = ["paydex_nb_jours_diff12m"]
 
         ## Paydex variation
         dataset = dataset.withColumn(
-            "paydex_yoy",
-            dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_past_12"],
+            "paydex_nb_jours_diff12m",
+            dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_lag12m"],
         )
 
         ## Binned paydex
@@ -510,17 +513,17 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=R0903
         )
 
         time_windows = {
-            n_m: Window()
+            n: Window()
             .partitionBy("siren")
             .orderBy(F.col("months_from_ref").asc())
-            .rangeBetween(-n_m, Window.currentRow)
-            for n_m in n_months
+            .rangeBetween(-n, Window.currentRow)
+            for n in n_months
         }
         feat = self.getOrDefault("inputCol")
-        for duration in n_months:
+        for n in n_months:
             dataset = dataset.withColumn(
-                f"{feat}_moy{duration}m",
-                F.avg(F.col(feat)).over(time_windows[duration]),
+                f"{feat}_moy{n}m",
+                F.avg(F.col(feat)).over(time_windows[n]),
             )
 
         return dataset.drop("ref_date", "months_from_ref")
@@ -599,13 +602,92 @@ class LagOperator(Transformer, HasInputCol):
         lag_window = (
             Window().partitionBy("siren").orderBy(F.col("months_from_ref").asc())
         )
-        for duration in n_months:
+        for n in n_months:
             dataset = dataset.withColumn(
-                f"{input_col}_lag{duration}m",
-                F.lag(F.col(input_col), duration, 0.0).over(lag_window),
+                f"{input_col}_lag{n}m",
+                F.lag(F.col(input_col), n, 0.0).over(lag_window),
             )
 
         return dataset.drop("ref_date", "months_from_ref")
+
+
+class DiffOperator(Transformer, HasInputCol):
+    """A transformer that computes the time evolution of a given time-indexed variable.
+
+    This transformer creates a LagOperator under the hood if the required lagged
+    variable is not found in the dataset.
+
+    Args:
+        inputCol: The column that will be used to derive the diff.
+        n_months: Number of months that will be considered for the difference.
+
+    """
+
+    n_months = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_months",
+        "Number of months for lag computation.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCol=None, n_months=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this LagOperator transformer.
+
+        Args:
+            inputCol (str): The column that will be used to derive lagged variables.
+            n_months (int or list): Number of months that will be considered for lags.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Compute time difference(s) and add the corresponding new columns.
+
+        The variable for which time differences should be computed is expected to be
+        defined through the `inputCol` parameter. The number of months over which the
+        diff is computed is defined through `n_months`. If `n_months` is a list, then
+        for each list element, an `n_months` difference of the `inputCol` will be
+        produced.
+
+        Args:
+            dataset: DataFrame to transform containing time-series data.
+
+        Returns:
+            DataFrame with new "var_diff[n]m" columns, where [n] is a number of months
+            over which `var`'s diff is computed.
+
+        """
+        input_col = self.getOrDefault("inputCol")
+        n_months = self.getOrDefault("n_months")
+        if isinstance(n_months, int):
+            n_months = [n_months]
+        elif isinstance(n_months, list):
+            pass
+        else:
+            raise ValueError("`n_months` should either be an int or a list of ints.")
+
+        # Compute lagged variables if needed
+        missing_lags = [
+            n for n in n_months if f"{input_col}_lag{n}m" not in dataset.columns
+        ]
+        dataset = PipelineModel(
+            [LagOperator(inputCol=input_col, n_months=n) for n in missing_lags]
+        ).transform(dataset)
+
+        # Compute diffs
+        for n in n_months:
+            dataset = dataset.withColumn(
+                f"{input_col}_diff{n}m",
+                F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m"),
+            )
+
+        return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
 
 
 class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
@@ -697,7 +779,7 @@ class HasPaydexFilter(Transformer):  # pylint: disable=R0903
             Filtered DataFrame.
 
         """
-        if {"paydex_bin", "paydex_yoy"} & set(self.config["FEATURES"]):
+        if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(self.config["FEATURES"]):
             logging.info(
                 "Paydex data features were requested through the provided \
                 configuration file. The dataset will be filtered to only keep samples \

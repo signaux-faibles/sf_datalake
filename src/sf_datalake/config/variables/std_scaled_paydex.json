@@ -7,7 +7,7 @@
     "DEFAULT_VALUES": {
         "time_til_failure": 9999,
         "paydex_nb_jours": 0,
-        "paydex_yoy": 0,
+        "paydex_nb_jours_diff12m": 0,
         "cotisation": 0.0,
         "montant_part_ouvriere": 0.0,
         "montant_part_patronale": 0.0,
@@ -57,7 +57,7 @@
         "ratio_dette": "StandardScaler",
         "avg_delta_dette_par_effectif": "StandardScaler",
         "paydex_nb_jours": "StandardScaler",
-        "paydex_yoy": "StandardScaler"
+        "paydex_nb_jours_diff12m": "StandardScaler"
     },
     "TARGET": [
         "failure_within_18m"
@@ -113,7 +113,7 @@
         ],
         "retards_paiement": [
             "paydex_nb_jours",
-            "paydex_yoy"
+            "paydex_nb_jours_diff12m"
         ],
         "misc": [
             "effectif"
