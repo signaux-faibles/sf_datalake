@@ -620,9 +620,15 @@ class DiffOperator(Transformer, HasInputCol):
     Args:
         inputCol: The column that will be used to derive the diff.
         n_months: Number of months that will be considered for the difference.
+        normalize: If True, normalize computed difference by its duration.
 
     """
 
+    normalize = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "normalize",
+        "Normalize difference by its duration.",
+    )
     n_months = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "n_months",
@@ -632,7 +638,7 @@ class DiffOperator(Transformer, HasInputCol):
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, n_months=None)
+        self._setDefault(inputCol=None, n_months=None, normalize=False)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -642,6 +648,7 @@ class DiffOperator(Transformer, HasInputCol):
         Args:
             inputCol (str): The column that will be used to derive lagged variables.
             n_months (int or list): Number of months that will be considered for lags.
+            normalize (bool): If True, normalize computed difference by its duration.
 
         """
         return self._set(**kwargs)
@@ -671,6 +678,7 @@ class DiffOperator(Transformer, HasInputCol):
             pass
         else:
             raise ValueError("`n_months` should either be an int or a list of ints.")
+        norm_coeff = [1 / n if self.getOrDefault("normalize") else 1 for n in n_months]
 
         # Compute lagged variables if needed
         missing_lags = [
@@ -684,7 +692,7 @@ class DiffOperator(Transformer, HasInputCol):
         for n in n_months:
             dataset = dataset.withColumn(
                 f"{input_col}_diff{n}m",
-                F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m"),
+                F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m") * norm_coeff[n],
             )
 
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
