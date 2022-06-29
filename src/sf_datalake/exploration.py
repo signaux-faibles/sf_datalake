@@ -221,7 +221,7 @@ def covid19_adapter_params(
             ),
             # Feature engineering
             sf_datalake.transform.PaydexColumnsAdder(config),
-            sf_datalake.transform.AvgDeltaDebtPerSizeColumnAdder(config),
+            sf_datalake.transform.DeltaDebtPerWorkforceColumnAdder(),
             sf_datalake.transform.DebtRatioColumnAdder(config),
             # Selection of features and target variable
             sf_datalake.transform.TargetVariableColumnAdder(),

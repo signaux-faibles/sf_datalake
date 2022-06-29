@@ -128,12 +128,37 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
     return stages
 
 
-class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to compute the average change in social debt / nb of employees."""
+class DeltaDebtPerWorkforceColumnAdder(Transformer):  # pylint: disable=R0903
+    """A transformer to compute the change in social debt / nb of employees.
 
-    def __init__(self, config):
+    The change is normalized by the chosen duration (in months).
+
+    Args:
+        n_months: Number of months over which the diff is computed. Defaults to 3.
+
+    """
+
+    n_months = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_months",
+        "Number of months for moving average computation.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(n_months=3)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this DeltaDebtPerWorkforceColumnAdder transformer.
+
+        Args:
+            n_months (int or list): Number of months that will be considered for diff.
+
+        """
+        return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame):
         """Computes the average change in social debt / nb of employees.
@@ -146,45 +171,23 @@ class AvgDeltaDebtPerSizeColumnAdder(Transformer):  # pylint: disable=R0903
             Transformed DataFrame with an extra `avg_delta_dette_par_effectif` column.
 
         """
-
-        mandatory_cols = {
+        assert {
             "montant_part_ouvriere",
             "montant_part_patronale",
-            "montant_part_ouvriere_lag3",
-            "montant_part_patronale_lag3",
             "effectif",
-        }
-        assert mandatory_cols <= set(dataset.columns)
+        } <= set(dataset.columns)
 
         dataset = dataset.withColumn(
             "dette_par_effectif",
             (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
             / dataset["effectif"],
         )
-        dataset = dataset.withColumn(
-            "dette_par_effectif_lag3",
-            (
-                dataset["montant_part_ouvriere_lag3"]
-                + dataset["montant_part_patronale_lag3"]
-            )
-            / dataset["effectif"],
-        )
-        dataset = dataset.withColumn(
-            "avg_delta_dette_par_effectif",
-            (dataset["dette_par_effectif"] - dataset["dette_par_effectif_lag3"]) / 3,
-        )
+        dataset = DiffOperator(
+            inputCol="dette_par_effectif",
+            n_months=self.getOrDefault("n_months"),
+            normalize=True,
+        ).transform(dataset)
         drop_columns = ["dette_par_effectif", "dette_par_effectif_lag3"]
-
-        if self.config["FILL_MISSING_VALUES"]:
-            dataset = dataset.fillna(
-                {
-                    "avg_delta_dette_par_effectif": self.config["DEFAULT_VALUES"][
-                        "avg_delta_dette_par_effectif"
-                    ]
-                }
-            )
-        else:
-            dataset = dataset.dropna(subset=["avg_delta_dette_par_effectif"])
 
         return dataset.drop(*drop_columns)
 
