@@ -193,14 +193,10 @@ class DeltaDebtPerWorkforceColumnAdder(Transformer):  # pylint: disable=R0903
 
 
 class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to compute the debt ratio."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
+    """A transformer to compute the social debt/contribution ratio."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):
-        """Computes the debt ratio.
+        """Computes the social debt/contribution ratio.
 
         Args:
             dataset: DataFrame to transform.
@@ -216,19 +212,11 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
             "cotisation_moy12m",
         } <= set(dataset.columns)
 
-        dataset = dataset.withColumn(
+        return dataset.withColumn(
             "ratio_dette",
-            (dataset.montant_part_ouvriere + dataset.montant_part_patronale)
-            / dataset.cotisation_moy12m,
+            (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
+            / dataset["cotisation_moy12m"],
         )
-        if self.config["FILL_MISSING_VALUES"]:
-            dataset = dataset.fillna(
-                {"ratio_dette": self.config["DEFAULT_VALUES"]["ratio_dette"]}
-            )
-        else:
-            dataset = dataset.dropna(subset=["ratio_dette"])
-
-        return dataset
 
 
 class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
@@ -290,13 +278,6 @@ class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
                 f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
             ]
 
-        ## Fill missing values
-        if self.config["FILL_MISSING_VALUES"]:
-            dataset = dataset.fillna(
-                {feat: self.config["DEFAULT_VALUES"][feat] for feat in paydex_features}
-            )
-        else:
-            dataset = dataset.dropna(subset=paydex_features)
         return dataset
 
 
@@ -447,7 +428,7 @@ class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
         return dataset
 
 
-class MovingAverage(Transformer, HasInputCol):  # pylint: disable=R0903
+class MovingAverage(Transformer, HasInputCol):
     """A transformer that computes moving averages of time-series variables.
 
     Args:
