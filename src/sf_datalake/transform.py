@@ -127,7 +127,9 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
     return stages
 
 
-class DeltaDebtPerWorkforceColumnAdder(Transformer):
+class DeltaDebtPerWorkforceColumnAdder(
+    Transformer
+):  # pylint: disable=too-few-public-methods
     """A transformer to compute the change in social debt / nb of employees.
 
     The change is normalized by the chosen duration (in months).
@@ -196,10 +198,10 @@ class DeltaDebtPerWorkforceColumnAdder(Transformer):
         return dataset
 
 
-class DebtRatioColumnAdder(Transformer):
+class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to compute the social debt/contribution ratio."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
         """Computes the social debt/contribution ratio.
 
         Args:
@@ -223,7 +225,7 @@ class DebtRatioColumnAdder(Transformer):
         )
 
 
-class PaydexOneHotEncoder(Transformer):
+class PaydexOneHotEncoder(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to compute one-hot encoded features associated with Paydex data."""
 
     def __init__(self, config):
@@ -266,7 +268,7 @@ class PaydexOneHotEncoder(Transformer):
         return dataset
 
 
-class MissingValuesHandler(Transformer):  # pylint: disable=R0903
+class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values."""
 
     def __init__(self, config):
@@ -313,7 +315,7 @@ class MissingValuesHandler(Transformer):  # pylint: disable=R0903
         return dataset
 
 
-class SirenAggregator(Transformer):  # pylint: disable=R0903
+class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to aggregate data at a SIREN level."""
 
     def __init__(self, config):
@@ -349,7 +351,9 @@ class SirenAggregator(Transformer):  # pylint: disable=R0903
         )
 
 
-class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
+class TimeNormalizer(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
     """A transformer that normalizes data using corresponding time-spans.
 
     The duration associated with a data will be expressed through the `start` and `end`
@@ -413,7 +417,7 @@ class TimeNormalizer(Transformer, HasInputCols):  # pylint: disable=R0903
         return dataset
 
 
-class MovingAverage(Transformer, HasInputCol):
+class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
     """A transformer that computes moving averages of time-series variables.
 
     Args:
@@ -498,7 +502,7 @@ class MovingAverage(Transformer, HasInputCol):
         return dataset.drop("ref_date", "months_from_ref")
 
 
-class LagOperator(Transformer, HasInputCol):
+class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
     """A transformer that computes lagged values of a given time-indexed variable.
 
     Args:
@@ -580,7 +584,7 @@ class LagOperator(Transformer, HasInputCol):
         return dataset.drop("ref_date", "months_from_ref")
 
 
-class DiffOperator(Transformer, HasInputCol):
+class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
     """A transformer that computes the time evolution of a given time-indexed variable.
 
     This transformer creates a LagOperator under the hood if the required lagged
@@ -667,10 +671,10 @@ class DiffOperator(Transformer, HasInputCol):
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
 
 
-class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
+class TargetVariableColumnAdder(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to compute the company failure target variable."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
         """Create the learning target variable `failure_within_18m`.
 
         Args:
@@ -688,7 +692,7 @@ class TargetVariableColumnAdder(Transformer):  # pylint: disable=R0903
         return dataset
 
 
-class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
+class DatasetColumnSelector(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to select the columns of the dataset used in the model."""
 
     def __init__(self, config):
@@ -719,10 +723,10 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=R0903
         return dataset
 
 
-class PrivateCompanyFilter(Transformer):  # pylint: disable=R0903
+class PrivateCompanyFilter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer that filters a dataset according to its public/private nature."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
         """Filters out public institutions from a dataset.
 
         Only keeps private companies using `code_naf` variable.
@@ -739,10 +743,10 @@ class PrivateCompanyFilter(Transformer):  # pylint: disable=R0903
         return dataset.filter("code_naf NOT IN ('O', 'P')")
 
 
-class HasPaydexFilter(Transformer):  # pylint: disable=R0903
+class HasPaydexFilter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer that filters according to paydex data availability."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
         """Filters out samples that do not have paydex data.
 
         Args:
@@ -758,10 +762,10 @@ class HasPaydexFilter(Transformer):  # pylint: disable=R0903
         )
 
 
-class WorkforceFilter(Transformer):  # pylint: disable=R0903
+class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to filter the dataset according to workforce size."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
         """Filters out small companies
 
         Only keeps companies with more than 10 employees.
@@ -778,10 +782,10 @@ class WorkforceFilter(Transformer):  # pylint: disable=R0903
         return dataset.filter(F.col("effectif") >= 10)
 
 
-class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
+class ProbabilityFormatter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to format the probability column in output of a model."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
         """Extract the positive probability and cast it as float.
 
         Args:
@@ -795,7 +799,7 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=R0903
         return dataset.withColumn("probability", transform_udf("probability"))
 
 
-class Covid19Adapter(Transformer):  # pylint: disable=R0903
+class Covid19Adapter(Transformer):  # pylint: disable=too-few-public-methods
     """Adapt post-pandemic data using linear fits of features quantiles."""
 
     def __init__(self, config):
