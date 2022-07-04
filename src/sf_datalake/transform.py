@@ -661,7 +661,7 @@ class DiffOperator(Transformer, HasInputCol):
         for n in n_months:
             dataset = dataset.withColumn(
                 f"{input_col}_diff{n}m",
-                F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m") * norm_coeff[n],
+                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")) * norm_coeff[n],
             )
 
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
