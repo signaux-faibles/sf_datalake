@@ -156,7 +156,7 @@ class DeltaDebtPerWorkforceColumnAdder(
         """Set parameters for this DeltaDebtPerWorkforceColumnAdder transformer.
 
         Args:
-            n_months (int or list): Number of months that will be considered for diff.
+            n_months (int): Number of months that will be considered for diff.
 
         """
         return self._set(**kwargs)
@@ -662,10 +662,10 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         ).transform(dataset)
 
         # Compute diffs
-        for n in n_months:
+        for i, n in enumerate(n_months):
             dataset = dataset.withColumn(
                 f"{input_col}_diff{n}m",
-                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")) * norm_coeff[n],
+                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")) * norm_coeff[i],
             )
 
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
