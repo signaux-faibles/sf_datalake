@@ -154,32 +154,50 @@ dataset = sf_datalake.io.load_data(
     seed=config["SEED"],
 )["dataset"]
 
-preprocessing_pipeline = PipelineModel(
-    stages=[
-        # Filters, time-scale and missing values handling
-        sf_datalake.transform.WorkforceFilter(),
-        sf_datalake.transform.HasPaydexFilter(config),
-        sf_datalake.transform.MissingValuesHandler(config),
-        sf_datalake.transform.TimeNormalizer(
-            inputCols=config["FEATURE_GROUPS"]["sante_financiere"],
-            start="date_deb_exercice",
-            end="date_fin_exercice",
-        ),
-        # sf_datalake.transform.TimeNormalizer(
-        #     inputCols=[""], start="date_deb_tva", end="date_fin_tva"
-        # ),
-        # Feature engineering
-        sf_datalake.transform.PaydexColumnsAdder(config),
-        sf_datalake.transform.DeltaDebtPerWorkforceColumnAdder(),
-        sf_datalake.transform.DebtRatioColumnAdder(config),
-        sf_datalake.transform.Covid19Adapter(config),
-        # Selection of features and target variable
-        sf_datalake.transform.TargetVariableColumnAdder(),
-        sf_datalake.transform.DatasetColumnSelector(config),
-    ]
-)
 
+# Switches
+if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(config["FEATURES"]):
+    with_paydex = True
+    logging.info(
+        "Paydex data features were requested through the provided configuration file. \
+        The dataset will be filtered to only keep samples with available paydex data."
+    )
+
+
+## Pre-processing pipeline
+
+filter_steps = [
+    sf_datalake.transform.WorkforceFilter(),
+]
+if with_paydex:
+    filter_steps.append(sf_datalake.transform.HasPaydexFilter())
+normalizing_steps = [
+    sf_datalake.transform.TimeNormalizer(
+        inputCols=config["FEATURE_GROUPS"]["sante_financiere"],
+        start="date_deb_exercice",
+        end="date_fin_exercice",
+    ),
+    # sf_datalake.transform.TimeNormalizer(
+    #     inputCols=[""], start="date_deb_tva", end="date_fin_tva"
+    # ),
+]
+feature_engineering_steps = [
+    sf_datalake.transform.Covid19Adapter(config),
+]
+if with_paydex:
+    feature_engineering_steps.append(
+        sf_datalake.transform.PaydexOneHotEncoder(config),
+    )
+building_steps = [
+    sf_datalake.transform.MissingValuesHandler(config),
+    sf_datalake.transform.TargetVariableColumnAdder(),
+    sf_datalake.transform.DatasetColumnSelector(config),
+]
+preprocessing_pipeline = PipelineModel(
+    stages=filter_steps + normalizing_steps + feature_engineering_steps + building_steps
+)
 dataset = preprocessing_pipeline.transform(dataset)
+
 assert dataset.dropna().count() == dataset.count()
 
 # Split the dataset into train, test, predict subsets.

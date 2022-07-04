@@ -2,7 +2,6 @@
 
 import datetime as dt
 import itertools
-import logging
 from typing import Iterable, List
 
 import numpy as np
@@ -220,48 +219,29 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
         )
 
 
-class PaydexColumnsAdder(Transformer):  # pylint: disable=R0903
-    """A transformer to compute features associated with Paydex data."""
+class PaydexOneHotEncoder(Transformer):  # pylint: disable=R0903
+    """A transformer to compute one-hot encoded features associated with Paydex data."""
 
     def __init__(self, config):
         super().__init__()
         self.config = config
 
     def _transform(self, dataset: pyspark.sql.DataFrame):
-        """Computes the yearly variation and quantile bin of payment delay (in days).
-
-        DataFrame to transform containing "paydex_nb_jours" and
-        "paydex_nb_jours_lag12" columns.
+        """Computes the quantile bins of payment delay (in days).
 
         Args:
-            dataset: DataFrame to transform.
+            dataset: DataFrame to transform. It should contain "paydex_nb_jours" and
+              "paydex_nb_jours_lag12" columns.
 
         Returns:
-             Transformed DataFrame with extra `paydex_nb_jours_diff12m` and
-             `paydex_bins` columns.
+             Transformed DataFrame with extra `paydex_bins` columns.
 
         """
-        if not (
-            {"paydex_bin", "paydex_nb_jours_diff12m"} & set(self.config["FEATURES"])
-        ):
-            logging.info(
-                "Paydex data was not requested as a feature inside the provided \
-                configuration file."
-            )
-            return dataset
 
         assert {"paydex_nb_jours", "paydex_nb_jours_lag12m"} <= set(dataset.columns)
-        paydex_features = ["paydex_nb_jours_diff12m"]
-
-        ## Paydex variation
-        dataset = dataset.withColumn(
-            "paydex_nb_jours_diff12m",
-            dataset["paydex_nb_jours"] - dataset["paydex_nb_jours_lag12m"],
-        )
 
         ## Binned paydex
         if "paydex_bin" in self.config["FEATURES"]:
-            paydex_features.append("paydex_bin")
             days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
             days_splits = np.unique(
                 np.array([float(v) for v in itertools.chain(*days_bins)])
@@ -758,11 +738,7 @@ class PrivateCompanyFilter(Transformer):  # pylint: disable=R0903
 class HasPaydexFilter(Transformer):  # pylint: disable=R0903
     """A transformer that filters according to paydex data availability."""
 
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=R0201
+    def _transform(self, dataset: pyspark.sql.DataFrame):
         """Filters out samples that do not have paydex data.
 
         Args:
@@ -772,18 +748,10 @@ class HasPaydexFilter(Transformer):  # pylint: disable=R0903
             Filtered DataFrame.
 
         """
-        if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(self.config["FEATURES"]):
-            logging.info(
-                "Paydex data features were requested through the provided \
-                configuration file. The dataset will be filtered to only keep samples \
-                with available paydex data."
-            )
-            return dataset.filter(
-                F.col("paydex_nb_jours").isNotNull()
-                & F.col("paydex_nb_jours_lag12").isNotNull()
-            )
-
-        return dataset
+        return dataset.filter(
+            F.col("paydex_nb_jours").isNotNull()
+            & F.col("paydex_nb_jours_lag12").isNotNull()
+        )
 
 
 class WorkforceFilter(Transformer):  # pylint: disable=R0903
