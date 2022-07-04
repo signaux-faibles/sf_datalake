@@ -127,7 +127,7 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
     return stages
 
 
-class DeltaDebtPerWorkforceColumnAdder(Transformer):  # pylint: disable=R0903
+class DeltaDebtPerWorkforceColumnAdder(Transformer):
     """A transformer to compute the change in social debt / nb of employees.
 
     The change is normalized by the chosen duration (in months).
@@ -163,11 +163,10 @@ class DeltaDebtPerWorkforceColumnAdder(Transformer):  # pylint: disable=R0903
         """Computes the average change in social debt / nb of employees.
 
         Args:
-            dataset: DataFrame to transform. It should contain debt and company size
-              data.
+            dataset: DataFrame to transform. It should contain debt and workforce data.
 
         Returns:
-            Transformed DataFrame with an extra `avg_delta_dette_par_effectif` column.
+            Transformed DataFrame with an extra `delta_dette_par_effectif` column.
 
         """
         assert {
@@ -182,17 +181,22 @@ class DeltaDebtPerWorkforceColumnAdder(Transformer):  # pylint: disable=R0903
             (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
             / dataset["effectif"],
         )
-        dataset = DiffOperator(
-            inputCol="dette_par_effectif",
-            n_months=n_months,
-            normalize=True,
-        ).transform(dataset)
-        drop_columns = ["dette_par_effectif", "dette_par_effectif_lag{n_months}"]
+        dataset = (
+            DiffOperator(
+                inputCol="dette_par_effectif",
+                n_months=n_months,
+                normalize=True,
+            )
+            .transform(dataset)
+            .withColumnRenamed(
+                "dette_par_effectif_diff{n_months}m", "delta_debt_par_effectif"
+            )
+        )
 
-        return dataset.drop(*drop_columns)
+        return dataset
 
 
-class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
+class DebtRatioColumnAdder(Transformer):
     """A transformer to compute the social debt/contribution ratio."""
 
     def _transform(self, dataset: pyspark.sql.DataFrame):
@@ -219,7 +223,7 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=R0903
         )
 
 
-class PaydexOneHotEncoder(Transformer):  # pylint: disable=R0903
+class PaydexOneHotEncoder(Transformer):
     """A transformer to compute one-hot encoded features associated with Paydex data."""
 
     def __init__(self, config):
