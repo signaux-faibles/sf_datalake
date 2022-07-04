@@ -177,6 +177,7 @@ class DeltaDebtPerWorkforceColumnAdder(Transformer):  # pylint: disable=R0903
             "effectif",
         } <= set(dataset.columns)
 
+        n_months = self.getOrDefault("n_months")
         dataset = dataset.withColumn(
             "dette_par_effectif",
             (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
@@ -184,10 +185,10 @@ class DeltaDebtPerWorkforceColumnAdder(Transformer):  # pylint: disable=R0903
         )
         dataset = DiffOperator(
             inputCol="dette_par_effectif",
-            n_months=self.getOrDefault("n_months"),
+            n_months=n_months,
             normalize=True,
         ).transform(dataset)
-        drop_columns = ["dette_par_effectif", "dette_par_effectif_lag3"]
+        drop_columns = ["dette_par_effectif", "dette_par_effectif_lag{n_months}"]
 
         return dataset.drop(*drop_columns)
 
