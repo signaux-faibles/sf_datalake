@@ -191,7 +191,7 @@ class DeltaDebtPerWorkforceColumnAdder(
             )
             .transform(dataset)
             .withColumnRenamed(
-                "dette_par_effectif_diff{n_months}m", "delta_debt_par_effectif"
+                f"dette_par_effectif_diff{n_months}m", "delta_dette_par_effectif"
             )
         )
 
