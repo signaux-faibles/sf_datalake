@@ -15,7 +15,7 @@
         "ratio_dette": 0.0,
         "apart_heures_consommees_cumulees": 0.0,
         "apart_heures_consommees": 0.0,
-        "delta_dette_par_effectif": 0.0,
+        "dette_par_effectif_slope3m": 0.0,
         "effectif": 0,
         "mnt_af_bfonc_bfr": 0.0,
         "mnt_af_bfonc_tresorerie": 0.0,
@@ -56,7 +56,7 @@
         "apart_heures_consommees": "StandardScaler",
         "ratio_dette_moy12m": "StandardScaler",
         "ratio_dette": "StandardScaler",
-        "delta_dette_par_effectif": "StandardScaler",
+        "dette_par_effectif_slope3m": "StandardScaler",
         "paydex_nb_jours_diff12m": "StandardScaler",
         "paydex_bin": "OneHotEncoder"
     },
@@ -115,7 +115,7 @@
         "dette": [
             "ratio_dette",
             "ratio_dette_moy12m",
-            "delta_dette_par_effectif"
+            "dette_par_effectif_slope3m"
         ]
     },
     "FEATURE_GROUPS": {

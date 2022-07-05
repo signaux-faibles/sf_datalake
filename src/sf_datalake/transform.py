@@ -183,19 +183,11 @@ class DeltaDebtPerWorkforceColumnAdder(
             (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
             / dataset["effectif"],
         )
-        dataset = (
-            DiffOperator(
-                inputCol="dette_par_effectif",
-                n_months=n_months,
-                normalize=True,
-            )
-            .transform(dataset)
-            .withColumnRenamed(
-                f"dette_par_effectif_diff{n_months}m", "delta_dette_par_effectif"
-            )
-        )
-
-        return dataset
+        return DiffOperator(
+            inputCol="dette_par_effectif",
+            n_months=n_months,
+            slope=True,
+        ).transform(dataset)
 
 
 class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-methods
@@ -588,24 +580,26 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
     """A transformer that computes the time evolution of a given time-indexed variable.
 
     This transformer creates a LagOperator under the hood if the required lagged
-    variable is not found in the dataset.
+    variable is not found in the dataset. The output(s) can either be a difference,
+    or a slope, computed as the ratio of the slope over the duration, i.e. the
+    `n_months` parameter.
 
     Args:
         inputCol: The column that will be used to derive the diff.
         n_months: Number of months that will be considered for the difference.
-        normalize: If True, normalize computed difference by its duration.
+        slope: If True, divide the computed difference by its duration in months.
 
     """
 
-    normalize = Param(
+    slope = Param(
         Params._dummy(),  # pylint: disable=protected-access
-        "normalize",
-        "Normalize difference by its duration.",
+        "slope",
+        "Divide difference by the duration.",
     )
     n_months = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "n_months",
-        "Number of months for lag computation.",
+        "Number of months for diff computation.",
     )
 
     @keyword_only
@@ -621,7 +615,7 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         Args:
             inputCol (str): The column that will be used to derive lagged variables.
             n_months (int or list): Number of months that will be considered for lags.
-            normalize (bool): If True, normalize computed difference by its duration.
+            slope: If True, divide the computed difference by its duration in months.
 
         """
         return self._set(**kwargs)
@@ -645,13 +639,15 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         """
         input_col = self.getOrDefault("inputCol")
         n_months = self.getOrDefault("n_months")
+        compute_slope = self.getOrDefault("slope")
         if isinstance(n_months, int):
             n_months = [n_months]
         elif isinstance(n_months, list):
             pass
         else:
             raise ValueError("`n_months` should either be an int or a list of ints.")
-        norm_coeff = [1 / n if self.getOrDefault("normalize") else 1 for n in n_months]
+        var_coeff = [1 / n if compute_slope else 1 for n in n_months]
+        var_name = "slope" if compute_slope else "diff"
 
         # Compute lagged variables if needed
         missing_lags = [
@@ -664,8 +660,8 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         # Compute diffs
         for i, n in enumerate(n_months):
             dataset = dataset.withColumn(
-                f"{input_col}_diff{n}m",
-                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")) * norm_coeff[i],
+                f"{input_col}_{var_name}{n}m",
+                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")) * var_coeff[i],
             )
 
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
