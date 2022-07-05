@@ -156,6 +156,7 @@ dataset = sf_datalake.io.load_data(
 
 
 # Switches
+with_paydex = False
 if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(config["FEATURES"]):
     with_paydex = True
     logging.info(
