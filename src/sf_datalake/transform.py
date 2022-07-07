@@ -324,10 +324,10 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
         """
         assert "time_til_failure" in dataset.columns
 
-        fill = self.getOrDefault("fill")
-        value = self.getOrDefault("value")
+        fill: bool = self.getOrDefault("fill")
+        value: dict = self.getOrDefault("value")
         for feature in dataset.columns:
-            for var, val in value:
+            for var, val in value.items():
                 if not feature == val and re.match(f"{var}(_.*m)?$", feature):
                     value[feature] = val
                     break
