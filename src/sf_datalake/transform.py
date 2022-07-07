@@ -335,7 +335,13 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
                     "No corresponding fill value found for features %s",
                     set(value) - set(dataset.columns),
                 )
-            dataset = dataset.fillna(value)
+            dataset = dataset.fillna(
+                {
+                    feature: val
+                    for feature, val in value.items()
+                    if feature in dataset.columns
+                }
+            )
         return dataset.dropna()
 
 
