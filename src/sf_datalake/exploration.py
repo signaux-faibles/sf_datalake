@@ -213,7 +213,9 @@ def covid19_adapter_params(
             # Filters, time-scale and missing values handling
             sf_datalake.transform.WorkforceFilter(),
             sf_datalake.transform.HasPaydexFilter(),
-            sf_datalake.transform.MissingValuesHandler(config),
+            sf_datalake.transform.MissingValuesHandler(
+                fill=config["FILL_MISSING_VALUES"], value=config["DEFAULT_VALUES"]
+            ),
             sf_datalake.transform.TimeNormalizer(
                 inputCols=config["FEATURE_GROUPS"]["sante_financiere"],
                 start="date_deb_exercice",
