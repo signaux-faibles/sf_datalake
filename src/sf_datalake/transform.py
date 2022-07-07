@@ -2,6 +2,8 @@
 
 import datetime as dt
 import itertools
+import logging
+import re
 from typing import Iterable, List
 
 import numpy as np
@@ -261,17 +263,54 @@ class PaydexOneHotEncoder(Transformer):  # pylint: disable=too-few-public-method
 
 
 class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to handle missing values."""
+    """A transformer to handle missing values.
 
-    def __init__(self, config):
+    Uses pyspark.sql.DataFrame.fillna method to fill missing values if required.
+
+    Args:
+      fill: If True, fill missing values using `value` and `subset` args.
+        Defaults to True.
+      value: Value to replace null values with. If the value is a dict, then subset is
+        ignored and value must be a mapping from column name (string) to replacement
+        value. The replacement value must be an int, float, boolean, or string.
+
+    """
+
+    fill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "fill",
+        "Switch for filling null values.",
+    )
+    value = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "value",
+        "Value to replace null values with.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(fill=True, value=None)
+        self.setParams(**kwargs)
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        fill (bool): If True, fill missing values using `value` and `subset` args.
+          Defaults to True.
+        value (dict): Value to replace null values with. It must be a mapping from
+          column name (string) to replacement value. The replacement value must be an
+          int, float, boolean, or string.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Fills or drop entries containing missing values.
 
-        If `FILL_MISSING_VALUES` config field is true, missing data is filled with
-        predefined values from the `DEFAULT_VALUES` config field.
+        If `fill` patameter is true, missing data is filled with predefined values from
+        the `value` parameter.
 
         Args:
             dataset: DataFrame to transform containing missing values.
@@ -281,29 +320,22 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
               entries are dropped.
 
         """
-        assert {"FEATURES", "FILL_MISSING_VALUES", "DEFAULT_VALUES"} <= set(self.config)
         assert "time_til_failure" in dataset.columns
 
-        if self.config["FILL_MISSING_VALUES"]:
-            dataset = dataset.fillna(
-                {
-                    k: v
-                    for (k, v) in self.config["DEFAULT_VALUES"].items()
-                    if k in dataset.columns
-                }
-            )
-        else:
-            dataset = dataset.fillna(
-                {
-                    "time_til_failure": self.config["DEFAULT_VALUES"][
-                        "time_til_failure"
-                    ],
-                }
-            )
-            dataset = dataset.dropna(
-                subset=[x for x in self.config["FEATURES"] if x in dataset.columns]
-            )
-
+        fill = self.getOrDefault("fill")
+        value = self.getOrDefault("value")
+        for feature in dataset.columns:
+            for var, val in value:
+                if not feature == val and re.match(f"{var}(_.*m)?$", feature):
+                    value[feature] = val
+                    break
+                logging.warning(
+                    "No corresponding fill value found for feature %s", feature
+                )
+        if fill:
+            dataset = dataset.fillna(value)
+        dataset = dataset.fillna(value={"time_til_failure": value["time_til_failure"]})
+        dataset = dataset.dropna()
         return dataset
 
 

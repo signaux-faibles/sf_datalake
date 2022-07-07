@@ -164,7 +164,6 @@ if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(config["FEATURES"]):
         The dataset will be filtered to only keep samples with available paydex data."
     )
 
-
 ## Pre-processing pipeline
 
 filter_steps = [
@@ -190,7 +189,9 @@ if with_paydex:
         sf_datalake.transform.PaydexOneHotEncoder(config),
     )
 building_steps = [
-    sf_datalake.transform.MissingValuesHandler(config),
+    sf_datalake.transform.MissingValuesHandler(
+        fill=config["FILL_MISSING_VALUES"], value=config["DEFAULT_VALUES"]
+    ),
     sf_datalake.transform.TargetVariableColumnAdder(),
     sf_datalake.transform.DatasetColumnSelector(config),
 ]
@@ -198,8 +199,6 @@ preprocessing_pipeline = PipelineModel(
     stages=filter_steps + normalizing_steps + feature_engineering_steps + building_steps
 )
 dataset = preprocessing_pipeline.transform(dataset)
-
-assert dataset.dropna().count() == dataset.count()
 
 # Split the dataset into train, test, predict subsets.
 (
