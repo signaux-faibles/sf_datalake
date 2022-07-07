@@ -322,8 +322,6 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
               entries are dropped.
 
         """
-        assert "time_til_failure" in dataset.columns
-
         fill: bool = self.getOrDefault("fill")
         value: dict = self.getOrDefault("value")
         if fill:
