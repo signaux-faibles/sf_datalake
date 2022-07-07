@@ -189,11 +189,11 @@ if with_paydex:
         sf_datalake.transform.PaydexOneHotEncoder(config),
     )
 building_steps = [
+    sf_datalake.transform.TargetVariableColumnAdder(),
+    sf_datalake.transform.DatasetColumnSelector(config),
     sf_datalake.transform.MissingValuesHandler(
         fill=config["FILL_MISSING_VALUES"], value=config["DEFAULT_VALUES"]
     ),
-    sf_datalake.transform.TargetVariableColumnAdder(),
-    sf_datalake.transform.DatasetColumnSelector(config),
 ]
 preprocessing_pipeline = PipelineModel(
     stages=filter_steps + normalizing_steps + feature_engineering_steps + building_steps

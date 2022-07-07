@@ -170,7 +170,7 @@ class DeltaDebtPerWorkforceColumnAdder(
             dataset: DataFrame to transform. It should contain debt and workforce data.
 
         Returns:
-            Transformed DataFrame with an extra `delta_dette_par_effectif` column.
+            Transformed DataFrame with an extra debt/workforce column.
 
         """
         assert {
@@ -326,19 +326,19 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
 
         fill: bool = self.getOrDefault("fill")
         value: dict = self.getOrDefault("value")
-        for feature in dataset.columns:
-            for var, val in value.items():
-                if not feature == val and re.match(f"{var}(_.*m)?$", feature):
-                    value[feature] = val
-                    break
-                logging.warning(
-                    "No corresponding fill value found for feature %s", feature
-                )
         if fill:
+            for feature in dataset.columns:
+                for var, val in value.items():
+                    if not feature == var and re.match(f"{var}(_.*m)?$", feature):
+                        value[feature] = val
+                        break
+            if not set(dataset.columns) <= set(value):
+                logging.warning(
+                    "No corresponding fill value found for features %s",
+                    set(value) - set(dataset.columns),
+                )
             dataset = dataset.fillna(value)
-        dataset = dataset.fillna(value={"time_til_failure": value["time_til_failure"]})
-        dataset = dataset.dropna()
-        return dataset
+        return dataset.dropna()
 
 
 class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
@@ -716,6 +716,7 @@ class TargetVariableColumnAdder(Transformer):  # pylint: disable=too-few-public-
         """
         assert "time_til_failure" in dataset.columns
 
+        dataset = dataset.fillna(value={"time_til_failure": 9999})
         dataset = dataset.withColumn(
             "failure_within_18m", (dataset["time_til_failure"] <= 18).cast("integer")
         )  # Models except integer or floating labels.
