@@ -134,7 +134,7 @@ class DeltaDebtPerWorkforceColumnAdder(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to compute the change in social debt / nb of employees.
 
-    The change is normalized by the chosen duration (in months).
+    The diff over `n_months` is divided by the chosen duration (in months).
 
     Args:
         n_months: Number of months over which the diff is computed. Defaults to 3.
@@ -163,7 +163,7 @@ class DeltaDebtPerWorkforceColumnAdder(
         """
         return self._set(**kwargs)
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Computes the average change in social debt / nb of employees.
 
         Args:
@@ -195,7 +195,9 @@ class DeltaDebtPerWorkforceColumnAdder(
 class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to compute the social debt/contribution ratio."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
+    def _transform(
+        self, dataset: pyspark.sql.DataFrame
+    ) -> pyspark.sql.DataFrame:  # pylint: disable=no-self-use
         """Computes the social debt/contribution ratio.
 
         Args:
@@ -226,7 +228,7 @@ class PaydexOneHotEncoder(Transformer):  # pylint: disable=too-few-public-method
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Computes the quantile bins of payment delay (in days).
 
         Args:
@@ -346,7 +348,7 @@ class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Aggregate data at a SIREN level by sum or average.
 
         Args:
@@ -727,7 +729,7 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=too-few-public-meth
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Select the columns of the dataset used in the model.
 
         Args:
@@ -754,7 +756,9 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=too-few-public-meth
 class PrivateCompanyFilter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer that filters a dataset according to its public/private nature."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
+    def _transform(
+        self, dataset: pyspark.sql.DataFrame
+    ) -> pyspark.sql.DataFrame:  # pylint: disable=no-self-use
         """Filters out public institutions from a dataset.
 
         Only keeps private companies using `code_naf` variable.
@@ -774,7 +778,9 @@ class PrivateCompanyFilter(Transformer):  # pylint: disable=too-few-public-metho
 class HasPaydexFilter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer that filters according to paydex data availability."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
+    def _transform(
+        self, dataset: pyspark.sql.DataFrame
+    ) -> pyspark.sql.DataFrame:  # pylint: disable=no-self-use
         """Filters out samples that do not have paydex data.
 
         Args:
@@ -793,7 +799,9 @@ class HasPaydexFilter(Transformer):  # pylint: disable=too-few-public-methods
 class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to filter the dataset according to workforce size."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
+    def _transform(
+        self, dataset: pyspark.sql.DataFrame
+    ) -> pyspark.sql.DataFrame:  # pylint: disable=no-self-use
         """Filters out small companies
 
         Only keeps companies with more than 10 employees.
@@ -813,7 +821,9 @@ class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
 class ProbabilityFormatter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to format the probability column in output of a model."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
+    def _transform(
+        self, dataset: pyspark.sql.DataFrame
+    ) -> pyspark.sql.DataFrame:  # pylint: disable=no-self-use
         """Extract the positive probability and cast it as float.
 
         Args:
@@ -834,7 +844,7 @@ class Covid19Adapter(Transformer):  # pylint: disable=too-few-public-methods
         super().__init__()
         self.config = config
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Adapts post-pandemic data using linear fits of features quantiles.
 
         Adapt post-pandemic event data through linear fits of the pre-pandemic quantiles
