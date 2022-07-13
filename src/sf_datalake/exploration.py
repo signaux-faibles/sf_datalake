@@ -212,17 +212,19 @@ def covid19_adapter_params(
         stages=[
             # Filters, time-scale and missing values handling
             sf_datalake.transform.WorkforceFilter(),
-            sf_datalake.transform.HasPaydexFilter(config),
-            sf_datalake.transform.MissingValuesHandler(config),
+            sf_datalake.transform.HasPaydexFilter(),
+            sf_datalake.transform.MissingValuesHandler(
+                fill=config["FILL_MISSING_VALUES"], value=config["DEFAULT_VALUES"]
+            ),
             sf_datalake.transform.TimeNormalizer(
                 inputCols=config["FEATURE_GROUPS"]["sante_financiere"],
                 start="date_deb_exercice",
                 end="date_fin_exercice",
             ),
             # Feature engineering
-            sf_datalake.transform.PaydexColumnsAdder(config),
-            sf_datalake.transform.AvgDeltaDebtPerSizeColumnAdder(config),
-            sf_datalake.transform.DebtRatioColumnAdder(config),
+            sf_datalake.transform.PaydexOneHotEncoder(config),
+            sf_datalake.transform.DeltaDebtPerWorkforceColumnAdder(),
+            sf_datalake.transform.DebtRatioColumnAdder(),
             # Selection of features and target variable
             sf_datalake.transform.TargetVariableColumnAdder(),
             sf_datalake.transform.DatasetColumnSelector(config),

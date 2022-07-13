@@ -39,9 +39,7 @@ def train_test_predict_split(
     not_failing_subset = df.filter(~will_fail_mask).sample(
         fraction=n_not_failing / (n_samples - n_failing), seed=config["SEED"]
     )
-    oversampled_subset = failing_subset.union(not_failing_subset).persist(
-        pyspark.StorageLevel.MEMORY_AND_DISK
-    )
+    oversampled_subset = failing_subset.union(not_failing_subset)
 
     # Split datasets according to dates and train/test split ratio.
     siren_train, siren_test = (
@@ -59,16 +57,11 @@ def train_test_predict_split(
         )
         .filter(oversampled_subset["periode"] <= config["TRAIN_DATES"][1])
         .join(siren_train, how="inner", on="siren")
-    ).persist(pyspark.StorageLevel.MEMORY_AND_DISK)
-
+    )
     test = (
         df.filter(df["periode"] >= config["TEST_DATES"][0])
         .filter(df["periode"] <= config["TEST_DATES"][1])
         .join(siren_test, how="inner", on="siren")
-    ).persist(pyspark.StorageLevel.MEMORY_AND_DISK)
-
-    prediction = df.filter(df["periode"] == config["PREDICTION_DATE"]).persist(
-        pyspark.StorageLevel.MEMORY_AND_DISK
     )
-
+    prediction = df.filter(df["periode"] == config["PREDICTION_DATE"])
     return train, test, prediction
