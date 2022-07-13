@@ -324,7 +324,7 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
         if fill:
             for feature in dataset.columns:
                 for var, val in value.items():
-                    if not feature == var and re.match(f"{var}(_.*m)?$", feature):
+                    if re.match(rf"{var}_\d*m$", feature):
                         value[feature] = val
                         break
             if not set(dataset.columns) <= set(value):
