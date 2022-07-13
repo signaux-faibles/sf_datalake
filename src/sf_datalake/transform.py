@@ -232,13 +232,13 @@ class PaydexOneHotEncoder(Transformer):  # pylint: disable=too-few-public-method
 
         Args:
             dataset: DataFrame to transform. It should contain "paydex_nb_jours" and
-              "paydex_nb_jours_lag12" columns.
+              "paydex_nb_jours_diff12m" columns.
 
         Returns:
              Transformed DataFrame with extra `paydex_bins` columns.
 
         """
-        assert {"paydex_nb_jours", "paydex_nb_jours_lag12m"} <= set(dataset.columns)
+        assert {"paydex_nb_jours", "paydex_nb_jours_diff12m"} <= set(dataset.columns)
 
         ## Binned paydex
         if "paydex_bin" in self.config["FEATURES"]:
@@ -794,7 +794,7 @@ class HasPaydexFilter(Transformer):  # pylint: disable=too-few-public-methods
         """
         return dataset.filter(
             F.col("paydex_nb_jours").isNotNull()
-            & F.col("paydex_nb_jours_lag12").isNotNull()
+            & F.col("paydex_nb_jours_diff12m").isNotNull()
         )
 
 
