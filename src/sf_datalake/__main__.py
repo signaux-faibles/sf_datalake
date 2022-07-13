@@ -198,7 +198,7 @@ building_steps = [
 preprocessing_pipeline = PipelineModel(
     stages=filter_steps + normalizing_steps + feature_engineering_steps + building_steps
 )
-dataset = preprocessing_pipeline.transform(dataset)
+dataset = preprocessing_pipeline.transform(dataset).cache()
 
 # Split the dataset into train, test, predict subsets.
 (
