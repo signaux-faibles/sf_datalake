@@ -4,36 +4,80 @@ import datetime as dt
 import itertools
 import logging
 import re
-from typing import Iterable, List
+from typing import List
 
 import numpy as np
 import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
+import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
-from pyspark.ml.param.shared import HasInputCol, HasInputCols, Param, Params
+from pyspark.ml.param.shared import (
+    HasInputCol,
+    HasInputCols,
+    HasOutputCol,
+    Param,
+    Params,
+)
 from pyspark.sql import Window
-from pyspark.sql.types import FloatType, StringType
 
 
-def parse_date(
-    df: pyspark.sql.DataFrame, colnames: Iterable[str]
-) -> pyspark.sql.DataFrame:
-    """Parses multiple columns of a pyspark.sql.DataFrame as date.
+class DateParser(Transformer, HasInputCol, HasOutputCol):
+    """A transformer that parses some string timestamp / date info to pyspark date type.
+
+    The data will be parsed from the `inputCol` into the `outputCol`. Both can be set at
+    instanciation time or using either `setInputCol`, `setOutputCol` or `setParams`. The
+    initial string format should be specified using a datetime pattern.
 
     Args:
-        df: A DataFrame with dates represented as "yyyyMMdd" strings or integers.
-        colnames : Names of the columns to parse.
-
-    Returns:
-        A new DataFrame with date columns as pyspark date types.
+        inputCol: The column containing data to be parsed.
+        outputCol: The output column to be created.
+        format: The input column datetime format. Defaults to "yyyyMMdd".
 
     """
-    for name in colnames:
-        df = df.withColumn(name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd"))
-    return df
+
+    format = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "format",
+        "Expected datetime format inside inputCol.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(format="yyyyMMdd")
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            inputCol: The column containing data to be parsed.
+            outputCol: The output column to be created.
+            format: The input column datetime format. Defaults to "yyyyMMdd".
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Extract date info from `inputCol` into `outputCol`.
+
+        Args:
+            dataset: A DataFrame with dates / datetime represented as strings.
+
+        Returns:
+            A new DataFrame with the set `outputCol` holding pyspark date types.
+
+        """
+        return dataset.withColumn(
+            self.getOrDefault("outputCol"),
+            F.to_date(
+                F.col(self.getOrDefault("inputCol")), self.getOrDefault("format")
+            ),
+        )
 
 
 def extract_siren_from_siret(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -869,7 +913,7 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=too-few-public-metho
             Transformed DataFrame with casted probability data.
 
         """
-        transform_udf = F.udf(lambda v: float(v[1]), FloatType())
+        transform_udf = F.udf(lambda v: float(v[1]), T.FloatType())
         return dataset.withColumn("probability", transform_udf("probability"))
 
 

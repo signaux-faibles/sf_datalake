@@ -20,6 +20,7 @@ from os import path
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
+from pyspark.ml import PipelineModel
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -56,7 +57,7 @@ def process_payment(
 
     df = df.withColumn("mvt_djc_int", F.unix_timestamp(F.col("mvt_djc")))
     gb = df.orderBy("frp", "art_cleart", "mvt_djc").groupBy(
-        ["frp", "art_cleart", "mvt_deff"]
+        ["frp", "art_cleart", "date_effective"]
     )
     df_agg = (
         gb.agg(F.min("mvt_djc_int"), F.sum("mvt_mcrd"))
@@ -94,16 +95,42 @@ datasets = sf_datalake.io.load_data(data_paths, file_format="orc")
 for name, ds in datasets.items():
     datasets[name] = ds.toDF(*(col.lower() for col in ds.columns))
 
-    #######
+#######
 # RAR #
 #######
 
 # Parse dates, create "frp" join key
-
-t_art = sf_datalake.transform.parse_date(
-    datasets["t_art"], ["art_disc", "art_didr", "art_datedcf", "art_dori"]
+art_date_parsers = PipelineModel(
+    [
+        sf_datalake.transform.DateParser(
+            inputCol="art_disc", output_col="date_inscription_rar", format="yyyyMMdd"
+        ),
+        sf_datalake.transform.DateParser(
+            inputCol="art_didr", output_col="date_exigibilite", format="yyyyMMdd"
+        ),
+        sf_datalake.transform.DateParser(
+            inputCol="art_datedcf",
+            output_col="date_notification_redressement",
+            format="yyyyMMdd",
+        ),
+        sf_datalake.transform.DateParser(
+            inputCol="art_dori", output_col="date_origine", format="yyyyMMdd"
+        ),
+    ]
 )
-t_mvt = sf_datalake.transform.parse_date(datasets["t_mvt"], ["mvt_djc", "mvt_deff"])
+mvt_date_parsers = PipelineModel(
+    [
+        sf_datalake.transform.DateParser(
+            inputCol="mvt_deff", output_col="date_effective", format="yyyyMMdd"
+        ),
+        sf_datalake.transform.DateParser(
+            inputCol="mvt_djc", output_col="date_journee_comptable", format="yyyyMMdd"
+        ),
+    ]
+)
+
+t_art = art_date_parsers.transform(datasets["t_art"])
+t_mvt = mvt_date_parsers.transform(datasets["t_mvt"])
 
 corresp_siren_frp2 = (
     datasets["t_etablissement_annee"]
@@ -153,13 +180,13 @@ x_creances = creances.select(
         "art_cleart",  # Clé de l'article
         "art_naart",  # Nature de l'article
         "art_napmc",  # Nature mesure conservatoire
-        "art_dori",  # Date d'origine
-        "art_didr",  # Date d'exigibilité de l'impot
-        "art_datedcf",  # Date prise en compte de la notification de redressement (cf)
-        "art_disc",  # Date d'inscription en RAR
+        "date_origine",
+        "date_exigibilite",
+        "date_notification_redressement",
+        "date_inscription_rar",
         "art_icirrel",  # Indicateur de circuit de relance (souvent pas rempli)
         "mnt_creance",  # Montant de la créance,
-        "mvt_djc",  # Date journée compatble
+        "date_journee_comptable",
         "mnt_paiement_cum",  # Montant des paiements à la date de la journée compatable
         "mnt_paiement_cum_autre",  # Montant des paiements dit "autres" à la djc.
     ]
