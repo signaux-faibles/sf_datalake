@@ -65,12 +65,11 @@ datasets = load_data(
 
 
 # Prepare datasets
-df_dgfip_yearly = sf_datalake.transform.stringify_and_pad_siren(
-    datasets["dgfip_yearly"]
-)
-df_dgfip_tva = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip_tva"])
-df_dgfip_rar = sf_datalake.transform.stringify_and_pad_siren(datasets["dgfip_rar"])
-df_sf = sf_datalake.transform.stringify_and_pad_siren(datasets["sf"]).withColumn(
+siren_normalizer = sf_datalake.transform.SirenNormalizer()
+df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
+df_dgfip_tva = siren_normalizer.transform(datasets["dgfip_tva"])
+df_dgfip_rar = siren_normalizer.transform(datasets["dgfip_rar"])
+df_sf = siren_normalizer.transform(datasets["sf"]).withColumn(
     "periode", F.to_date(F.date_trunc("month", F.col("periode")))
 )
 df_dgfip_yearly = df_dgfip_yearly.withColumn(

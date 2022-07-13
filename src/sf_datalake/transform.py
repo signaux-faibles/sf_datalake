@@ -36,21 +36,6 @@ def parse_date(
     return df
 
 
-def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Normalizes the input DataFrame "siren" entries.
-
-    Args:
-        df: A DataFrame with a "siren" column, whose type can be cast to string.
-
-    Returns:
-        A DataFrame with zeros-left-padded SIREN data, as string type.
-
-    """
-    assert "siren" in df.columns, "Input DataFrame doesn't have a 'siren' column."
-    df = df.withColumn("siren", F.lpad(df["siren"].cast("string"), 9, "0"))
-    return df
-
-
 def extract_siren_from_siret(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
     """Infer the SIREN number from a SIRET column.
 
@@ -340,6 +325,55 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
                 }
             )
         return dataset.dropna()
+
+
+class SirenNormalizer(
+    Transformer, HasInputCol
+):  # pylint: disable=too-few-public-methods
+    """A transformer that normalizes a DataFrame's "siren" column.
+
+    It does so by:
+    - Casting the SIREN column values to strings.
+    - Left-padding the SIREN with zeroes.
+
+    Args:
+        inputCol: The column containing SIRENs to normalize. Default to "siren".
+
+    """
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCol="siren")
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this SirenNormalizer.
+
+        Args:
+            inputCol: The column containing SIRENs to normalize. Default to "siren".
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Normalize SIREN data.
+
+        Args:
+            dataset: A DataFrame with a "siren" column, whose type can be cast to
+              string.
+
+        Returns:
+            A DataFrame with zeros-left-padded SIREN data, as string type.
+
+        """
+        assert (
+            "siren" in dataset.columns
+        ), "Input DataFrame doesn't have a 'siren' column."
+        return dataset.withColumn(
+            "siren", F.lpad(dataset["siren"].cast("string"), 9, "0")
+        )
 
 
 class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
