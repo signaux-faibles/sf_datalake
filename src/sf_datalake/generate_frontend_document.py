@@ -100,6 +100,11 @@ path_group.add_argument(
     required=True,
 )
 path_group.add_argument(
+    "--parameters",
+    help="Path to the parameters configuration file.",
+    required=True,
+)
+path_group.add_argument(
     "--concerning_data",
     required=True,
     help="""Path to a csv file containing data associated with the most 'concerning'
@@ -128,6 +133,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 pred_vars = sf_datalake.io.load_variables(args.variables)
+parameters = sf_datalake.io.load_parameters(args.parameters)
 
 micro_macro = {
     micro: macro
@@ -275,17 +281,10 @@ prediction_set["alert"] = pd.Categorical.from_codes(
 )
 
 ## Score explanation per categories
+n_concerning_micro = parameters["N_CONCERNING_MICRO"]
 concerning_micro_threshold = args.concerning_threshold
-concerning_values_columns = [
-    "1st_concerning_val",
-    "2nd_concerning_val",
-    "3rd_concerning_val",
-]
-concerning_feats_columns = [
-    "1st_concerning_feat",
-    "2nd_concerning_feat",
-    "3rd_concerning_feat",
-]
+concerning_values_columns = [f"concerning_val_{n}" for n in range(n_concerning_micro)]
+concerning_feats_columns = [f"concerning_feat_{n}" for n in range(n_concerning_micro)]
 if concerning_micro_threshold is not None:
     mask = concerning_data[concerning_values_columns] > concerning_micro_threshold
     concerning_micro_variables = concerning_data[concerning_feats_columns].where(

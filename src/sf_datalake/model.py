@@ -130,6 +130,14 @@ def explain_logistic_regression(
         for feature in features
     ]
 
+    @F.udf(returnType=StringType())
+    def get_max_value_colname(row, max_col):
+        """Extract the column name where the nth highest value is found."""
+        for i, name in enumerate(meso_features):
+            if row[i] == max_col:
+                return name
+        raise NameError(f"Could not find columns associated to {max_col}")
+
     # Get individual features contribution
     ep = pyspark.ml.feature.ElementwiseProduct()
     ep.setScalingVec(model.coefficients)
@@ -158,51 +166,23 @@ def explain_logistic_regression(
 
     # 'Micro' scores
     micro_scores_columns = [
-        "1st_concerning_val",
-        "2nd_concerning_val",
-        "3rd_concerning_val",
-        "1st_concerning_feat",
-        "2nd_concerning_feat",
-        "3rd_concerning_feat",
-    ]
-    explanation_df = (
-        explanation_df.withColumn(
-            "1st_concerning_val",
-            F.sort_array(F.array([F.col(x) for x in meso_features]), asc=False)[0],
-        )
-        .withColumn(
-            "2nd_concerning_val",
-            F.sort_array(F.array([F.col(x) for x in meso_features]), asc=False)[1],
-        )
-        .withColumn(
-            "3rd_concerning_val",
-            F.sort_array(F.array([F.col(x) for x in meso_features]), asc=False)[2],
-        )
-    )
+        f"concerning_val_{n}" for n in range(config["N_CONCERNING_MICRO"])
+    ] + [f"concerning_feat_{n}" for n in range(config["N_CONCERNING_MICRO"])]
 
-    @F.udf(returnType=StringType())
-    def get_max_value_colname(row, max_col):
-        """Extract the column name where the nth highest value is found."""
-        for i, name in enumerate(meso_features):
-            if row[i] == max_col:
-                return name
-        raise NameError(f"Could not find columns associated to {max_col}")
+    for n_micro in range(config["N_CONCERNING_MICRO"]):
+        explanation_df = explanation_df.withColumn(
+            f"concerning_val_{n_micro}",
+            F.sort_array(F.array([F.col(x) for x in meso_features]), asc=False)[
+                n_micro
+            ],
+        )
+    for n_micro in range(config["N_CONCERNING_MICRO"]):
+        explanation_df = explanation_df.withColumn(
+            f"concerning_feat_{n_micro}",
+            get_max_value_colname(F.array(meso_features), f"concerning_val_{n_micro}"),
+        )
 
-    explanation_df = (
-        explanation_df.withColumn(
-            "1st_concerning_feat",
-            get_max_value_colname(F.array(meso_features), "1st_concerning_val"),
-        )
-        .withColumn(
-            "2nd_concerning_feat",
-            get_max_value_colname(F.array(meso_features), "2nd_concerning_val"),
-        )
-        .withColumn(
-            "3rd_concerning_feat",
-            get_max_value_colname(F.array(meso_features), "3rd_concerning_val"),
-        )
-    )
-
+    # Columns selection
     micro_scores_df = explanation_df.select(["siren"] + micro_scores_columns)
     macro_scores_df = explanation_df.select(["siren"] + macro_scores_columns)
     return macro_scores_df, micro_scores_df
