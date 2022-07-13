@@ -207,7 +207,6 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-metho
             Transformed DataFrame with an extra `ratio_dette` column.
 
         """
-
         assert {
             "montant_part_ouvriere",
             "montant_part_patronale",
@@ -239,7 +238,6 @@ class PaydexOneHotEncoder(Transformer):  # pylint: disable=too-few-public-method
              Transformed DataFrame with extra `paydex_bins` columns.
 
         """
-
         assert {"paydex_nb_jours", "paydex_nb_jours_lag12m"} <= set(dataset.columns)
 
         ## Binned paydex
@@ -270,11 +268,10 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
     Uses pyspark.sql.DataFrame.fillna method to fill missing values if required.
 
     Args:
-      fill: If True, fill missing values using `value` and `subset` args.
-        Defaults to True.
-      value: Value to replace null values with. If the value is a dict, then subset is
-        ignored and value must be a mapping from column name (string) to replacement
-        value. The replacement value must be an int, float, boolean, or string.
+      fill: If True, fill missing values using the `value` arg. Defaults to True.
+      value: Value to replace null values with. It must be a mapping from column name
+        (string) to replacement value. The replacement value must be an int, float,
+        boolean, or string.
 
     """
 
@@ -299,8 +296,8 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
     def setParams(self, **kwargs):
         """Set parameters for this transformer.
 
-        fill (bool): If True, fill missing values using `value` and `subset` args.
-          Defaults to True.
+        fill (bool): If True, fill missing values using the `value` arg. Defaults to
+          True.
         value (dict): Value to replace null values with. It must be a mapping from
           column name (string) to replacement value. The replacement value must be an
           int, float, boolean, or string.
