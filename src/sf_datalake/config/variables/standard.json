@@ -5,7 +5,6 @@
         "siren"
     ],
     "DEFAULT_VALUES": {
-        "time_til_failure": 9999,
         "cotisation": 0.0,
         "montant_part_ouvriere": 0.0,
         "montant_part_patronale": 0.0,
