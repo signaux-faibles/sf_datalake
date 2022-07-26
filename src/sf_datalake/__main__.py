@@ -195,7 +195,11 @@ building_steps = [
         n_months=config["TARGET"]["n_months"],
     ),
     sf_datalake.transform.ColumnSelector(
-        inputCols=[config["IDENTIFIERS"] + list(config["FEATURES"]) + config["TARGET"]]
+        inputCols=[
+            config["IDENTIFIERS"]
+            + list(config["FEATURES"])
+            + config["TARGET"]["outputCol"]
+        ]
     ),
     sf_datalake.transform.MissingValuesHandler(
         fill=config["FILL_MISSING_VALUES"], value=config["DEFAULT_VALUES"]
