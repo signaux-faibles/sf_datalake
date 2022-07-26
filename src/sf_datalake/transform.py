@@ -237,45 +237,66 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-metho
 
 
 class PaydexOneHotEncoder(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to compute one-hot encoded features associated with Paydex data."""
+    """A transformer to compute one-hot encoded features associated with Paydex data.
 
-    def __init__(self, config):
+    Args:
+        inputCol (str): The variable to be one-hot encoded.
+        bins (list): A list of bins, with adjacent and increasing number of days values,
+          e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will be cast to
+          floats.
+        outputCol (str): The one-hot encoded column name.
+
+    """
+
+    bins = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "bins",
+        "Bins for paydex number of days one hot encoding.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(inputCol="paydex_nb_jours", outputCol="paydex_bin", bins=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            inputCol (str): The variable to be one-hot encoded.
+            bins (list): A list of bins, with adjacent and increasing number of days
+              values, e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will
+              be cast to floats.
+            outputCol (str): The one-hot encoded column name.
+
+        """
+        return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Computes the quantile bins of payment delay (in days).
 
         Args:
-            dataset: DataFrame to transform. It should contain "paydex_nb_jours" and
-              "paydex_nb_jours_diff12m" columns.
+            dataset: DataFrame to transform.
 
         Returns:
              Transformed DataFrame with extra `paydex_bins` columns.
 
         """
-        assert {"paydex_nb_jours", "paydex_nb_jours_diff12m"} <= set(dataset.columns)
 
         ## Binned paydex
-        if "paydex_bin" in self.config["FEATURES"]:
-            days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
-            days_splits = np.unique(
-                np.array([float(v) for v in itertools.chain(*days_bins)])
-            )
-            bucketizer = pyspark.ml.feature.Bucketizer(
-                splits=days_splits,
-                handleInvalid="error",
-                inputCol="paydex_nb_jours",
-                outputCol="paydex_bin",
-            )
-            dataset = bucketizer.transform(dataset)
-
-            ## Add corresponding 'meso' column names to the configuration.
-            self.config["MESO_GROUPS"]["paydex_bin"] = [
-                f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
-            ]
-
-        return dataset
+        days_bins = self.getOrDefault("bins")
+        days_splits = np.unique(
+            np.array([float(v) for v in itertools.chain(*days_bins)])
+        )
+        bucketizer = pyspark.ml.feature.Bucketizer(
+            splits=days_splits,
+            handleInvalid="error",
+            inputCol=self.getOrDefault("inputCol"),
+            outputCol=self.getOrDefault("outputCol"),
+        )
+        return bucketizer.transform(dataset)
 
 
 class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-methods

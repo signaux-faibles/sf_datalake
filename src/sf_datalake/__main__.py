@@ -186,8 +186,17 @@ feature_engineering_steps = [
 ]
 if with_paydex:
     feature_engineering_steps.append(
-        sf_datalake.transform.PaydexOneHotEncoder(config),
+        sf_datalake.transform.PaydexOneHotEncoder(
+            bins=config["ONE_HOT_CATEGORIES"]["paydex_bin"]
+        ),
     )
+    ## Add corresponding 'meso' column names to the configuration for explanation step.
+    config["MESO_GROUPS"]["paydex_bin"] = [
+        f"paydex_bin_ohcat{i}"
+        for i, _ in enumerate(config["ONE_HOT_CATEGORIES"]["paydex_bin"])
+    ]
+
+
 building_steps = [
     sf_datalake.transform.TargetVariable(
         inputCol=config["TARGET"]["inputCol"],
