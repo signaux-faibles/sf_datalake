@@ -837,7 +837,7 @@ class TargetVariable(
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, outputCol=False, n_months=None)
+        self._setDefault(inputCol=None, outputCol=None, n_months=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -864,13 +864,12 @@ class TargetVariable(
 
         """
         dataset = dataset.fillna(value={self.getOrDefault("inputCol"): math.inf})
-        dataset = dataset.withColumn(
+        return dataset.withColumn(
             self.getOrDefault("outputCol"),
             (self.getOrDefault("inputCol") <= self.getOrDefault("n_months")).cast(
                 "int"
             ),
         )  # Pyspark models except integer or floating labels.
-        return dataset
 
 
 class ColumnSelector(
