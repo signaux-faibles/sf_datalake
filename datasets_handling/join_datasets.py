@@ -65,7 +65,7 @@ datasets = load_data(
 
 
 # Prepare datasets
-siren_normalizer = sf_datalake.transform.SirenNormalizer()
+siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
 df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
 df_dgfip_tva = siren_normalizer.transform(datasets["dgfip_tva"])
 df_dgfip_rar = siren_normalizer.transform(datasets["dgfip_rar"])

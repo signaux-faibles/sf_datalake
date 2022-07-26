@@ -80,22 +80,6 @@ class DateParser(Transformer, HasInputCol, HasOutputCol):
         )
 
 
-def extract_siren_from_siret(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Infer the SIREN number from a SIRET column.
-
-    Args:
-        df: A DataFrame with a "siret" column, whose type can be cast to string.
-
-    Returns:
-        A DataFrame with zeros-left-padded SIREN data, as string type.
-
-    """
-    assert "siret" in df.columns, "Input DataFrame doesn't have a 'siret' column."
-    return df.withColumn(
-        "siret", F.lpad(F.col("siret").cast("string"), 14, "0")
-    ).withColumn("siren", F.col("siret").substr(1, 9))
-
-
 def get_transformer(name: str) -> Transformer:
     """Gets a pre-configured Transformer object by specifying its name.
 
@@ -371,17 +355,17 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
         return dataset.dropna()
 
 
-class SirenNormalizer(
+class IdentifierNormalizer(
     Transformer, HasInputCol
 ):  # pylint: disable=too-few-public-methods
-    """A transformer that normalizes a DataFrame's "siren" column.
+    """A transformer that normalizes a DataFrame's SIREN / SIRET data.
 
     It does so by:
-    - Casting the SIREN column values to strings.
-    - Left-padding the SIREN with zeroes.
+    - Casting the identifier column values to strings.
+    - Left-padding the identifier with zeroes.
 
     Args:
-        inputCol: The column containing SIRENs to normalize. Default to "siren".
+        inputCol: The column containing identifier to normalize. Default to "siren".
 
     """
 
@@ -393,7 +377,7 @@ class SirenNormalizer(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this SirenNormalizer.
+        """Set parameters for this IdentifierNormalizer.
 
         Args:
             inputCol: The column containing SIRENs to normalize. Default to "siren".
@@ -412,11 +396,67 @@ class SirenNormalizer(
             A DataFrame with zeros-left-padded SIREN data, as string type.
 
         """
+        identifier = self.getOrDefault("inputCol")
         assert (
-            "siren" in dataset.columns
-        ), "Input DataFrame doesn't have a 'siren' column."
+            identifier in dataset.columns
+        ), f"Input DataFrame doesn't have a {identifier} column."
         return dataset.withColumn(
-            "siren", F.lpad(dataset["siren"].cast("string"), 9, "0")
+            identifier, F.lpad(dataset[identifier].cast("string"), 9, "0")
+        )
+
+
+class SiretToSiren(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
+    """A transformer that generates a SIREN column from SIRET information.
+
+    It does so by:
+    - Casting the SIRET column values to strings.
+    - Left-padding the SIRET with zeroes.
+    - Extracting the first 9 digits.
+
+    Args:
+        inputCol: The column containing SIRET values. Default to "siret".
+        outputCol: The column containing SIREN values. Default to "siren".
+
+    """
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCol="siret", outputCol="siren")
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this SiretToSiren.
+
+        Args:
+            inputCol: The column containing SIRET values. Default to "siret".
+            outputCol: The column containing SIREN values. Default to "siren".
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Extract SIREN data.
+
+        Args:
+            dataset: A DataFrame with a "siret" column, whose type can be cast to
+              string.
+
+        Returns:
+            A DataFrame with zeros-left-padded SIREN data, as string type.
+
+        """
+        siret_col = self.getOrDefault("inputCol")
+        siren_col = self.getOrDefault("outputCol")
+
+        assert (
+            siret_col in dataset.columns
+        ), f"Input DataFrame doesn't have a {siret_col} column."
+        return dataset.withColumn(
+            siren_col, F.lpad(F.col(siret_col).cast("string"), 14, "0").substr(1, 9)
         )
 
 
