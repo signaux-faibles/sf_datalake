@@ -189,8 +189,14 @@ if with_paydex:
         sf_datalake.transform.PaydexOneHotEncoder(config),
     )
 building_steps = [
-    sf_datalake.transform.TargetVariableColumnAdder(),
-    sf_datalake.transform.DatasetColumnSelector(config),
+    sf_datalake.transform.TargetVariable(
+        inputCol=config["TARGET"]["inputCol"],
+        outputCol=config["TARGET"]["outputCol"],
+        n_months=config["TARGET"]["n_months"],
+    ),
+    sf_datalake.transform.ColumnSelector(
+        inputCols=[config["IDENTIFIERS"] + list(config["FEATURES"]) + config["TARGET"]]
+    ),
     sf_datalake.transform.MissingValuesHandler(
         fill=config["FILL_MISSING_VALUES"], value=config["DEFAULT_VALUES"]
     ),

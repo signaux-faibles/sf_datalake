@@ -3,6 +3,7 @@
 import datetime as dt
 import itertools
 import logging
+import math
 import re
 from typing import List
 
@@ -24,7 +25,9 @@ from pyspark.ml.param.shared import (
 from pyspark.sql import Window
 
 
-class DateParser(Transformer, HasInputCol, HasOutputCol):
+class DateParser(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
     """A transformer that parses some string timestamp / date info to pyspark date type.
 
     The data will be parsed from the `inputCol` into the `outputCol`. Both can be set at
@@ -820,37 +823,79 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
 
 
-class TargetVariableColumnAdder(Transformer):  # pylint: disable=too-few-public-methods
+class TargetVariable(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
     """A transformer to compute the company failure target variable."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
-        """Create the learning target variable `failure_within_18m`.
+    n_months = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_months",
+        "Number of months for failure forecast.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCol=None, outputCol=False, n_months=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this LagOperator transformer.
 
         Args:
-            dataset: DataFrame to transform containing `time_til_failure` variable.
-
-        Returns:
-            Transformed DataFrame with an extra `failure_within_18m` column.
+            inputCol (str): The column that will be used to derive target.
+            outputCol (str): The new target variable column.
+            n_months (int): Number of months that will be considered as target
+              threshold.
 
         """
-        assert "time_til_failure" in dataset.columns
+        return self._set(**kwargs)
 
-        dataset = dataset.fillna(value={"time_til_failure": 9999})
+    def _transform(self, dataset: pyspark.sql.DataFrame):
+        """Create the learning target variable.
+
+        Args:
+            dataset: DataFrame to transform.
+
+        Returns:
+            Transformed DataFrame with an extra target column.
+
+        """
+        dataset = dataset.fillna(value={self.getOrDefault("inputCol"): math.inf})
         dataset = dataset.withColumn(
-            "failure_within_18m", (dataset["time_til_failure"] <= 18).cast("integer")
-        )  # Models except integer or floating labels.
+            self.getOrDefault("outputCol"),
+            (self.getOrDefault("inputCol") <= self.getOrDefault("n_months")).cast(
+                "int"
+            ),
+        )  # Pyspark models except integer or floating labels.
         return dataset
 
 
-class DatasetColumnSelector(Transformer):  # pylint: disable=too-few-public-methods
+class ColumnSelector(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
     """A transformer to select the columns of the dataset used in the model."""
 
-    def __init__(self, config):
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(inputCols=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inputCols: List[str]):
+        """Set parameters for this ColumnSelector transformer.
+
+        Args:
+            inputCols (list): The columns that will be used in the ML process.
+
+        """
+        return self._set(inputCols=inputCols)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Select the columns of the dataset used in the model.
+        """Select the columns of the dataset used in ML process.
 
         Args:
             dataset: DataFrame to select columns from.
@@ -859,17 +904,7 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=too-few-public-meth
             Transformed DataFrame.
 
         """
-        assert {"IDENTIFIERS", "FEATURES", "TARGET"} <= set(self.config)
-
-        dataset = dataset.select(
-            *(
-                set(
-                    self.config["IDENTIFIERS"]
-                    + list(self.config["FEATURES"])
-                    + self.config["TARGET"]
-                )
-            )
-        )
+        dataset = dataset.select(self.getOrDefault("inputCols"))
         return dataset
 
 
