@@ -196,7 +196,6 @@ if with_paydex:
         for i, _ in enumerate(config["ONE_HOT_CATEGORIES"]["paydex_bin"])
     ]
 
-
 building_steps = [
     sf_datalake.transform.TargetVariable(
         inputCol=config["TARGET"]["inputCol"],
@@ -206,8 +205,8 @@ building_steps = [
     sf_datalake.transform.ColumnSelector(
         inputCols=[
             config["IDENTIFIERS"]
-            + list(config["FEATURES"])
-            + config["TARGET"]["outputCol"]
+            + list(config["FEATURES"])  # features dict keys to list
+            + [config["TARGET"]["outputCol"]]  # contains a single string
         ]
     ),
     sf_datalake.transform.MissingValuesHandler(
