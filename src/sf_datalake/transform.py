@@ -887,9 +887,9 @@ class TargetVariable(
         dataset = dataset.fillna(value={self.getOrDefault("inputCol"): math.inf})
         return dataset.withColumn(
             self.getOrDefault("outputCol"),
-            (self.getOrDefault("inputCol") <= self.getOrDefault("n_months")).cast(
-                "int"
-            ),
+            (
+                dataset[self.getOrDefault("inputCol")] <= self.getOrDefault("n_months")
+            ).cast("int"),
         )  # Pyspark models except integer or floating labels.
 
 
