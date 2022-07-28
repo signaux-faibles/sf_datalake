@@ -190,7 +190,7 @@ if with_paydex:
             bins=config["ONE_HOT_CATEGORIES"]["paydex_bin"]
         ),
     )
-    ## Add corresponding 'meso' column names to the configuration for explanation step.
+    # Add corresponding 'meso' column names to the configuration for explanation step.
     config["MESO_GROUPS"]["paydex_bin"] = [
         f"paydex_bin_ohcat{i}"
         for i, _ in enumerate(config["ONE_HOT_CATEGORIES"]["paydex_bin"])
@@ -227,7 +227,7 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
 
 # Build and run Pipeline
 transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
-model_stages = sf_datalake.model.generate_stages(config)
+model_stages = [sf_datalake.model.get_model_from_conf(config)]
 postprocessing_stages = [sf_datalake.transform.ProbabilityFormatter()]
 
 pipeline = Pipeline(stages=transforming_stages + model_stages + postprocessing_stages)

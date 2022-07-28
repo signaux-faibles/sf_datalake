@@ -185,7 +185,7 @@ for name, df in {
 
 # Compute alert level thresholds
 score_threshold = sf_datalake.evaluation.optimal_beta_thresholds(
-    y_true=test_set["failure_within_18m"], y_score=test_set["probability"]
+    y_true=test_set["failure"], y_score=test_set["probability"]
 )
 
 # Create encoded alert groups
