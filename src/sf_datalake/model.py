@@ -10,12 +10,13 @@ from pyspark.sql.types import StringType
 import sf_datalake.utils
 
 
-def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
+def get_model_from_conf(model_config: dict, target_col: str) -> pyspark.ml.Model:
     """Generates a Model object from a given configuration.
 
     Args:
         model_config: The Model configuration. The dict contains parameters that
           corresponds to some pyspark.ml.Model arguments.
+        target_col: The target column's name.
 
     Returns:
         The selected Model instantiated using the input config parameters.
@@ -23,7 +24,7 @@ def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
     """
     factory = {
         "LogisticRegression": pyspark.ml.classification.LogisticRegression(
-            labelCol=model_config["TARGET"]["outputCol"],
+            labelCol=target_col,
             regParam=model_config["REGULARIZATION_COEFF"],
             standardization=False,
             maxIter=model_config["MAX_ITER"],

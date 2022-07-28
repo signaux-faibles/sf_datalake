@@ -227,7 +227,11 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
 
 # Build and run Pipeline
 transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
-model_stages = [sf_datalake.model.get_model_from_conf(config)]
+model_stages = [
+    sf_datalake.model.get_model_from_conf(
+        config["MODEL"], target_col=config["TARGET"]["outputCol"]
+    )
+]
 postprocessing_stages = [sf_datalake.transform.ProbabilityFormatter()]
 
 pipeline = Pipeline(stages=transforming_stages + model_stages + postprocessing_stages)
