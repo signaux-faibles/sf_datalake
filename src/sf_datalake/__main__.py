@@ -186,11 +186,29 @@ feature_engineering_steps = [
 ]
 if with_paydex:
     feature_engineering_steps.append(
-        sf_datalake.transform.PaydexOneHotEncoder(config),
+        sf_datalake.transform.PaydexOneHotEncoder(
+            bins=config["ONE_HOT_CATEGORIES"]["paydex_bin"]
+        ),
     )
+    # Add corresponding 'meso' column names to the configuration for explanation step.
+    config["MESO_GROUPS"]["paydex_bin"] = [
+        f"paydex_bin_ohcat{i}"
+        for i, _ in enumerate(config["ONE_HOT_CATEGORIES"]["paydex_bin"])
+    ]
+
 building_steps = [
-    sf_datalake.transform.TargetVariableColumnAdder(),
-    sf_datalake.transform.DatasetColumnSelector(config),
+    sf_datalake.transform.TargetVariable(
+        inputCol=config["TARGET"]["inputCol"],
+        outputCol=config["TARGET"]["outputCol"],
+        n_months=config["TARGET"]["n_months"],
+    ),
+    sf_datalake.transform.ColumnSelector(
+        inputCols=(
+            config["IDENTIFIERS"]
+            + list(config["FEATURES"])  # features dict keys to list
+            + [config["TARGET"]["outputCol"]]  # contains a single string
+        )
+    ),
     sf_datalake.transform.MissingValuesHandler(
         fill=config["FILL_MISSING_VALUES"], value=config["DEFAULT_VALUES"]
     ),
@@ -209,7 +227,11 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
 
 # Build and run Pipeline
 transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
-model_stages = sf_datalake.model.generate_stages(config)
+model_stages = [
+    sf_datalake.model.get_model_from_conf(
+        config["MODEL"], target_col=config["TARGET"]["outputCol"]
+    )
+]
 postprocessing_stages = [sf_datalake.transform.ProbabilityFormatter()]
 
 pipeline = Pipeline(stages=transforming_stages + model_stages + postprocessing_stages)

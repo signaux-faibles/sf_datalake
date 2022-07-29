@@ -28,7 +28,7 @@ def train_test_predict_split(
           test, prediction.
 
     """
-    will_fail_mask = df["failure_within_18m"].astype("boolean")
+    will_fail_mask = df[config["TARGET"]["outputCol"]].astype("boolean")
 
     n_samples = df.count()
     n_failing = df.filter(will_fail_mask).count()

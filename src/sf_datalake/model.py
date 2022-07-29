@@ -1,6 +1,6 @@
 """Model utilities and classes."""
 
-from typing import List, Tuple
+from typing import Tuple
 
 import pyspark.ml
 import pyspark.ml.classification
@@ -10,28 +10,13 @@ from pyspark.sql.types import StringType
 import sf_datalake.utils
 
 
-def generate_stages(config: dict) -> List[pyspark.ml.Model]:
-    """Generate stages associated with a given Model.
-
-    The returned list is ready to be included into a pyspark.ml.Pipeline object.
-
-    Args:
-        config: model configuration, as loaded by io.load_parameters().
-
-    Returns:
-        A prepared Model.
-
-    """
-    stages = [get_model_from_conf(config["MODEL"])]
-    return stages
-
-
-def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
+def get_model_from_conf(model_config: dict, target_col: str) -> pyspark.ml.Model:
     """Generates a Model object from a given configuration.
 
     Args:
         model_config: The Model configuration. The dict contains parameters that
           corresponds to some pyspark.ml.Model arguments.
+        target_col: The target column's name.
 
     Returns:
         The selected Model instantiated using the input config parameters.
@@ -39,7 +24,7 @@ def get_model_from_conf(model_config: dict) -> pyspark.ml.Model:
     """
     factory = {
         "LogisticRegression": pyspark.ml.classification.LogisticRegression(
-            labelCol="failure_within_18m",
+            labelCol=target_col,
             regParam=model_config["REGULARIZATION_COEFF"],
             standardization=False,
             maxIter=model_config["MAX_ITER"],

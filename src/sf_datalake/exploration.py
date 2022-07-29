@@ -6,9 +6,7 @@ from typing import List, Tuple
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
-from pyspark.ml import PipelineModel
-from pyspark.ml.feature import VectorAssembler
-from pyspark.ml.regression import LinearRegression
+import pyspark.sql.types as T
 
 import sf_datalake.transform
 import sf_datalake.utils
@@ -106,7 +104,7 @@ def accounting_duration(
         raise ValueError(f"Unknown unit {unit}")
     return (
         avg_duration.withColumn(
-            "datediff_floored", F.round("exercice_datediff").cast("int")
+            "datediff_floored", F.round("exercice_datediff").cast(T.IntegerType())
         )
         .groupBy("datediff_floored")
         .count()
@@ -183,81 +181,6 @@ def qqplot_dataset(
 
     dataset = dataset1.join(dataset2, how="left", on="quantiles").orderBy("quantiles")
     return dataset
-
-
-def covid19_adapter_params(
-    df: pyspark.sql.DataFrame, features: List[str], config: dict
-) -> dict:
-    """Generates parameters to adapt post-pandemic data over a set of features.
-
-    Parameters are built using a linear model fit on post-pandemic quantiles vs
-    pre-pandemic quantiles.
-
-    Args:
-        df: input DataFrame.
-        features: name of the features to run the fit on.
-        config: model configuration, as loaded by io.load_parameters().
-
-    Returns:
-        A dict with features as keys. For each feature, the structure is as follows:
-            {
-                "params": list of the linear fit parameters (intercept + coefficient).
-                "rmse": root mean square error of the linear fit.
-                "r2": r square of the linear fit.
-            }
-
-    """
-    # pylint: disable=R0801
-    preprocessing_pipeline = PipelineModel(
-        stages=[
-            # Filters, time-scale and missing values handling
-            sf_datalake.transform.WorkforceFilter(),
-            sf_datalake.transform.HasPaydexFilter(),
-            sf_datalake.transform.MissingValuesHandler(
-                fill=config["FILL_MISSING_VALUES"], value=config["DEFAULT_VALUES"]
-            ),
-            sf_datalake.transform.TimeNormalizer(
-                inputCols=config["FEATURE_GROUPS"]["sante_financiere"],
-                start="date_deb_exercice",
-                end="date_fin_exercice",
-            ),
-            # Feature engineering
-            sf_datalake.transform.PaydexOneHotEncoder(config),
-            sf_datalake.transform.DeltaDebtPerWorkforceColumnAdder(),
-            sf_datalake.transform.DebtRatioColumnAdder(),
-            # Selection of features and target variable
-            sf_datalake.transform.TargetVariableColumnAdder(),
-            sf_datalake.transform.DatasetColumnSelector(config),
-        ]
-    )
-    df = preprocessing_pipeline.transform(df)
-
-    # Keep data from the first date of the learning period
-    df = df.filter(df["periode"] >= config["TRAIN_DATES"][0])
-
-    # Split training data according to a date associated with the beginning of
-    # the pandemic event
-    df1 = df.filter(df["periode"] <= config["PANDEMIC_EVENT_DATE"]).select(features)
-    df2 = df.filter(df["periode"] > config["PANDEMIC_EVENT_DATE"]).select(features)
-
-    adapter_params = {}
-    for feat in features:
-        df = qqplot_dataset(df1, df2, feature=feat)
-        df_va = (
-            VectorAssembler(inputCols=["y"], outputCol="features")
-            .transform(df)
-            .select(["features", "x"])
-        )
-
-        lr = LinearRegression(featuresCol="features", labelCol="x")
-        lr_model = lr.fit(df_va)
-        adapter_params[feat] = {
-            "params": [lr_model.intercept, lr_model.coefficients[0]],
-            "rmse": lr_model.summary.rootMeanSquaredError,
-            "r2": lr_model.summary.r2,
-        }
-
-    return adapter_params
 
 
 def print_spark_df_scores(results: pyspark.sql.DataFrame):

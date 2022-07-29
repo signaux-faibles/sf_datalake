@@ -3,68 +3,26 @@
 import datetime as dt
 import itertools
 import logging
+import math
 import re
-from typing import Iterable, List
+from typing import List
 
 import numpy as np
 import pyspark.ml
 import pyspark.sql
 import pyspark.sql.functions as F
+import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
 from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
-from pyspark.ml.param.shared import HasInputCol, HasInputCols, Param, Params
+from pyspark.ml.param.shared import (
+    HasInputCol,
+    HasInputCols,
+    HasOutputCol,
+    Param,
+    Params,
+)
 from pyspark.sql import Window
-from pyspark.sql.types import FloatType, StringType
-
-
-def parse_date(
-    df: pyspark.sql.DataFrame, colnames: Iterable[str]
-) -> pyspark.sql.DataFrame:
-    """Parses multiple columns of a pyspark.sql.DataFrame as date.
-
-    Args:
-        df: A DataFrame with dates represented as "yyyyMMdd" strings or integers.
-        colnames : Names of the columns to parse.
-
-    Returns:
-        A new DataFrame with date columns as pyspark date types.
-
-    """
-    for name in colnames:
-        df = df.withColumn(name, F.to_date(F.col(name).cast(StringType()), "yyyyMMdd"))
-    return df
-
-
-def stringify_and_pad_siren(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Normalizes the input DataFrame "siren" entries.
-
-    Args:
-        df: A DataFrame with a "siren" column, whose type can be cast to string.
-
-    Returns:
-        A DataFrame with zeros-left-padded SIREN data, as string type.
-
-    """
-    assert "siren" in df.columns, "Input DataFrame doesn't have a 'siren' column."
-    df = df.withColumn("siren", F.lpad(df["siren"].cast("string"), 9, "0"))
-    return df
-
-
-def extract_siren_from_siret(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Infer the SIREN number from a SIRET column.
-
-    Args:
-        df: A DataFrame with a "siret" column, whose type can be cast to string.
-
-    Returns:
-        A DataFrame with zeros-left-padded SIREN data, as string type.
-
-    """
-    assert "siret" in df.columns, "Input DataFrame doesn't have a 'siret' column."
-    return df.withColumn(
-        "siret", F.lpad(F.col("siret").cast("string"), 14, "0")
-    ).withColumn("siren", F.col("siret").substr(1, 9))
 
 
 def get_transformer(name: str) -> Transformer:
@@ -127,6 +85,65 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
     # We add a final concatenation stage of all columns that should be fed to the model.
     stages.append(VectorAssembler(inputCols=concat_input_cols, outputCol="features"))
     return stages
+
+
+class DateParser(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
+    """A transformer that parses some string timestamp / date info to pyspark date type.
+
+    The data will be parsed from the `inputCol` into the `outputCol`. Both can be set at
+    instanciation time or using either `setInputCol`, `setOutputCol` or `setParams`. The
+    initial string format should be specified using a datetime pattern.
+
+    Args:
+        inputCol: The column containing data to be parsed.
+        outputCol: The output column to be created.
+        format: The input column datetime format. Defaults to "yyyyMMdd".
+
+    """
+
+    format = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "format",
+        "Expected datetime format inside inputCol.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(format="yyyyMMdd")
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            inputCol: The column containing data to be parsed.
+            outputCol: The output column to be created.
+            format: The input column datetime format. Defaults to "yyyyMMdd".
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Extract date info from `inputCol` into `outputCol`.
+
+        Args:
+            dataset: A DataFrame with dates / datetime represented as strings.
+
+        Returns:
+            A new DataFrame with the set `outputCol` holding pyspark date types.
+
+        """
+        return dataset.withColumn(
+            self.getOrDefault("outputCol"),
+            F.to_date(
+                F.col(self.getOrDefault("inputCol")).cast(T.StringType()),
+                self.getOrDefault("format"),
+            ),
+        )
 
 
 class DeltaDebtPerWorkforceColumnAdder(
@@ -220,46 +237,69 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-metho
         )
 
 
-class PaydexOneHotEncoder(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to compute one-hot encoded features associated with Paydex data."""
+class PaydexOneHotEncoder(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
+    """A transformer to compute one-hot encoded features associated with Paydex data.
 
-    def __init__(self, config):
+    Args:
+        inputCol (str): The variable to be one-hot encoded.
+        bins (list): A list of bins, with adjacent and increasing number of days values,
+          e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will be cast to
+          floats.
+        outputCol (str): The one-hot encoded column name.
+
+    """
+
+    bins = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "bins",
+        "Bins for paydex number of days one hot encoding.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(inputCol="paydex_nb_jours", outputCol="paydex_bin", bins=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            inputCol (str): The variable to be one-hot encoded.
+            bins (list): A list of bins, with adjacent and increasing number of days
+              values, e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will
+              be cast to floats.
+            outputCol (str): The one-hot encoded column name.
+
+        """
+        return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
         """Computes the quantile bins of payment delay (in days).
 
         Args:
-            dataset: DataFrame to transform. It should contain "paydex_nb_jours" and
-              "paydex_nb_jours_diff12m" columns.
+            dataset: DataFrame to transform.
 
         Returns:
              Transformed DataFrame with extra `paydex_bins` columns.
 
         """
-        assert {"paydex_nb_jours", "paydex_nb_jours_diff12m"} <= set(dataset.columns)
 
         ## Binned paydex
-        if "paydex_bin" in self.config["FEATURES"]:
-            days_bins = self.config["ONE_HOT_CATEGORIES"]["paydex_bin"]
-            days_splits = np.unique(
-                np.array([float(v) for v in itertools.chain(*days_bins)])
-            )
-            bucketizer = pyspark.ml.feature.Bucketizer(
-                splits=days_splits,
-                handleInvalid="error",
-                inputCol="paydex_nb_jours",
-                outputCol="paydex_bin",
-            )
-            dataset = bucketizer.transform(dataset)
-
-            ## Add corresponding 'meso' column names to the configuration.
-            self.config["MESO_GROUPS"]["paydex_bin"] = [
-                f"paydex_bin_ohcat{i}" for i, _ in enumerate(days_bins)
-            ]
-
-        return dataset
+        days_bins = self.getOrDefault("bins")
+        days_splits = np.unique(
+            np.array([float(v) for v in itertools.chain(*days_bins)])
+        )
+        bucketizer = pyspark.ml.feature.Bucketizer(
+            splits=days_splits,
+            handleInvalid="error",
+            inputCol=self.getOrDefault("inputCol"),
+            outputCol=self.getOrDefault("outputCol"),
+        )
+        return bucketizer.transform(dataset)
 
 
 class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-methods
@@ -340,6 +380,125 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
                 }
             )
         return dataset.dropna()
+
+
+class IdentifierNormalizer(
+    Transformer, HasInputCol
+):  # pylint: disable=too-few-public-methods
+    """A transformer that normalizes a DataFrame's SIREN / SIRET data.
+
+    It does so by:
+    - Casting the identifier column values to strings.
+    - Left-padding the identifier with zeroes.
+
+    The zero-padding is done inplace.
+
+    Args:
+        inputCol: The column containing identifier to normalize. Default to "siren".
+        n_pad: Length of string to be zero-padded. A SIREN is 9 characters long, while
+          a SIRET is 14 characters long.
+
+    """
+
+    n_pad = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_pad",
+        "Length of string to be zero-padded.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCol="siren", n_pad=9)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this IdentifierNormalizer.
+
+        Args:
+            inputCol: The column containing SIRENs to normalize. Default to "siren".
+            n_pad: Length of string to be zero-padded. A SIREN is 9 characters long,
+              while a SIRET is 14 characters long.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Normalize identifier data inplace.
+
+        Args:
+            dataset: A DataFrame with an identifier (e.g. SIREN data) column, whose type
+              can be cast to string.
+
+        Returns:
+            A DataFrame with zeros-left-padded identifier data, as string type.
+
+        """
+        identifier = self.getOrDefault("inputCol")
+        n_pad = self.getOrDefault("n_pad")
+        assert (
+            identifier in dataset.columns
+        ), f"Input DataFrame doesn't have a {identifier} column."
+        return dataset.withColumn(
+            identifier, F.lpad(dataset[identifier].cast(T.StringType()), n_pad, "0")
+        )
+
+
+class SiretToSiren(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
+    """A transformer that generates a SIREN column from SIRET information.
+
+    It does so by:
+    - Casting the SIRET column values to strings.
+    - Left-padding the SIRET with zeroes.
+    - Extracting the first 9 digits.
+
+    Args:
+        inputCol: The column containing SIRET values. Default to "siret".
+        outputCol: The column containing SIREN values. Default to "siren".
+
+    """
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCol="siret", outputCol="siren")
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this SiretToSiren.
+
+        Args:
+            inputCol: The column containing SIRET values. Default to "siret".
+            outputCol: The column containing SIREN values. Default to "siren".
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Extract SIREN data.
+
+        Args:
+            dataset: A DataFrame with a "siret" column, whose type can be cast to
+              string.
+
+        Returns:
+            A DataFrame with zeros-left-padded SIREN data, as string type.
+
+        """
+        siret_col = self.getOrDefault("inputCol")
+        siren_col = self.getOrDefault("outputCol")
+
+        assert (
+            siret_col in dataset.columns
+        ), f"Input DataFrame doesn't have a {siret_col} column."
+        return dataset.withColumn(
+            siren_col,
+            F.lpad(F.col(siret_col).cast(T.StringType()), 14, "0").substr(1, 9),
+        )
 
 
 class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
@@ -509,7 +668,8 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
         dataset = dataset.withColumn(
             "ref_date", F.lit(self.getOrDefault("ref_date"))
         ).withColumn(
-            "months_from_ref", F.months_between("periode", "ref_date").cast("int")
+            "months_from_ref",
+            F.months_between("periode", "ref_date").cast(T.IntegerType()),
         )
 
         time_windows = {
@@ -596,7 +756,8 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         dataset = dataset.withColumn(
             "ref_date", F.lit(self.getOrDefault("ref_date"))
         ).withColumn(
-            "months_from_ref", F.months_between("periode", "ref_date").cast("int")
+            "months_from_ref",
+            F.months_between("periode", "ref_date").cast(T.IntegerType()),
         )
 
         lag_window = (
@@ -702,37 +863,78 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
 
 
-class TargetVariableColumnAdder(Transformer):  # pylint: disable=too-few-public-methods
+class TargetVariable(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
     """A transformer to compute the company failure target variable."""
 
-    def _transform(self, dataset: pyspark.sql.DataFrame):  # pylint: disable=no-self-use
-        """Create the learning target variable `failure_within_18m`.
+    n_months = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_months",
+        "Number of months for failure forecast.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(inputCol=None, outputCol=None, n_months=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this LagOperator transformer.
 
         Args:
-            dataset: DataFrame to transform containing `time_til_failure` variable.
-
-        Returns:
-            Transformed DataFrame with an extra `failure_within_18m` column.
+            inputCol (str): The column that will be used to derive target.
+            outputCol (str): The new target variable column.
+            n_months (int): Number of months that will be considered as target
+              threshold.
 
         """
-        assert "time_til_failure" in dataset.columns
+        return self._set(**kwargs)
 
-        dataset = dataset.fillna(value={"time_til_failure": 9999})
-        dataset = dataset.withColumn(
-            "failure_within_18m", (dataset["time_til_failure"] <= 18).cast("integer")
-        )  # Models except integer or floating labels.
-        return dataset
+    def _transform(self, dataset: pyspark.sql.DataFrame):
+        """Create the learning target variable.
+
+        Args:
+            dataset: DataFrame to transform.
+
+        Returns:
+            Transformed DataFrame with an extra target column.
+
+        """
+        dataset = dataset.fillna(value={self.getOrDefault("inputCol"): math.inf})
+        return dataset.withColumn(
+            self.getOrDefault("outputCol"),
+            (
+                dataset[self.getOrDefault("inputCol")] <= self.getOrDefault("n_months")
+            ).cast(T.IntegerType()),
+        )  # Pyspark models except integer or floating labels.
 
 
-class DatasetColumnSelector(Transformer):  # pylint: disable=too-few-public-methods
+class ColumnSelector(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
     """A transformer to select the columns of the dataset used in the model."""
 
-    def __init__(self, config):
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(inputCols=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, inputCols: List[str]):
+        """Set parameters for this ColumnSelector transformer.
+
+        Args:
+            inputCols (list): The columns that will be used in the ML process.
+
+        """
+        return self._set(inputCols=inputCols)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Select the columns of the dataset used in the model.
+        """Select the columns of the dataset used in ML process.
 
         Args:
             dataset: DataFrame to select columns from.
@@ -741,17 +943,7 @@ class DatasetColumnSelector(Transformer):  # pylint: disable=too-few-public-meth
             Transformed DataFrame.
 
         """
-        assert {"IDENTIFIERS", "FEATURES", "TARGET"} <= set(self.config)
-
-        dataset = dataset.select(
-            *(
-                set(
-                    self.config["IDENTIFIERS"]
-                    + list(self.config["FEATURES"])
-                    + self.config["TARGET"]
-                )
-            )
-        )
+        dataset = dataset.select(self.getOrDefault("inputCols"))
         return dataset
 
 
@@ -835,7 +1027,7 @@ class ProbabilityFormatter(Transformer):  # pylint: disable=too-few-public-metho
             Transformed DataFrame with casted probability data.
 
         """
-        transform_udf = F.udf(lambda v: float(v[1]), FloatType())
+        transform_udf = F.udf(lambda v: float(v[1]), T.FloatType())
         return dataset.withColumn("probability", transform_udf("probability"))
 
 

@@ -54,9 +54,11 @@
         "ratio_dette": "StandardScaler",
         "dette_par_effectif_slope3m": "StandardScaler"
     },
-    "TARGET": [
-        "failure_within_18m"
-    ],
+    "TARGET": {
+        "outputCol": "failure",
+        "n_months": 18,
+        "inputCol": "time_til_failure"
+    },
     "MESO_GROUPS": {
         "cotisation_urssaf": [
             "cotisation",
