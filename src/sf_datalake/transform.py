@@ -640,7 +640,7 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, n_months=None, normalize=False)
+        self._setDefault(inputCol=None, n_months=None, slope=False)
         self.setParams(**kwargs)
 
     @keyword_only
