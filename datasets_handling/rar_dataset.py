@@ -103,28 +103,28 @@ for name, ds in datasets.items():
 art_date_parsers = PipelineModel(
     [
         sf_datalake.transform.DateParser(
-            inputCol="art_disc", output_col="date_inscription_rar", format="yyyyMMdd"
+            inputCol="art_disc", outputCol="date_inscription_rar", format="yyyyMMdd"
         ),
         sf_datalake.transform.DateParser(
-            inputCol="art_didr", output_col="date_exigibilite", format="yyyyMMdd"
+            inputCol="art_didr", outputCol="date_exigibilite", format="yyyyMMdd"
         ),
         sf_datalake.transform.DateParser(
             inputCol="art_datedcf",
-            output_col="date_notification_redressement",
+            outputCol="date_notification_redressement",
             format="yyyyMMdd",
         ),
         sf_datalake.transform.DateParser(
-            inputCol="art_dori", output_col="date_origine", format="yyyyMMdd"
+            inputCol="art_dori", outputCol="date_origine", format="yyyyMMdd"
         ),
     ]
 )
 mvt_date_parsers = PipelineModel(
     [
         sf_datalake.transform.DateParser(
-            inputCol="mvt_deff", output_col="date_effective", format="yyyyMMdd"
+            inputCol="mvt_deff", outputCol="date_effective", format="yyyyMMdd"
         ),
         sf_datalake.transform.DateParser(
-            inputCol="mvt_djc", output_col="date_journee_comptable", format="yyyyMMdd"
+            inputCol="mvt_djc", outputCol="date_journee_comptable", format="yyyyMMdd"
         ),
     ]
 )
