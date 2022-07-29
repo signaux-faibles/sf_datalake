@@ -236,7 +236,9 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-metho
         )
 
 
-class PaydexOneHotEncoder(Transformer):  # pylint: disable=too-few-public-methods
+class PaydexOneHotEncoder(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
     """A transformer to compute one-hot encoded features associated with Paydex data.
 
     Args:
