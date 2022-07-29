@@ -6,6 +6,7 @@ from typing import List, Tuple
 import pyspark
 import pyspark.sql
 import pyspark.sql.functions as F
+import pyspark.sql.types as T
 
 import sf_datalake.transform
 import sf_datalake.utils
@@ -103,7 +104,7 @@ def accounting_duration(
         raise ValueError(f"Unknown unit {unit}")
     return (
         avg_duration.withColumn(
-            "datediff_floored", F.round("exercice_datediff").cast("int")
+            "datediff_floored", F.round("exercice_datediff").cast(T.IntegerType())
         )
         .groupBy("datediff_floored")
         .count()

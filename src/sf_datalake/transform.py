@@ -78,7 +78,8 @@ class DateParser(
         return dataset.withColumn(
             self.getOrDefault("outputCol"),
             F.to_date(
-                F.col(self.getOrDefault("inputCol")), self.getOrDefault("format")
+                F.col(self.getOrDefault("inputCol")).cast(T.StringType()),
+                self.getOrDefault("format"),
             ),
         )
 
@@ -427,7 +428,7 @@ class IdentifierNormalizer(
             identifier in dataset.columns
         ), f"Input DataFrame doesn't have a {identifier} column."
         return dataset.withColumn(
-            identifier, F.lpad(dataset[identifier].cast("string"), 9, "0")
+            identifier, F.lpad(dataset[identifier].cast(T.StringType()), 9, "0")
         )
 
 
@@ -482,7 +483,8 @@ class SiretToSiren(
             siret_col in dataset.columns
         ), f"Input DataFrame doesn't have a {siret_col} column."
         return dataset.withColumn(
-            siren_col, F.lpad(F.col(siret_col).cast("string"), 14, "0").substr(1, 9)
+            siren_col,
+            F.lpad(F.col(siret_col).cast(T.StringType()), 14, "0").substr(1, 9),
         )
 
 
@@ -653,7 +655,8 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
         dataset = dataset.withColumn(
             "ref_date", F.lit(self.getOrDefault("ref_date"))
         ).withColumn(
-            "months_from_ref", F.months_between("periode", "ref_date").cast("int")
+            "months_from_ref",
+            F.months_between("periode", "ref_date").cast(T.IntegerType()),
         )
 
         time_windows = {
@@ -740,7 +743,8 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         dataset = dataset.withColumn(
             "ref_date", F.lit(self.getOrDefault("ref_date"))
         ).withColumn(
-            "months_from_ref", F.months_between("periode", "ref_date").cast("int")
+            "months_from_ref",
+            F.months_between("periode", "ref_date").cast(T.IntegerType()),
         )
 
         lag_window = (
@@ -891,7 +895,7 @@ class TargetVariable(
             self.getOrDefault("outputCol"),
             (
                 dataset[self.getOrDefault("inputCol")] <= self.getOrDefault("n_months")
-            ).cast("int"),
+            ).cast(T.IntegerType()),
         )  # Pyspark models except integer or floating labels.
 
 
