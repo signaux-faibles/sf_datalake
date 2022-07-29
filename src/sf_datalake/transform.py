@@ -25,65 +25,6 @@ from pyspark.ml.param.shared import (
 from pyspark.sql import Window
 
 
-class DateParser(
-    Transformer, HasInputCol, HasOutputCol
-):  # pylint: disable=too-few-public-methods
-    """A transformer that parses some string timestamp / date info to pyspark date type.
-
-    The data will be parsed from the `inputCol` into the `outputCol`. Both can be set at
-    instanciation time or using either `setInputCol`, `setOutputCol` or `setParams`. The
-    initial string format should be specified using a datetime pattern.
-
-    Args:
-        inputCol: The column containing data to be parsed.
-        outputCol: The output column to be created.
-        format: The input column datetime format. Defaults to "yyyyMMdd".
-
-    """
-
-    format = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "format",
-        "Expected datetime format inside inputCol.",
-    )
-
-    @keyword_only
-    def __init__(self, **kwargs):
-        super().__init__()
-        self._setDefault(format="yyyyMMdd")
-        self.setParams(**kwargs)
-
-    @keyword_only
-    def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCol: The column containing data to be parsed.
-            outputCol: The output column to be created.
-            format: The input column datetime format. Defaults to "yyyyMMdd".
-
-        """
-        return self._set(**kwargs)
-
-    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Extract date info from `inputCol` into `outputCol`.
-
-        Args:
-            dataset: A DataFrame with dates / datetime represented as strings.
-
-        Returns:
-            A new DataFrame with the set `outputCol` holding pyspark date types.
-
-        """
-        return dataset.withColumn(
-            self.getOrDefault("outputCol"),
-            F.to_date(
-                F.col(self.getOrDefault("inputCol")).cast(T.StringType()),
-                self.getOrDefault("format"),
-            ),
-        )
-
-
 def get_transformer(name: str) -> Transformer:
     """Gets a pre-configured Transformer object by specifying its name.
 
@@ -144,6 +85,65 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
     # We add a final concatenation stage of all columns that should be fed to the model.
     stages.append(VectorAssembler(inputCols=concat_input_cols, outputCol="features"))
     return stages
+
+
+class DateParser(
+    Transformer, HasInputCol, HasOutputCol
+):  # pylint: disable=too-few-public-methods
+    """A transformer that parses some string timestamp / date info to pyspark date type.
+
+    The data will be parsed from the `inputCol` into the `outputCol`. Both can be set at
+    instanciation time or using either `setInputCol`, `setOutputCol` or `setParams`. The
+    initial string format should be specified using a datetime pattern.
+
+    Args:
+        inputCol: The column containing data to be parsed.
+        outputCol: The output column to be created.
+        format: The input column datetime format. Defaults to "yyyyMMdd".
+
+    """
+
+    format = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "format",
+        "Expected datetime format inside inputCol.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(format="yyyyMMdd")
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            inputCol: The column containing data to be parsed.
+            outputCol: The output column to be created.
+            format: The input column datetime format. Defaults to "yyyyMMdd".
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Extract date info from `inputCol` into `outputCol`.
+
+        Args:
+            dataset: A DataFrame with dates / datetime represented as strings.
+
+        Returns:
+            A new DataFrame with the set `outputCol` holding pyspark date types.
+
+        """
+        return dataset.withColumn(
+            self.getOrDefault("outputCol"),
+            F.to_date(
+                F.col(self.getOrDefault("inputCol")).cast(T.StringType()),
+                self.getOrDefault("format"),
+            ),
+        )
 
 
 class DeltaDebtPerWorkforceColumnAdder(
@@ -391,15 +391,25 @@ class IdentifierNormalizer(
     - Casting the identifier column values to strings.
     - Left-padding the identifier with zeroes.
 
+    The zero-padding is done inplace.
+
     Args:
         inputCol: The column containing identifier to normalize. Default to "siren".
+        n_pad: Length of string to be zero-padded. A SIREN is 9 characters long, while
+          a SIRET is 14 characters long.
 
     """
+
+    n_pad = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_pad",
+        "Length of string to be zero-padded.",
+    )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol="siren")
+        self._setDefault(inputCol="siren", n_pad=9)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -408,27 +418,30 @@ class IdentifierNormalizer(
 
         Args:
             inputCol: The column containing SIRENs to normalize. Default to "siren".
+            n_pad: Length of string to be zero-padded. A SIREN is 9 characters long,
+              while a SIRET is 14 characters long.
 
         """
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Normalize SIREN data.
+        """Normalize identifier data inplace.
 
         Args:
-            dataset: A DataFrame with a "siren" column, whose type can be cast to
-              string.
+            dataset: A DataFrame with an identifier (e.g. SIREN data) column, whose type
+              can be cast to string.
 
         Returns:
-            A DataFrame with zeros-left-padded SIREN data, as string type.
+            A DataFrame with zeros-left-padded identifier data, as string type.
 
         """
         identifier = self.getOrDefault("inputCol")
+        n_pad = self.getOrDefault("n_pad")
         assert (
             identifier in dataset.columns
         ), f"Input DataFrame doesn't have a {identifier} column."
         return dataset.withColumn(
-            identifier, F.lpad(dataset[identifier].cast(T.StringType()), 9, "0")
+            identifier, F.lpad(dataset[identifier].cast(T.StringType()), n_pad, "0")
         )
 
 
