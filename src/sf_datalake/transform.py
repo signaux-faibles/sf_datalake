@@ -406,7 +406,7 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
             if not set(dataset.columns) <= set(value):
                 logging.warning(
                     "No corresponding fill value found for features %s",
-                    set(value) - set(dataset.columns),
+                    set(dataset.columns) - set(value),
                 )
             dataset = dataset.fillna(
                 {
