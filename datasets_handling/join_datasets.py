@@ -13,6 +13,7 @@ import sys
 from os import path
 
 import pyspark.sql.functions as F
+from pyspark.sql import Window
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -66,6 +67,8 @@ df_dgfip_yearly = df_dgfip_yearly.withColumn(
 )
 
 # Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
+w = Window().partitionBy(["siren", "periode"]).orderBy(F.col("null_ratio").asc())
+
 joined_df = (
     df_sf.join(
         df_dgfip_yearly,
@@ -74,12 +77,12 @@ joined_df = (
             & (df_sf.periode >= df_dgfip_yearly.date_deb_exercice)
             & (df_sf.periode < df_dgfip_yearly.date_fin_exercice)
         ),
-        how="left",
+        how="inner",
     )
     .drop(df_dgfip_yearly.siren)
-    .orderBy("null_ratio")
-    .dropDuplicates(["siren", "periode"])
-    .drop("null_ratio")
+    .withColumn("n_row", F.row_number().over(w))
+    .filter(F.col("n_row") == 1)
+    .drop("n_row")
 )
 
 joined_df.write.format("orc").save(args.output)
