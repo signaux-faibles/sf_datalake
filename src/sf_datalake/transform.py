@@ -338,12 +338,15 @@ class PaydexOneHotEncoder(
         return bucketizer.transform(dataset)
 
 
-class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-methods
+class MissingValuesHandler(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
     Uses pyspark.sql.DataFrame.fillna method to fill missing values if required.
 
     Args:
+      inputCols: The input dataset columns to consider for filling.
       fill: If True, fill missing values using the `value` arg. Defaults to True.
       value: Value to replace null values with. It must be a mapping from column name
         (string) to replacement value. The replacement value must be an int, float,
@@ -372,6 +375,7 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
     def setParams(self, **kwargs):
         """Set parameters for this transformer.
 
+        inputCols (list[str]): The input dataset columns to consider for filling.
         fill (bool): If True, fill missing values using the `value` arg. Defaults to
           True.
         value (dict): Value to replace null values with. It must be a mapping from
@@ -391,29 +395,26 @@ class MissingValuesHandler(Transformer):  # pylint: disable=too-few-public-metho
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-            DataFrame where previously missing values are filled, or corresponding
-              entries are dropped.
+            DataFrame where previously missing values are either filled, or
+            corresponding entries are dropped.
 
         """
         fill: bool = self.getOrDefault("fill")
         value: dict = self.getOrDefault("value")
+        features: List[str] = self.getOrDefault("inputCols")
         if fill:
-            for feature in dataset.columns:
+            for feature in features:
                 for var, val in value.items():
-                    if re.match(rf"{var}_\d*m$", feature):
+                    if re.match(rf"{var}_(diff|slope|moy|lag)\d+m$", feature):
                         value[feature] = val
                         break
-            if not set(dataset.columns) <= set(value):
+            if not set(features) <= set(value):
                 logging.warning(
                     "No corresponding fill value found for features %s",
-                    set(dataset.columns) - set(value),
+                    set(features) - set(value),
                 )
             dataset = dataset.fillna(
-                {
-                    feature: val
-                    for feature, val in value.items()
-                    if feature in dataset.columns
-                }
+                {feature: val for feature, val in value.items() if feature in features}
             )
         return dataset.dropna()
 
