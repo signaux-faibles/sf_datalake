@@ -918,7 +918,7 @@ class TargetVariable(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this LagOperator transformer.
+        """Set parameters for this transformer.
 
         Args:
             inputCol (str): The column that will be used to derive target.
