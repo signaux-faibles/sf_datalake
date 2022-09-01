@@ -4,7 +4,6 @@ The join is made along temporal and SIREN variables.
 
 USAGE
     python join_datasets.py --sf <sf_dataset> --dgfip_yearly <DGFiP_yearly_dataset> \
-    --dgfip_tva <DGFiP_TVA_dataset> --dgfip_rar <DGFiP_rar_dataset> \
     --output <output_directory>
 
 """
@@ -14,6 +13,7 @@ import sys
 from os import path
 
 import pyspark.sql.functions as F
+from pyspark.sql import Window
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -37,14 +37,6 @@ parser.add_argument(
     help="Path to the DGFiP yearly dataset.",
 )
 parser.add_argument(
-    "--dgfip_tva",
-    help="Path to the DGFiP tva dataset.",
-)
-parser.add_argument(
-    "--dgfip_rar",
-    help="Path to the DGFiP rar 'reste à recouvrer' monthly dataset.",
-)
-parser.add_argument(
     "--output",
     dest="output",
     help="Path to the output dataset.",
@@ -57,8 +49,6 @@ datasets = load_data(
     {
         "sf": args.sf_data,
         "dgfip_yearly": args.dgfip_yearly,
-        "dgfip_tva": args.dgfip_tva,
-        "dgfip_rar": args.dgfip_rar,
     },
     file_format="orc",
 )
@@ -67,8 +57,6 @@ datasets = load_data(
 # Prepare datasets
 siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
 df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
-df_dgfip_tva = siren_normalizer.transform(datasets["dgfip_tva"])
-df_dgfip_rar = siren_normalizer.transform(datasets["dgfip_rar"])
 df_sf = siren_normalizer.transform(datasets["sf"]).withColumn(
     "periode", F.to_date(F.date_trunc("month", F.col("periode")))
 )
@@ -77,56 +65,24 @@ df_dgfip_yearly = df_dgfip_yearly.withColumn(
     sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_yearly.columns])
     / len(df_dgfip_yearly.columns),
 )
-df_dgfip_rar = df_dgfip_rar.filter(
-    F.col("siren").isNotNull()
-    & F.col("art_didr").isNotNull()
-    & F.col("mvt_djc").isNotNull()
-    & F.col("mnt_creance").isNotNull()
-)
 
 # Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
-overwritten_columns = (set(df_dgfip_yearly.columns) & set(df_dgfip_tva.columns)) - {
-    "siren"
-}
+w = Window().partitionBy(["siren", "periode"]).orderBy(F.col("null_ratio").asc())
+
 joined_df = (
-    df_sf.drop(*overwritten_columns)
-    .join(
+    df_sf.join(
         df_dgfip_yearly,
         on=(
             (df_sf.siren == df_dgfip_yearly.siren)
             & (df_sf.periode >= df_dgfip_yearly.date_deb_exercice)
             & (df_sf.periode < df_dgfip_yearly.date_fin_exercice)
         ),
-        how="left",
+        how="inner",
     )
     .drop(df_dgfip_yearly.siren)
-    .orderBy("null_ratio")
-    .dropDuplicates(["siren", "periode"])
-    .drop("null_ratio")
+    .withColumn("n_row", F.row_number().over(w))
+    .filter(F.col("n_row") == 1)
+    .drop("n_row")
 )
-
-joined_df = joined_df.join(
-    df_dgfip_tva,
-    on=(
-        (joined_df.siren == df_dgfip_tva.siren)
-        & (joined_df.periode >= df_dgfip_tva.date_deb_tva)
-        & (joined_df.periode < df_dgfip_tva.date_fin_tva)
-    ),
-    how="left",
-).drop(df_dgfip_tva.siren)
-
-joined_df = (
-    joined_df.join(
-        df_dgfip_rar,
-        on=(
-            (joined_df.siren == df_dgfip_rar.siren)
-            & (joined_df.periode >= df_dgfip_rar.mvt_djc)
-            & (joined_df.periode >= df_dgfip_rar.art_didr)
-        ),
-        how="left",
-    )
-    .sort(["mvt_djc", "mnt_paiement_cum_tot"], ascending=False)
-    .dropDuplicates(["siren", "periode", "art_cleart"])
-).drop(df_dgfip_rar.siren)
 
 joined_df.write.format("orc").save(args.output)

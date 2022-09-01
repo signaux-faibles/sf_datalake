@@ -55,18 +55,19 @@ agg_config = sf_datalake.io.load_variables(args.aggregation)
 input_ds = sf_datalake.io.load_data({"input": args.input}, file_format="orc")["input"]
 
 # Set every column name to lower case (if not already).
-input_ds = input_ds.toDF(*(col.lower() for col in input_ds.columns))
-# Generate a clean SIREN column
-siret_level_ds = sf_datalake.transform.extract_siren_from_siret(input_ds)
+siret_level_ds = input_ds.toDF(*(col.lower() for col in input_ds.columns))
 
-######################
-# SIREN aggregation  #
-######################
+#####################
+# SIREN aggregation #
+#####################
 
 # Filter out public institutions and companies and aggregate at SIREN level
+siren_converter = sf_datalake.transform.SiretToSiren()
 naf_filter = sf_datalake.transform.PrivateCompanyFilter()
 aggregator = sf_datalake.transform.SirenAggregator(agg_config)
-siren_level_ds = PipelineModel([naf_filter, aggregator]).transform(siret_level_ds)
+siren_level_ds = PipelineModel([siren_converter, naf_filter, aggregator]).transform(
+    siret_level_ds
+)
 
 #####################
 # Time Computations #
