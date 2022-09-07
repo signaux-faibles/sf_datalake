@@ -1,11 +1,8 @@
-"""Evaluation of model outputs.
+"""Evaluation of model predictions. """
 
-"""
-
-from typing import Tuple
+from typing import Dict, Iterable
 
 import numpy as np
-import pyspark
 from sklearn.metrics import (
     average_precision_score,
     balanced_accuracy_score,
@@ -17,49 +14,44 @@ from sklearn.metrics import (
 )
 
 
-def make_thresholds_from_fbeta(
-    y_score: np.array,
-    y_true: np.array,
-    beta_F1: float = 0.5,
-    beta_F2: float = 2,
+def optimal_beta_thresholds(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    betas: Iterable[float] = (0.5, 2.0),
     n_thr: int = 101,
-) -> Tuple[float, float]:
+) -> Dict[float, float]:
     """Computes the classification thresholds that maximise :math:`F_\\beta` score.
 
-    We choose to define both alert levels as the thresholds that maximize
-    :math:`F_\\beta` for a given :math:`\\beta`. Typically, F1 alert threshold is tuned
-    to favour precision (e.g., :math:`\\beta = 0.5`), while F2 alert threshold favors
-    recall (e.g., :math:`\\beta = 0.5`).
+    We choose to define alert levels as the thresholds that maximize :math:`F_\\beta`
+    for a given :math:`\\beta`. Typically, an alert threshold is tuned to favor
+    precision (e.g., :math:`\\beta = 0.5`), while another alert threshold favors recall
+    (e.g., :math:`\\beta = 0.5`).
 
     Args:
+        y_true: The true outcomes. 0 means "no failure within the next 18
+          months", while 1 means "failure within the next 18 months".
         y_score: The computed probability of a failure state within the next
           18 months.
-        y_true: The true outcome. 0 means "no failure within the next 18
-          months", while 1 means "failure within…".
-        beta_F1: The :math:`\\beta` value for the first threshold.
-        beta_F1: The :math:`\\beta` value for the second threshold.
-        n_thr: an array of even-spaced `n_thr` values spanning the [0, 1] interval
-          is used as evaluated threshold values.
+        betas: The required :math:`\\beta` values for F-score thresholds
+          computation.
+        n_thr: Size of an even-spaced array of values spanning the [0, 1]
+          interval that will be used as candidate threshold values.
 
     Returns:
-        A couple of thresholds associated with the two input :math:`\\beta` values.
+        A dict of (beta, threshold) couples associated with each :math:`\\beta` input
+          values.
 
     """
-    thresh = np.linspace(0, 1, n_thr)
+    thresh_array = np.linspace(0, 1, n_thr)
 
-    f_beta_F1 = []
-    f_beta_F2 = []
-    for thr in thresh:
-        above_thresh = y_score >= thr
-        F1_score = fbeta_score(y_true=y_true, y_pred=above_thresh, beta=beta_F1)
-        F2_score = fbeta_score(y_true=y_true, y_pred=above_thresh, beta=beta_F2)
-        f_beta_F1.append(F1_score)
-        f_beta_F2.append(F2_score)
+    f_beta = np.zeros((len(betas), n_thr))
+    for n_t, threshold in enumerate(thresh_array):
+        y_pred = y_score >= threshold
+        for n_b, beta in enumerate(betas):
+            f_beta[n_b, n_t] = fbeta_score(y_true, y_pred, beta)
+    thresholds = thresh_array[np.argmax(f_beta, axis=1)]
 
-    t_F1 = thresh[np.argmax(f_beta_F1)]
-    t_F2 = thresh[np.argmax(f_beta_F2)]
-
-    return (t_F1, t_F2)
+    return dict(zip(betas, thresholds))
 
 
 def metrics(
@@ -72,12 +64,12 @@ def metrics(
 
     Args:
         y_true: An array containing the true values.
-        y_score: An array containing probabilities associated with each prediction.
-        beta: Optional. If provided, weighting of recall relative to precision for the
-          evaluation.
-        thresh: Optional. If provided, the model will classify an entry X as positive
-          if predict_proba(X)>=thresh. Otherwise, the model classifies X as positive if
-          predict(X)=1, ie predict_proba(X)>=0.5
+        y_score: The computed probability of a failure state within the next
+          18 months.
+        beta: Weighting of recall relative to precision for the evaluation.
+          Corresponds to the beta value of the F_beta score.
+        thresh: The probability above which a binary model should classify a
+          sample as positive.
 
     Returns:
         A dictionary containing the evaluation metrics.
@@ -107,20 +99,3 @@ def metrics(
         "Area under Precision-Recall curve": np.round(aucpr, 2),
         "Area under ROC curve": np.round(roc, 2),
     }
-
-
-def print_spark_df_scores(results: pyspark.sql.DataFrame):
-    """Quickly prints scores from data contained in a spark DataFrame."""
-    correct_count = results.filter(results.label == results.prediction).count()
-    total_count = results.count()
-    correct_1_count = results.filter(
-        (results.label == 1) & (results.prediction == 1)
-    ).count()
-    total_1_test = results.filter((results.label == 1)).count()
-    total_1_predict = results.filter((results.prediction == 1)).count()
-
-    print(f"All correct predections count: {correct_count}")
-    print(f"Total count: {total_count}")
-    print(f"Accuracy %: {(correct_count / total_count) * 100}")
-    print(f"Recall %: {(correct_1_count / total_1_test) * 100}")
-    print(f"Precision %: {(correct_1_count / total_1_predict) * 100}")

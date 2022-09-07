@@ -1,164 +1,190 @@
 variables:
-  PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.cache/pip"
-  # gitlab docker runner has a mounted volume HOST:/home/cloudadm/.ci-python_packages/ = CONTAINER:/packages
-  # todo : modifier le point de montage en fonction de la configuration du fichier de config
-  CACHE_ROOT: "/home/cloudadm/.ci-python_packages"
-  CACHE_KEY: "${CI_PIPELINE_ID}"
-  CACHE: "${CACHE_ROOT}/${CACHE_KEY}"
+  REGISTRY_ROOT: "/home/cloudadm/.ci-python_packages"
+  REGISTRY_KEY: "${CI_PIPELINE_ID}"
+  REGISTRY: "${REGISTRY_ROOT}/${REGISTRY_KEY}"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   PACKAGE: "python_packages.tar.gz"
   LAKE_HOME: "/projets/TSF"
   LAKE_MODULES_DIR: "${LAKE_HOME}/applicatifs"
   LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
   LAKE_ENTRYPOINT: "${LAKE_MODULES_DIR}/main.py"
   DEPLOYMENT_TYPE: "null"
-  RUN_SPARK_TASK: "no"
+
+### Workflow: defines when branch and merge request pipelines should run.
 
 workflow:
   rules:
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
       variables:
         DEPLOYMENT_TYPE: "prod"
-        RUN_SPARK_TASK: "yes"
-    - if: $CI_COMMIT_REF_NAME =~ /feat/
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop"'
       variables:
-        DEPLOYMENT_TYPE: "feat"
-        RUN_SPARK_TASK: "yes"
-    - when: always
+        DEPLOYMENT_TYPE: "small"
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH != "develop"'
 
-# Pip's cache doesn't store the python packages
-# https://pip.pypa.io/en/stable/reference/pip_install/#caching
-#
-# If you want to also cache the installed packages, you have to install
-# them in a virtualenv and cache it as well.
-cache:
-  paths:
-    - .cache/pip
-    - venv/
+
+.lake:
+  tags:
+    - datalake
+  before_script:
+    - cd ${REGISTRY}/bin && pwd
+  after_script:
+    - pwd
 
 .python:
   tags:
     - ci
   image: python:3.6.8
   before_script:
-    - python -V  # Print out python version for debugging
-    - pip install -U pip
-    - pip install virtualenv
-    - virtualenv venv
     - source venv/bin/activate
+  cache:
+    key: $CI_COMMIT_REF_SLUG
+    paths:
+      - .cache/pip
+      - venv/
 
-.lake:
-  tags:
-    - datalake
-  before_script:
-    - cd ${CACHE}/bin && pwd
 
 ##########################
 #  PIPELINE STARTS HERE  #
 ##########################
 
+stages:
+  - .pre
+  - build
+  - test
+  - deploy
+  - .post
 
 remove_older_working_directories:
   stage: .pre
   tags:
     - datalake
   script:
-    - echo "Cleaning older CI cached data."
-    # on ne garde que les 5 derniers
-    - ls -1QAtd ${CACHE_ROOT}/* | tail -n+10 | xargs rm -rf
+    - echo "Cleaning older CI pipeline data. Keeping only the 10 most recent directories in ${REGISTRY_ROOT}."
+    - ls -1QAtd ${REGISTRY_ROOT}/* | tail -n+10 | xargs rm -rf
+
+prepare_python_venv:
+  stage: .pre
+  extends: .python
+  before_script: null
+  script:
+    - python -V  # Print out python version for debugging
+    - pip install -U pip
+    - pip install virtualenv
+    - virtualenv venv
 
 prepare_new_working_directory:
   stage: .pre
   tags:
     - datalake
   script:
-    - echo "Preparing cache & conf in ${CACHE}."
-    - "[[ -d ${CACHE} ]] && rm -rf ${CACHE}"
-    - mkdir -p ${CACHE}
-    - mkdir -p ${CACHE}/trace
-    - mkdir -p ${CACHE}/log
-    - mkdir -p ${CACHE}/bin
-    - mkdir -p ${CACHE}/results
-    - echo "Fetching spark configuration to ${CACHE}/spark_config.json (maybe null)"
-    - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/spark_config.json | envsubst > ${CACHE}/spark_config.json
-    - cat ${CACHE}/spark_config.json
-    - MAACDO_VERSION=$(jq --raw-output --arg GROUP "${DEPLOYMENT_TYPE}" --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$GROUP] + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
-    - echo "Getting MaacDo version ${MAACDO_VERSION} "
-    - git clone --depth 1 --branch $MAACDO_VERSION https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${CACHE}/bin
+    - echo "Preparing runners shared space & configuration in ${REGISTRY}."
+    - "[[ -d ${REGISTRY} ]] && rm -rf ${REGISTRY}"
+    - mkdir -p ${REGISTRY}
+    - mkdir -p ${REGISTRY}/trace
+    - mkdir -p ${REGISTRY}/log
+    - mkdir -p ${REGISTRY}/bin
+    - mkdir -p ${REGISTRY}/results
+    - echo "Preparing spark configuration inside ${REGISTRY}/spark_config.json (will be set to 'null' if no prediction should be run afterwards)."
+    - jq --arg REF "${DEPLOYMENT_TYPE}" '.[$REF]' ${CI_PROJECT_DIR}/.ci/datalake/spark_config.json | envsubst > ${REGISTRY}/spark_config.json
+    - cat ${REGISTRY}/spark_config.json
+    - echo "Getting MaacDo version from default or ${CI_COMMIT_REF_SLUG} from .ci/datalake/maacdo_version.json "
+    - MAACDO_VERSION=$(jq --raw-output --arg BRANCH "${CI_COMMIT_REF_SLUG}" '.maacdo | .default + .[$BRANCH] | .version' ${CI_PROJECT_DIR}/.ci/datalake/maacdo_version.json)
+    - echo "${MAACDO_VERSION} > ${REGISTRY}/.maacdo_version"
+    - echo "Got MaacDo version as ${MAACDO_VERSION} "
+    - git clone --depth 1 --branch ${MAACDO_VERSION} https://${GIT_MAACDO_USERNAME}:${GIT_MAACDO_TOKEN}@forge.dgfip.finances.rie.gouv.fr/raphaelventura/maac-do.git ${REGISTRY}/bin
 
 prepare_maacdo_configuration:
   stage: .pre
   extends: .lake
   needs:
-    - job: prepare_new_working_directory
+    - job: "prepare_new_working_directory"
   script:
-    - SPARK_CONFIG=$(jq  --compact-output '.sparkTask' ${CACHE}/spark_config.json)
+    - SPARK_CONFIG=$(jq  --compact-output '.sparkTask' ${REGISTRY}/spark_config.json)
     - >
      [[ -z ${SPARK_CONFIG} ]]
      && [[ ${DEPLOYMENT_TYPE} != "null" ]]
-     && { echo "no config for Spark tasks"; exit 1; }
+     && { echo "Error: no config for Spark task excecution was provided."; exit 1; }
     - export SPARK_CONFIG=${SPARK_CONFIG}
-    - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${CACHE}/ci_job.par
-    - cat ${CACHE}/ci_job.par
+    - envsubst < ${CI_PROJECT_DIR}/.ci/datalake/datalake_config_template.par > ${REGISTRY}/ci_job.par
+    - cat ${REGISTRY}/ci_job.par
+
+install_package:
+  stage: build
+  extends: .python
+  needs:
+    - job: "prepare_new_working_directory"
+    - job: "prepare_python_venv"
+  script:
+    - pip install -v .
+
+venv_pack:
+  stage: build
+  extends: .python
+  needs:
+    - job: "install_package"
+  script:
+    - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
 
 pylint:
   stage: test
   extends: .python
   script:
-  - pip install pylint
-  - pylint --rcfile=.pylintrc src/sf_datalake/
+    - pip install pylint
+    - pylint --rcfile=.pylintrc src/sf_datalake/
   rules:
     - changes:
-        - src/sf_datalake/*
-
-build_package:
-  stage: build
-  extends: .python
-  needs:
-    - job: prepare_new_working_directory
-  script:
-    - pip install -v .
-    - venv-pack -o /packages/${CACHE_KEY}/${PACKAGE}
+      - src/sf_datalake/**/*.py
 
 send_package_to_lake:
   stage: deploy
   extends: .lake
   needs:
-    - job: build_package
-    - job: prepare_maacdo_configuration
+    - job: "venv_pack"
+    - job: "prepare_maacdo_configuration"
+    - job: "pylint"
+      optional: true
   script:
-    - echo "Removing old packages archive if it exists."
+    - echo "Deleting old packages archive (if it exists) on the lake HDFS."
     - ./api_maacdo.pl
         -a SuppressionFichier
         -i ${LAKE_PKG_TARGET}
-        -c ${CACHE}/ci_job.par ||
+        -c ${REGISTRY}/ci_job.par ||
         echo "Failed removing ${LAKE_PKG_TARGET}. Maybe this file doesn't exist."
     - echo "Sending new python packages archive to ${LAKE_PKG_TARGET}."
     - ./api_maacdo.pl
       -a EnvoyerFichier
-      -l ${CACHE}/${PACKAGE}
+      -l ${REGISTRY}/${PACKAGE}
       -i ${LAKE_PKG_TARGET}
-      -c ${CACHE}/ci_job.par
+      -c ${REGISTRY}/ci_job.par
 
 send_entrypoint_to_lake:
   stage: deploy
   extends: .lake
   needs:
-    - job: prepare_maacdo_configuration
+    - job: "prepare_maacdo_configuration"
+    - job: "pylint"
+      optional: true
   script:
+    - echo "Deleting previous entry point (if it exists) on the lake HDFS."
     - ./api_maacdo.pl
         -a SuppressionFichier
         -i ${LAKE_ENTRYPOINT}
-        -c ${CACHE}/ci_job.par ||
-        echo "Failed removing file ${LAKE_ENTRYPOINT}. Maybe this file doesn't exist."
+        -c ${REGISTRY}/ci_job.par ||
+        echo "Failed removing ${LAKE_ENTRYPOINT}. Maybe this file doesn't exist."
     - SCRIPT="${CI_PROJECT_DIR}/src/sf_datalake/__main__.py"
     - echo "Sending new python main script ${SCRIPT} to ${LAKE_ENTRYPOINT}."
     - ./api_maacdo.pl
       -a EnvoyerFichier
       -l ${SCRIPT}
       -i ${LAKE_ENTRYPOINT}
-      -c ${CACHE}/ci_job.par
+      -c ${REGISTRY}/ci_job.par
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
+
+### Spark jobs handling
 
 start_spark_task:
   stage: deploy
@@ -168,12 +194,15 @@ start_spark_task:
     - job: "send_package_to_lake"
   script:
     - echo "Launching spark job, getting livy ID."
-    - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${CACHE}/ci_job.par | grep ID |  cut -d: -f2)'
+    - 'idLivy=$(./api_maacdo.pl -a DemarrageTacheSpark -c ${REGISTRY}/ci_job.par | grep ID |  cut -d: -f2)'
     - echo "Spark task has started. Livy id is [$idLivy]."
-    - echo ${idLivy} | xargs > ${CACHE}/idLivy
-    - echo "to get yarns logs even in success case, run -> ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${idLivy} -c ${CACHE}/ci_job.par"
+    - echo ${idLivy} | xargs > ${REGISTRY}/idLivy
+    - echo "To get yarns logs even in success case, execute the following from the server running the gitlab runner process:"
+    - echo "--> ./api_maacdo.pl -a YarnLogsTacheSpark -j ${idLivy} -c ${REGISTRY}/ci_job.par"
+    - echo "To stop the spark task, execute the following from the server running the gitlab runner process:"
+    - echo "--> ./api_maacdo.pl -a ArretTacheSpark -j ${idLivy} -c ${REGISTRY}/ci_job.par"
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
 
 wait_for_task_finishing:
   stage: deploy
@@ -181,17 +210,17 @@ wait_for_task_finishing:
   needs:
     - job: "start_spark_task"
   script:
-    - export ID_LIVY=$(cat ${CACHE}/idLivy)
+    - export ID_LIVY=$(cat ${REGISTRY}/idLivy)
     - |
       LAST=""
       while true; do
-        TACHE_SPARK=$(./api_maacdo.pl -a EtatTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
+        TACHE_SPARK=$(./api_maacdo.pl -a EtatTacheSpark -j ${ID_LIVY} -c ${REGISTRY}/ci_job.par)
         STATUS=$(echo ${TACHE_SPARK} | awk '{print $NF}' | tr -dc '[:alnum:]\r\n' | tr '[:lower:]' '[:upper:]')
-        echo "${STATUS}" > ${CACHE}/status_${ID_LIVY}
+        echo "${STATUS}" > ${REGISTRY}/status_${ID_LIVY}
         echo "Status of task ${ID_LIVY} is '${STATUS}'"
         [[ ${STATUS} == 'DEAD' ]] && exit 111
         [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]] || break
-        LOGS=$(./api_maacdo.pl -a LogsTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par)
+        LOGS=$(./api_maacdo.pl -a LogsTacheSpark -j ${ID_LIVY} -c ${REGISTRY}/ci_job.par)
         CURRENT=$(printf '%s' "${LOGS}" | md5sum)
         if [[ ${LAST} == ${CURRENT} ]]
         then
@@ -205,89 +234,91 @@ wait_for_task_finishing:
         sleep 60
       done
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
 
 stop_spark_task:
   stage: deploy
   extends: .lake
-  needs: ["start_spark_task"]
+  needs:
+    - job: "start_spark_task"
   script:
-    - export ID_LIVY=$(cat ${CACHE}/idLivy)
-    - export STATUS=$(cat ${CACHE}/status_${ID_LIVY})
+    - export ID_LIVY=$(cat ${REGISTRY}/idLivy)
+    - export STATUS=$(cat ${REGISTRY}/status_${ID_LIVY})
     - echo "Task ${ID_LIVY} has status ${STATUS}."
     - |
       if [[ ${STATUS} == 'STARTING' ||  ${STATUS} == 'RUNNING' ]]
       then
-        ./api_maacdo.pl -a ArretTacheSpark   -j ${ID_LIVY} -c ${CACHE}/ci_job.par
+        ./api_maacdo.pl -a ArretTacheSpark -j ${ID_LIVY} -c ${REGISTRY}/ci_job.par
       else
         echo "Nothing to do."
       fi
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
       when: manual
+      allow_failure: true
+
+### Post-processing
 
 pages:
   stage: deploy
   extends: .python
+  needs:
+    - job: "prepare_python_venv"
   script:
-    - pwd
     - pip install sphinx sphinx-rtd-theme
     - cd docs/
     - sphinx-apidoc -f -o source/ ../src/
     - make html
     - mv build/html/ ../public/
+  when: manual
 #  artifacts:
 #    paths:
 #      - public
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - src/sf_datalake/*
 
 fetch_yarn_logs:
   stage: .post
   extends: .lake
-  needs: ["wait_for_task_finishing"]
+  needs:
+    - job: "wait_for_task_finishing"
   script:
-    - export ID_LIVY=$(cat ${CACHE}/idLivy)
-    - ./api_maacdo.pl -a YarnLogsTacheSpark  -j ${ID_LIVY} -c ${CACHE}/ci_job.par
-    - |
-      for file in $(ls ${CACHE}/log/YarnLogsTacheSpark_*)
-      do
-        echo " --- log file -> ${file} --- "
-        tail -n 100 ${file}
-        echo " --------------- "
-      done
+    - export ID_LIVY=$(cat ${REGISTRY}/idLivy)
+    - echo "Fetching YARN logs after job failure."
+    - ./api_maacdo.pl -a YarnLogsTacheSpark -j ${ID_LIVY} -c ${REGISTRY}/ci_job.par
+    - find ${REGISTRY}/log/ -type f -name 'YarnLogsTacheSpark_*' -execdir cat '{}' + | grep -v 'OnOutOfMemoryError' | grep 'Error' -B 20
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
       when: on_failure
 
-fetch_model_outputs:
+fetch_run_outputs_from_HDFS:
   stage: .post
   extends: .lake
-  needs: ["wait_for_task_finishing"]
+  needs:
+    - job: "wait_for_task_finishing"
   script:
-    - export ID_LIVY=$(cat ${CACHE}/idLivy)
-    - |
-      MODEL_OUTPUT=$(jq --raw-output '[.sparkTask.args as $m | range(0; $m | length; 2) | {($m[.]): $m[(. + 1)]} ] | add | .["--output_directory"]' ${CACHE}/spark_config.json)
-      echo "Fetching results from ${MODEL_OUTPUT}"
-      [[ -z ${MODEL_OUTPUT} ]] && exit 1
-    - bash recup_folder.sh ${MODEL_OUTPUT} ${CACHE}/results ${CACHE}/ci_job.par
-    - |
-      for file in ${CACHE}/results/*
-      do
-        # Gather all csv outputs into a zip and delete the csv files
-        # if spark job has succeeded.
-        zip ${file}.zip ${file} && rm ${file}
-      done
+    - export ID_LIVY=$(cat ${REGISTRY}/idLivy)
+    - echo "Parsing ${REGISTRY}/spark_config.json looking for '--output_directory' argument."
+    - cat ${REGISTRY}/spark_config.json
+    - > # select 'sparkTask.args', build json objects like { "--param": "value"}, add these objects in an array, then select value for "--output_directory" key
+      MODEL_OUTPUT_DIR=$(jq --raw-output '[.sparkTask.args as $m | range(0; $m | length; 2) | {($m[.]): $m[(. + 1)]} ] | add | .["--output_directory"]' ${REGISTRY}/spark_config.json)
+    - echo "Found '--output_directory'=${MODEL_OUTPUT_DIR}"
+    - > # if MODEL_OUTPUT_DIR is not found, exit
+      [[ -z ${MODEL_OUTPUT_DIR} ]] && exit 1
+    - bash fetchFolder.sh ${MODEL_OUTPUT_DIR} ${REGISTRY}/results ${REGISTRY}/ci_job.par
+    - echo "Gathering fetched outputs into ${REGISTRY}/results.zip"
+    - zip -j ${REGISTRY}/results.zip ${REGISTRY}/results/*
+    - rm -r ${REGISTRY}/results/
+    - echo "Removing remote results in ${MODEL_OUTPUT_DIR}"
+    - bash rmRecursiveHdfs.sh ${MODEL_OUTPUT_DIR} ${REGISTRY}/ci_job.par
   rules:
-    - if: $RUN_SPARK_TASK == "yes"
+    - if: $DEPLOYMENT_TYPE != "null"
+      when: always
 
-#
-# END of PIPELINE
-#
+######################
+# PIPELINE ENDS HERE #
+######################
 
-print-docker-env:
+
+print-python-env:
   stage: .pre
   extends: .python
   script:
@@ -303,12 +334,12 @@ print-shell-env:
   script:
     - env | sort
     - whoami
-    - echo "Files on the nubo VM at $(pwd):"
-    - ls -al
-    - echo "Files on the HDFS at ${LAKE_MODULES_DIR}:"
-    - ./api_maacdo.pl
-      -a ListContenuRepertoire
-      -i ${LAKE_MODULES_DIR}
-    - echo "Files in ${CACHE}:"
-    - ls -al ${CACHE}
+    - pwd
+    - echo "ID_LIVY = $(cat ${REGISTRY}/idLivy)"
+    - echo "ID_LIVY status = $(cat ${REGISTRY}/status_${ID_LIVY})"
+    - echo "Spark config:"
+    - cat ${REGISTRY}/spark_config.json
+    - echo "MaacDo version = $(cat ${REGISTRY}/.maacdo_version"
+    - echo "MaacDo configuration:"
+    - cat ${REGISTRY}/ci_job.par
   when: manual

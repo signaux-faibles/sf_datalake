@@ -16,13 +16,12 @@ ignore=CVS
 # regex matches against base names, not paths.
 ignore-patterns=
 
-# Python code to execute, usually for sys.path manipulation such as
-# pygtk.require().
-#init-hook=
+# As a temporary workaround for https://github.com/PyCQA/pylint/issues/4577
+init-hook = "import astroid; astroid.context.InferenceContext.max_inferred = 500"
 
 # Use multiple processes to speed up Pylint. Specifying 0 will auto-detect the
 # number of processors available to use.
-jobs=1
+jobs=0
 
 # Control the amount of potential inferred values when inferring a single
 # object. This can help the performance when dealing with large functions or
@@ -254,7 +253,7 @@ indent-string='    '
 max-line-length=88
 
 # Maximum number of lines in a module.
-max-module-lines=1000
+max-module-lines=2000
 
 # Allow the body of a class to be on the same line as the declaration if body
 # contains single statement.
@@ -274,7 +273,7 @@ ignore-comments=yes
 ignore-docstrings=yes
 
 # Ignore imports when computing similarities.
-ignore-imports=no
+ignore-imports=yes
 
 # Minimum lines number of a similarity.
 min-similarity-lines=4
@@ -353,7 +352,7 @@ good-names=i,
 good-names-rgxs=
 
 # Include a hint for the correct naming format with invalid-name.
-include-naming-hint=no
+include-naming-hint=yes
 
 # Naming style matching correct inline iteration names.
 inlinevar-naming-style=any

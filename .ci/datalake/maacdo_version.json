@@ -1,10 +1,10 @@
 {
     "maacdo": {
         "default": {
-            "version": "v0.0.1"
+            "version": "v2.1.0"
         },
-        "test-able-to-choose-maacdo-version": {
-            "version": "test_branch"
+        "an-sf-datalake-CI_COMMIT_REF_SLUG-(branch or tag)": {
+            "version": "the-branch-or-tag-to-be-checked-out-from-the-maacdo-gitlab-repository"
         }
     }
 }

@@ -2,8 +2,8 @@
 
 from typing import Tuple
 
+import pyspark
 import pyspark.sql
-from pyspark.sql import functions as F
 
 
 def train_test_predict_split(
@@ -21,14 +21,14 @@ def train_test_predict_split(
 
     Args:
         df: the DataFrame to sample
-        config: model configuration, as loaded by utils.get_config().
+        config: model configuration, as loaded by io.load_parameters().
 
     Returns:
         A tuple of three DataFrame, each associated with the following stages: learn,
           test, prediction.
 
     """
-    will_fail_mask = df["failure_within_18m"].astype("boolean")
+    will_fail_mask = df[config["TARGET"]["outputCol"]].astype("boolean")
 
     n_samples = df.count()
     n_failing = df.filter(will_fail_mask).count()
@@ -53,16 +53,15 @@ def train_test_predict_split(
 
     train = (
         oversampled_subset.filter(
-            oversampled_subset["periode"] > config["TRAIN_DATES"][0]
+            oversampled_subset["periode"] >= config["TRAIN_DATES"][0]
         )
-        .filter(oversampled_subset["periode"] < config["TRAIN_DATES"][1])
+        .filter(oversampled_subset["periode"] <= config["TRAIN_DATES"][1])
         .join(siren_train, how="inner", on="siren")
     )
     test = (
-        df.filter(df["periode"] > config["TEST_DATES"][0])
-        .filter(df["periode"] < config["TEST_DATES"][1])
+        df.filter(df["periode"] >= config["TEST_DATES"][0])
+        .filter(df["periode"] <= config["TEST_DATES"][1])
         .join(siren_test, how="inner", on="siren")
     )
-
-    prediction = df.filter(F.to_date(df["periode"]) == config["PREDICTION_DATE"])
+    prediction = df.filter(df["periode"] == config["PREDICTION_DATE"])
     return train, test, prediction
