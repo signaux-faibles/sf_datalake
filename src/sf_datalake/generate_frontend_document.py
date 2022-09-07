@@ -22,46 +22,6 @@ import sf_datalake.io
 import sf_datalake.predictions
 import sf_datalake.utils
 
-
-def tailoring_rule(row) -> int:
-    """Details how predictions should evolve based on tailorings.
-
-    The tailoring rule will return an int (-1, 0, or 1) that describes alert level
-    evolution based on the truth values of some of `row`'s given elements.
-
-    Args:
-        row: Any object that has a `__getitem__` method.
-
-    Returns:
-        Either -1, 0, or 1, respectively corresponding to decrease, no change, increase
-        of the alert level.
-
-    """
-    tailoring = 0
-    if row["augmentation_dette_urssaf_recente"]:
-        tailoring += 1
-    if (
-        row["diminution_dette_urssaf_ancienne"]
-        and not row["augmentation_dette_urssaf_recente"]
-        and row["dette_urssaf_macro_preponderante"]
-    ):
-        tailoring -= 1
-    if row["demande_activite_partielle_elevee"]:
-        tailoring += 1
-
-    return min(max(tailoring, -1), 1)
-
-
-def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
-    """Left pad an iterable of SIREN with zeroes if needed."""
-    return x.astype(str).str.zfill(9)
-
-
-def normalize_siret(x: Union[pd.Series, pd.Index]) -> pd.Series:
-    """Left pad an iterable of SIRET with zeroes if needed."""
-    return x.astype(str).str.zfill(13)
-
-
 parser = argparse.ArgumentParser(
     description="""Generate a JSON document usable by the front-end Signaux Faibles
     application."""
@@ -94,7 +54,6 @@ path_group.add_argument(
     help="Generated JSON document output path.",
 )
 path_group.add_argument(
-    "-v",
     "--variables",
     help="Path to the variables configuration file.",
     required=True,
@@ -111,15 +70,21 @@ path_group.add_argument(
     features (i.e., the ones with highest values) values.""",
 )
 path_group.add_argument(
-    "--tailoring_data",
+    "--urssaf_tailoring_data",
     required=True,
-    help="Path to a csv containing required tailoring data.",
+    help="Path to a csv containing required urssaf tailoring data.",
 )
 path_group.add_argument(
-    "--n_months",
+    "--pu_tailoring_data",
+    required=True,
+    help="Path to a csv containing required partial unemployment tailoring data.",
+)
+parser.add_argument(
+    "--pu_n_days",
     help="""Number of months to consider as upper threshold for partial unemployment
     tailoring.""",
-    default=10,
+    type=int,
+    default=241,
 )
 parser.add_argument(
     "--concerning_threshold",
@@ -128,6 +93,50 @@ parser.add_argument(
     help="""Threshold above which a `feature * weight` product is considered
     'concerning'.""",
 )
+
+
+def tailoring_rule(row) -> int:
+    """Details how predictions should evolve based on tailorings.
+
+    The tailoring rule will return an int (-1, 0, or 1) that describes alert level
+    evolution based on the truth values of some of `row`'s given elements.
+
+    Args:
+        row: Any object that has a `__getitem__` method.
+
+    Returns:
+        Either -1, 0, or 1, respectively corresponding to decrease, no change, increase
+        of the alert level.
+
+    """
+    tailoring = 0
+    if (
+        row["augmentation_dette_sur_cotisation_urssaf_recente"]
+        and not row["dette_urssaf_macro_preponderante"]
+    ):
+        tailoring += 1
+    if (
+        row["diminution_dette_urssaf_ancienne"]
+        and row["dette_urssaf_ancienne_significative"]
+        # TODO: check if this should be activated
+        # and not row["augmentation_dette_sur_cotisation_urssaf_recente"]
+    ):
+        tailoring -= 1
+    if row["demande_activite_partielle_elevee"]:
+        tailoring += 1
+
+    return min(max(tailoring, -1), 1)
+
+
+def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
+    """Left pad an iterable of SIREN with zeroes if needed."""
+    return x.astype(str).str.zfill(9)
+
+
+def normalize_siret(x: Union[pd.Series, pd.Index]) -> pd.Series:
+    """Left pad an iterable of SIRET with zeroes if needed."""
+    return x.astype(str).str.zfill(13)
+
 
 # Parse CLI arguments, load predictions configuration and supplementary data
 
@@ -142,12 +151,12 @@ micro_macro = {
 }
 
 additional_data = {
-    "idListe": "Mai 2022",
-    "batch": "2203",
+    "idListe": "Sept 2022",
+    "batch": "2208",
     "algo": "avec_paydex"
     if "retards_paiement" in pred_vars["FEATURE_GROUPS"]
     else "sans_paydex",
-    "periode": "2022-05-01T00:00:00Z",
+    "periode": "2022-09-01T00:00:00Z",
 }
 
 # Load prediction lists
@@ -194,73 +203,78 @@ prediction_set["pre_tailoring_alert_group"] = prediction_set["probability"].appl
 )
 
 ### A posteriori alert tailoring
-tailoring_data = pd.read_csv(args.tailoring_data)
-tailoring_data["siret"] = normalize_siret(tailoring_data["siret"])
-tailoring_data["siren"] = tailoring_data["siret"].str[:9]
+urssaf_df = pd.read_csv(args.urssaf_tailoring_data)
+ap_df = pd.read_csv(args.pu_tailoring_data, index_col="ETAB_SIRET")
+
+# Partial unemployment
+ap_df.index = normalize_siret(ap_df.index)
+ap_df["siren"] = ap_df.index.str[:9]
+ap_df["n_jours"] = pd.to_timedelta(ap_df["n_jours"])
+max_pu_days = ap_df.groupby("siren")["n_jours"].max()
 
 # Urssaf tailoring
-debt_data = (
-    tailoring_data.drop(["total_demande_ap", "siret"], axis="columns")
-    .groupby(["siren"])
-    .agg(sum)
+urssaf_df = urssaf_df.set_index(normalize_siren(urssaf_df["siren"])).drop(
+    columns="siren"
 )
-debt_data["dette_recente_reference"] = 0.0
-debt_data["dette_recente_courante"] = (
-    debt_data["montant_part_patronale_recente_courante"]
-    + debt_data["montant_part_ouvriere_recente_courante"]
+urssaf_df["periode"] = pd.to_datetime(urssaf_df["periode"], utc=True).dt.tz_localize(
+    None
 )
-debt_data["dette_ancienne_courante"] = (
-    debt_data["montant_part_patronale_ancienne_courante"]
-    + debt_data["montant_part_ouvriere_ancienne_courante"]
+urssaf_df["dette"] = (
+    urssaf_df["montant_part_patronale"] + urssaf_df["montant_part_ouvriere"]
 )
-debt_data["dette_ancienne_reference"] = (
-    debt_data["montant_part_patronale_ancienne_reference"]
-    + debt_data["montant_part_ouvriere_ancienne_reference"]
+avg_contrib = urssaf_df.pop("cotisation_moyenne")
+avg_contrib = avg_contrib[~avg_contrib.index.duplicated()]
+
+# Masks
+old_debt_mask = urssaf_df["periode"].between(
+    pd.Timestamp("2020-01-01"), pd.Timestamp("2021-09-01")
 )
-recent_debt_cols = {
-    "start": "dette_recente_reference",
-    "end": "dette_recente_courante",
-    "contribution": "cotisation_moyenne_12m",
-}
-previous_debt_cols = {
-    "start": "dette_ancienne_reference",
-    "end": "dette_ancienne_courante",
-    "contribution": "cotisation_moyenne_12m",
-}
+one_year_schedule_mask = urssaf_df["periode"].between(
+    pd.Timestamp("2020-09-01"), pd.Timestamp("2021-08-31")
+)
 
 ### Apply tailoring
 tailoring_signals = {
     "diminution_dette_urssaf_ancienne": (
-        sf_datalake.predictions.urssaf_debt_change,
+        sf_datalake.predictions.urssaf_debt_decrease_indicator,
         {
-            "debt_df": debt_data,
-            "debt_cols": previous_debt_cols,
-            "increasing": False,
-            "tol": 0.2,
+            "debt_p1": urssaf_df[old_debt_mask]["dette"],
+            "debt_p2": urssaf_df[~old_debt_mask]["dette"],
+            "thresh": 0.1,
         },
     ),
-    "augmentation_dette_urssaf_recente": (
-        sf_datalake.predictions.urssaf_debt_change,
+    "dette_urssaf_ancienne_significative": (
+        sf_datalake.predictions.urssaf_debt_vs_payment_schedule_indicator,
         {
-            "debt_df": debt_data,
-            "debt_cols": recent_debt_cols,
-            "increasing": True,
-            "tol": 0.2,
+            "debt_s": urssaf_df[old_debt_mask].groupby("siren")["dette"].max(),
+            "contribution_s": avg_contrib,
+            "thresh": 0.1,
+        },
+    ),
+    "augmentation_dette_sur_cotisation_urssaf_recente": (
+        sf_datalake.predictions.urssaf_debt_vs_payment_schedule_indicator,
+        {
+            "debt_s": (
+                urssaf_df[urssaf_df["periode"] == pd.Timestamp("2022-07-01")]["dette"]
+                - urssaf_df[urssaf_df["periode"] == pd.Timestamp("2022-04-01")]["dette"]
+            ),
+            "contribution_s": avg_contrib,
+            "thresh": 0.1,
         },
     ),
     "demande_activite_partielle_elevee": (
-        sf_datalake.predictions.partial_unemployment_signal,
+        sf_datalake.predictions.high_partial_unemployment_request_indicator,
         {
-            "pu_df": tailoring_data.set_index("siret"),
-            "pu_col": "total_demande_ap",
-            "threshold": args.n_months,
+            "pu_s": max_pu_days,
+            "threshold": pd.Timedelta(args.pu_n_days, unit="day"),
         },
     ),
     "dette_urssaf_macro_preponderante": (
-        sf_datalake.predictions.urssaf_debt_prevails,
+        sf_datalake.predictions.urssaf_debt_prevails_indicator,
         {"macro_df": macro_explanation},
     ),
 }
+
 prediction_set = sf_datalake.predictions.tailor_alert(
     prediction_set,
     tailoring_signals,
