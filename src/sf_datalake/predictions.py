@@ -87,71 +87,82 @@ def tailor_alert(
     return predictions_df
 
 
-def partial_unemployment_signal(
-    pu_df: pd.DataFrame,
-    pu_col: str,
-    threshold: int,
+def high_partial_unemployment_request_indicator(
+    pu_s: pd.Series,
+    threshold: pd.Timedelta,
 ) -> pd.Index:
-    """Computes if alert level should be modified based on partial unemployment.
+    """Computes an alert indicator based on partial unemployment request.
 
-    The input DataFrame is indexed at the SIRET (entity) level, and this function helps
-    determine if any of the company's entities has filed requests amounting to a maximal
-    allowed value.
+    The input DataFrame / Series simply gives .
 
     Args:
-        pu_df: Partial unemployment data, used to decide whether or not alert level
-          should be updated. Index should be a list of SIRETs, not SIRENs.
-        pu_col: Name of the column holding allowed partial unemployment duration.
-        threshold: A number of months above which the tailoring switch is triggered.
+        pu_s: The number of requested partial unemployment days during a given timespan.
+        threshold: A duration above which the tailoring switch is triggered.
 
     Returns:
         The (siren) indexes where partial unemployment requests level is deemed high.
 
     """
-    assert pu_df.index.name == "siret"
-    pu_df["high_pu_request"] = pu_df[pu_col] > threshold
-    siren_mask = pu_df.groupby("siren")["high_pu_request"].agg(pd.Series.any)
-    return siren_mask[siren_mask].index
+    return pu_s[pu_s > threshold].index
 
 
-def urssaf_debt_change(
-    debt_df: pd.DataFrame,
-    debt_cols: Dict[str, str],
-    increasing: bool = True,
-    tol: float = 0.2,
+def urssaf_debt_decrease_indicator(
+    debt_p1: pd.Series,
+    debt_p2: pd.Series,
+    thresh: float = 0.1,
 ) -> pd.Index:
-    """States if some debt value has increased/decreased.
+    """States if some debt value has signficantly decreased.
 
-    States if companies debt change over time, relative to the company's annual
-    contributions, exceeds some input threshold.
+    Debt is considered over two periods of time: `p1`, and `p2`. Each series should
+    be indexed by siren and can hold multiple values for each given siren.
 
     Args:
-        debt_df: Debt data, used to decide whether or not alert level should be
-          upgraded.
-        debt_cols : A dict mapping names to lists of columns to be compared:
-          - "start": The starting point of debt change.
-          - "end": The ending point of debt change.
-          - "contribution": An average annual contribution value.
-        increasing: if `True`, points out cases where computed change is greater than
-          `tol`. If `False`, points out cases where the opposite of computed change is
-           greater than `tol`.
-        tol: the threshold, as a percentage of debt / contributions change, above which
-          the alert level should be updated.
+
 
     Returns:
-        The (siren) indexes where urssaf debt change is significant.
+        The (siren) indexes where debt change is (relatively) significant.
+
+    """
+    debt_p1_max = debt_p1.groupby("siren").max()
+    debt_p2_min = debt_p2.groupby("siren").min()
+    inter_index = debt_p1_max.index.intersection(debt_p2_min.index)
+    mask = debt_p1_max[inter_index] > 0 & (
+        debt_p2_min[inter_index] / debt_p1_max[inter_index] < thresh
+    )
+    return mask[mask].index
+
+
+def urssaf_debt_vs_payment_schedule_indicator(
+    debt_s: pd.Series,
+    contribution_s: pd.Series,
+    increasing: bool = True,
+    thresh: float = 0.1,
+) -> pd.Index:
+    """States if some debt value has increased/decreased wrt to payment schedule.
+
+    Returns True for indexes where companies debt, relative to monthly average
+    contributions over some payment schedule, exceeds some input threshold.
+
+    Args:
+        debt_s: Debt data, used to decide whether or not alert level should be
+          upgraded.
+        debt_s :
+        increasing: if `True`, points out cases where computed change is greater than
+          `thresh`. If `False`, points out cases where the opposite of computed change
+          is greater than `thresh`.
+        thresh: The threshold, as a percentage of debt / contributions change, above
+          which the alert level should be updated.
+
+    Returns:
+        The (siren) indexes where urssaf debt value is significant wrt contributions.
 
     """
     sign = 1 if increasing else -1
-    debt_change = (
-        sign
-        * (debt_df[debt_cols["end"]] - debt_df[debt_cols["start"]])
-        / (debt_df[debt_cols["contribution"]] * 12)
-    )
-    return debt_df[debt_change > tol].index
+    debt_ratio = sign * debt_s / (contribution_s * 12)
+    return debt_ratio[debt_ratio > thresh].index
 
 
-def urssaf_debt_prevails(
+def urssaf_debt_prevails_indicator(
     macro_df: pd.DataFrame,
 ) -> pd.Index:
     """States if URSSAF debt prevails among concerning predictors groups.
