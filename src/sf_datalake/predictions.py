@@ -96,7 +96,7 @@ def high_partial_unemployment_request_indicator(
     The input DataFrame / Series simply gives .
 
     Args:
-        pu_s: The number of requested partial unemployment days during a given timespan.
+        pu_s: The number of requested partial unemployment days over a given period.
         threshold: A duration above which the tailoring switch is triggered.
 
     Returns:
@@ -113,11 +113,15 @@ def urssaf_debt_decrease_indicator(
 ) -> pd.Index:
     """States if some debt value has signficantly decreased.
 
-    Debt is considered over two periods of time: `p1`, and `p2`. Each series should
-    be indexed by siren and can hold multiple values for each given siren.
+    Debt is considered over two periods of time: `p1`, and `p2`. Each series should be
+    indexed by siren and can hold multiple values for each given siren. The decrease is
+    considered significant if debt over p1 is positive, and if min(p2) / max(p1) does
+    not exceed the input threshold.
 
     Args:
-
+        debt_p1: Debt over period 1.
+        debt_p2: Debt over period 2.
+        threshold: A threshold for the debt ratio.
 
     Returns:
         The (siren) indexes where debt change is (relatively) significant.

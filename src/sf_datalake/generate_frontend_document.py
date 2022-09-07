@@ -213,7 +213,7 @@ ap_df["n_jours"] = pd.to_timedelta(ap_df["n_jours"])
 max_pu_days = ap_df.groupby("siren")["n_jours"].max()
 
 # Urssaf tailoring
-urssaf_df = urssaf_df.set_index(urssaf_df["siren"].astype(str).str.zfill(9)).drop(
+urssaf_df = urssaf_df.set_index(normalize_siren(urssaf_df["siren"])).drop(
     columns="siren"
 )
 urssaf_df["periode"] = pd.to_datetime(urssaf_df["periode"], utc=True).dt.tz_localize(
@@ -226,7 +226,6 @@ avg_contrib = urssaf_df.pop("cotisation_moyenne")
 avg_contrib = avg_contrib[~avg_contrib.index.duplicated()]
 
 # Masks
-# TODO: replace with a `between` and set a lower date.
 old_debt_mask = urssaf_df["periode"].between(
     pd.Timestamp("2020-01-01"), pd.Timestamp("2021-09-01")
 )
