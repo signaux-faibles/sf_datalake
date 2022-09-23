@@ -24,7 +24,6 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -112,7 +111,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.rsq_venv
 
 # Spyder project settings
 .spyderproject
@@ -123,6 +121,9 @@ venv.bak/
 
 # mkdocs documentation
 /site
+
+# Emacs directory configuration
+.dir-locals.el
 
 # mypy
 .mypy_cache/
@@ -137,7 +138,3 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-
-*.tar.gz
-.git-credentials
-.rsq_venv/
