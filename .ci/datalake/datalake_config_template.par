@@ -4,7 +4,7 @@ mdpconx=${API_MAACDO_PWD}
 trace=0
 dumptrace=0
 aide=0
-reptrdplg=/dev/null
+reptrdplg=./log
 
 [ArretTacheSpark]
 #logout=${REGISTRY}/log/ArretTacheSpark_
@@ -17,7 +17,6 @@ data=${SPARK_CONFIG}
 #logout=${REGISTRY}/log/DemarrageTacheSpark_
 
 [EnvoyerFichier]
-# in this case, must precise an existing file
 #logout=${REGISTRY}/log/EnvoyerFichier_
 
 [EtatTacheSpark]

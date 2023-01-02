@@ -118,7 +118,7 @@ install_package:
     - job: "prepare_new_working_directory"
     - job: "prepare_python_venv"
   script:
-    - pip install -v .
+    - pip install -v .[pack]
 
 venv_pack:
   stage: build
