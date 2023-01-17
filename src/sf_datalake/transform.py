@@ -89,39 +89,36 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
 
 def vector_disassembler(
     df: pyspark.sql.DataFrame,
-    feature_names: List[str],
-    feature_assembled_name: str,
-    keep_col_names: List[str] = None,
+    columns: List[str],
+    assembled_col: str,
+    keep: List[str] = None,
 ) -> pyspark.sql.DataFrame:
     """Inverse operation of `pyspark.ml.feature.VectorAssembler` operator.
 
     Args:.
         df: input DataFrame.
-        feature_names: individual features previously assembled from a VectorAssembler.
-        feature_assembled_name: name of the assembled feature from a VectorAssembler.
-        keep_col_names: additional features to keep that have not been assembled.
+        columns: individual columns previously assembled by a `VectorAssembler`.
+        assembled_col: `VectorAssembler`'s output column name.
+        keep: additional columns to keep that are not part of the assembled column.
 
     Returns:
-        A DataFrame with individual features that have been disassembled.
+        A DataFrame with columns that have been "disassembled".
 
     """
-    if keep_col_names is None:
-        keep_col_names = []
-    assert set(keep_col_names + [feature_assembled_name]) <= set(df.columns)
+    if keep is None:
+        keep = []
+    assert set(keep + [assembled_col]) <= set(df.columns)
 
     def udf_vector_disassembler(col):
         return F.udf(lambda v: v.toArray().tolist(), T.ArrayType(T.DoubleType()))(col)
 
-    df = df.select(keep_col_names + [feature_assembled_name])
+    df = df.select(keep + [assembled_col])
     df = df.withColumn(
-        feature_assembled_name, udf_vector_disassembler(F.col(feature_assembled_name))
-    ).select(
-        keep_col_names
-        + [F.col(feature_assembled_name)[i] for i in range(len(feature_names))]
-    )
+        assembled_col, udf_vector_disassembler(F.col(assembled_col))
+    ).select(keep + [F.col(assembled_col)[i] for i in range(len(columns))])
 
-    for i, feat in enumerate(feature_names):
-        df = df.withColumnRenamed(f"{feature_assembled_name}[{i}]", feat)
+    for i, col in enumerate(columns):
+        df = df.withColumnRenamed(f"{assembled_col}[{i}]", col)
     return df
 
 
@@ -1049,25 +1046,6 @@ class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
         if "effectif" not in dataset.columns:
             raise KeyError("Dataset has no 'effectif' column.")
         return dataset.filter(F.col("effectif") >= 10)
-
-
-class ProbabilityFormatter(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to format the probability column in output of a model."""
-
-    def _transform(  # pylint: disable=no-self-use
-        self, dataset: pyspark.sql.DataFrame
-    ) -> pyspark.sql.DataFrame:
-        """Extract the positive probability and cast it as float.
-
-        Args:
-            dataset: DataFrame to transform
-
-        Returns:
-            Transformed DataFrame with casted probability data.
-
-        """
-        transform_udf = F.udf(lambda v: float(v[1]), T.FloatType())
-        return dataset.withColumn("probability", transform_udf("probability"))
 
 
 class Covid19Adapter(Transformer):  # pylint: disable=too-few-public-methods
