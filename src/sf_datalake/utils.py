@@ -1,9 +1,8 @@
 """Utility functions."""
 
-from typing import Dict, List
+from typing import List
 
 import pyspark.sql
-import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.sql import SparkSession
 
@@ -42,22 +41,6 @@ def numerical_columns(df: pyspark.sql.DataFrame) -> List[str]:
     ]
 
 
-def transformer_features_mapping(config: dict) -> Dict[str, List[str]]:
-    """Associates each transformer with a list of features.
-
-    Args:
-        config: model configuration, as loaded by get_config().
-
-    Returns:
-        The transformer -> features mapping.
-
-    """
-    transformer_features = {}
-    for feature, transformer in config["FEATURES"].items():
-        transformer_features.setdefault(transformer, []).append(feature)
-    return transformer_features
-
-
 def feature_index(config: dict) -> List[str]:
     """Generates an index associated with the features matrix columns.
 
@@ -88,17 +71,3 @@ def feature_index(config: dict) -> List[str]:
                 f"Indexing for transformer {transformer} is not implemented yet."
             )
     return indexer
-
-
-@F.udf(returnType=T.ArrayType(T.FloatType()))
-def dense_to_array_udf(assembled_feature: str) -> F.udf:
-    """Transform an assembled column to an array.
-
-    Args:
-        assembled_feature: assembled feature
-
-    Returns:
-        A user-defined function.
-
-    """
-    return [float(x) for x in assembled_feature]
