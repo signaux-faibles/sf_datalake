@@ -234,9 +234,8 @@ model_stages = [
         config["MODEL"], target_col=config["TARGET"]["outputCol"]
     )
 ]
-postprocessing_stages = [sf_datalake.transform.ProbabilityFormatter()]
 
-pipeline = Pipeline(stages=transforming_stages + model_stages + postprocessing_stages)
+pipeline = Pipeline(stages=transforming_stages + model_stages)
 pipeline_model = pipeline.fit(train_data)
 _ = pipeline_model.transform(train_data)
 model = sf_datalake.model.get_model_from_pipeline_model(

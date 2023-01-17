@@ -111,13 +111,23 @@ def write_predictions(
     prediction_output_path = path.join(output_dir, "prediction_data.csv")
 
     logging.info("Writing test data to file %s", test_output_path)
-    test_data.select(["siren", "failure", "probability"]).repartition(n_rep).write.csv(
+    sf_datalake.transform.vector_disassembler(
+        test_data,
+        ["comp_probability", "probability"],
+        assembled_col="probability",
+        keep=["siren", "failure"],
+    ).select(["siren", "failure", "probability"]).repartition(n_rep).write.csv(
         test_output_path, header=True
     )
 
     logging.info("Writing prediction data to file %s", prediction_output_path)
-    prediction_data.select(["siren", "probability"]).repartition(n_rep).write.csv(
-        prediction_output_path, header=True
+    sf_datalake.transform.vector_disassembler(
+        prediction_data,
+        ["comp_probability", "probability"],
+        assembled_col="probability",
+        keep=["siren"],
+    ).select(["siren", "probability"]).repartition(n_rep).write.csv(
+        test_output_path, header=True
     )
 
 
