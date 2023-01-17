@@ -91,20 +91,22 @@ def vector_disassembler(
     df: pyspark.sql.DataFrame,
     feature_names: List[str],
     feature_assembled_name: str,
-    keep_col_names: List[str],
+    keep_col_names: List[str] = None,
 ) -> pyspark.sql.DataFrame:
     """Inverse operation of `pyspark.ml.feature.VectorAssembler` operator.
 
-    Args:
-        df: input DataFrame
-        feature_names: individual features previously assembled from a VectorAssembler
-        feature_assembled_name: name of the assembled feature from a VectorAssembler
-        keep_col_names: additional features to keep that have not been assembled
+    Args:.
+        df: input DataFrame.
+        feature_names: individual features previously assembled from a VectorAssembler.
+        feature_assembled_name: name of the assembled feature from a VectorAssembler.
+        keep_col_names: additional features to keep that have not been assembled.
 
     Returns:
         A DataFrame with individual features that have been disassembled.
 
     """
+    if keep_col_names is None:
+        keep_col_names = []
     assert set(keep_col_names + [feature_assembled_name]) <= set(df.columns)
 
     def udf_vector_disassembler(col):
