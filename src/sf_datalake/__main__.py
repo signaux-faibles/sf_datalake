@@ -263,6 +263,6 @@ sf_datalake.io.write_predictions(
 )
 sf_datalake.io.write_explanations(
     output_directory,
-    spark.createDataFrame(macro_scores),
-    spark.createDataFrame(micro_scores),
+    spark.createDataFrame(macro_scores.reset_index()),
+    spark.createDataFrame(micro_scores.reset_index()),
 )
