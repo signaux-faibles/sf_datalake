@@ -14,7 +14,7 @@ import sf_datalake.utils
 
 def explanation_data(
     features_list: List[str],
-    model: pyspark.sql.ml.Model,
+    model: pyspark.ml.Model,
     train_data: pyspark.sql.DataFrame,
     prediction_data: pyspark.sql.DataFrame,
     n_train_sample: int = 5000,
