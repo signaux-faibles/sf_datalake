@@ -51,7 +51,7 @@ def explanation_data(
                 df=train_data, columns=features_list, assembled_col="features"
             )
             .sample(
-                fraction=min(1, max(0, ((n_train_sample + 1) / train_data.count())))
+                fraction=min(1.0, max(0.0, ((n_train_sample + 1) / train_data.count())))
             )
             .toPandas()
         )
