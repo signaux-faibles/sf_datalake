@@ -50,7 +50,9 @@ def explanation_data(
             sf_datalake.transform.vector_disassembler(
                 df=train_data, columns=features_list, assembled_col="features"
             )
-            .sample(fraction=max(1, ((n_train_sample + 1) / train_data.count())))
+            .sample(
+                fraction=min(1, max(0, ((n_train_sample + 1) / train_data.count())))
+            )
             .toPandas()
         )
 
