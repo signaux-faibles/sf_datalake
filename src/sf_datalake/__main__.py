@@ -20,13 +20,14 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 
+import sf_datalake.explain
 import sf_datalake.io
 import sf_datalake.model
 import sf_datalake.sampler
 import sf_datalake.transform
 import sf_datalake.utils
 
-_ = sf_datalake.utils.get_spark_session()
+spark = sf_datalake.utils.get_spark_session()
 parser = argparse.ArgumentParser(
     description="""
     Run a 'Signaux Faibles' distributed prediction with the chosen set of
@@ -239,17 +240,20 @@ model_stages = [
 
 pipeline = Pipeline(stages=transforming_stages + model_stages)
 pipeline_model = pipeline.fit(train_data)
-_ = pipeline_model.transform(train_data)
+train_transformed = pipeline_model.transform(train_data)
+test_transformed = pipeline_model.transform(test_data)
+prediction_transformed = pipeline_model.transform(prediction_data)
+
 model = sf_datalake.model.get_model_from_pipeline_model(
     pipeline_model, config["MODEL"]["NAME"]
 )
 logging.info("Model weights: %.3f", model.coefficients)
 logging.info("Model intercept: %.3f", model.intercept)
-test_transformed = pipeline_model.transform(test_data)
-prediction_transformed = pipeline_model.transform(prediction_data)
-macro_scores, micro_scores = sf_datalake.model.explain(
-    config, pipeline_model, prediction_transformed
+features_list = sf_datalake.utils.feature_index(config)
+shap_values, expected_value = sf_datalake.explain.explanation_data(
+    features_list, model, train_transformed, prediction_transformed
 )
+macro_scores, micro_scores = sf_datalake.explain.micro_macro_scores(config, shap_values)
 
 # Write outputs.
 sf_datalake.io.write_predictions(
@@ -259,6 +263,6 @@ sf_datalake.io.write_predictions(
 )
 sf_datalake.io.write_explanations(
     output_directory,
-    macro_scores,
-    micro_scores,
+    spark.createDataFrame(macro_scores),
+    spark.createDataFrame(micro_scores),
 )
