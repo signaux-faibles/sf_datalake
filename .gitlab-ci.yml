@@ -73,7 +73,7 @@ prepare_python_venv:
     - python -V  # Print out python version for debugging
     - pip install -U pip
     - pip install virtualenv
-    - virtualenv venv
+    - virtualenv --always-copy venv
 
 prepare_new_working_directory:
   stage: .pre
