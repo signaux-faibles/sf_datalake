@@ -134,14 +134,16 @@ def write_predictions(
 def write_explanations(
     output_dir: str,
     macro_scores_df: pyspark.sql.DataFrame,
-    micro_scores_df: pyspark.sql.DataFrame,
+    concerning_scores_df: pyspark.sql.DataFrame,
     n_rep: int = 5,
 ):
     """Writes the explanations of a prediction to CSV files."""
     concerning_output_path = path.join(output_dir, "concerning_values.csv")
     explanation_output_path = path.join(output_dir, "explanation_data.csv")
     logging.info("Writing concerning features to file %s", concerning_output_path)
-    micro_scores_df.repartition(n_rep).write.csv(concerning_output_path, header=True)
+    concerning_scores_df.repartition(n_rep).write.csv(
+        concerning_output_path, header=True
+    )
 
     logging.info(
         "Writing explanation macro scores data to directory %s", explanation_output_path

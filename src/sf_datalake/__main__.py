@@ -253,7 +253,9 @@ features_list = sf_datalake.utils.feature_index(config)
 shap_values, expected_value = sf_datalake.explain.explanation_data(
     features_list, model, train_transformed, prediction_transformed
 )
-macro_scores, micro_scores = sf_datalake.explain.micro_macro_scores(config, shap_values)
+macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
+    config, shap_values
+)
 
 # Write outputs.
 sf_datalake.io.write_predictions(
@@ -264,5 +266,5 @@ sf_datalake.io.write_predictions(
 sf_datalake.io.write_explanations(
     output_directory,
     spark.createDataFrame(macro_scores.reset_index()),
-    spark.createDataFrame(micro_scores.reset_index()),
+    spark.createDataFrame(concerning_scores.reset_index()),
 )

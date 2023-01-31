@@ -102,7 +102,7 @@ def explanation_data(
     return sv, ev
 
 
-def micro_macro_scores(
+def explanation_scores(
     config: dict, shap_df: pd.DataFrame
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Compute plot-ready feature contribution.
@@ -121,7 +121,8 @@ def micro_macro_scores(
         A 2-uple containing:
         - A "macro scores" df, which contains aggregated features contrbutions across a
           feature group.
-        - A "micro scores" df , which contains
+        - A "concerning scores" df, which contains the most significant individual
+          features contributions.
 
     """
 
@@ -154,5 +155,5 @@ def micro_macro_scores(
     )
     concerning_feat.columns = [f"concerning_feat_{n}" for n in range(n_concerning)]
     concerning_values.columns = [f"concerning_val_{n}" for n in range(n_concerning)]
-    micro_scores = concerning_feat.join(concerning_values)
-    return macro_scores, micro_scores
+    concerning_scores = concerning_feat.join(concerning_values)
+    return macro_scores, concerning_scores
