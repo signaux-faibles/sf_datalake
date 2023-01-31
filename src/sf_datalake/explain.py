@@ -105,7 +105,29 @@ def explanation_data(
 def micro_macro_scores(
     config: dict, shap_df: pd.DataFrame
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Yo"""
+    """Compute plot-ready feature contribution.
+
+    This computes individual, as well as aggregated, features contributions. The most
+    significant contributions (in favor of a positive prediction) are returned as a
+    DataFrame containing concerning feature names and values. The number of concerning
+    features to be returned is read from configuration `N_CONCERNING_MICRO` field.
+
+    Args:
+        config: The run configuration. It should contain `FEATURE GROUPS`, `MESO_GROUPS`
+          and `N_CONCERNING_MICRO` info.
+        shap_df: The shap values associated with the features used for machine learning.
+
+    Returns:
+        A 2-uple containing:
+        - A "macro scores" df, which contains aggregated features contrbutions across a
+          feature group.
+        - A "micro scores" df , which contains
+
+    """
+
+    def min_max_scale(X: pd.DataFrame, vmin: float, vmax: float):
+        scale = (vmax - vmin) / (X.values.max() - X.values.min())
+        return scale * X + vmin - X.values.min() * scale
 
     # Sum "micro" variables that belong to a given group and drop them.
     for group, features in config["MESO_GROUPS"].items():
@@ -116,14 +138,19 @@ def micro_macro_scores(
     macro_scores = pd.DataFrame([], index=shap_df.index)
     for group, features in config["FEATURE_GROUPS"].items():
         macro_scores.loc[:, f"{group}_macro_score"] = shap_df[features].sum(axis=1)
+    macro_scores = min_max_scale(macro_scores, vmin=-1, vmax=1)
 
     # Concerning (highest scoring) features
     n_concerning = config["N_CONCERNING_MICRO"]
     sorter = np.argsort(-shap_df.values, axis=1)[:, :n_concerning]
     concerning_feat = pd.DataFrame(shap_df.columns[sorter], index=shap_df.index)
-    concerning_values = pd.DataFrame(
-        shap_df.values[np.arange(len(shap_df))[:, np.newaxis], sorter],
-        index=shap_df.index,
+    concerning_values = min_max_scale(
+        pd.DataFrame(
+            shap_df.values[np.arange(len(shap_df))[:, np.newaxis], sorter],
+            index=shap_df.index,
+        ),
+        vmin=-1,
+        vmax=1,
     )
     concerning_feat.columns = [f"concerning_feat_{n}" for n in range(n_concerning)]
     concerning_values.columns = [f"concerning_val_{n}" for n in range(n_concerning)]
