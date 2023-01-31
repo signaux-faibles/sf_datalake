@@ -269,7 +269,7 @@ if isinstance(
         pyspark.ml.classification.GBTClassificationModel,
     ),
 ):
-    num_cols = concerning_scores.select_dtypes(include="number").cols
+    num_cols = concerning_scores.select_dtypes(include="number").columns
     concerning_scores.loc[:, num_cols] = 1 / (1 + np.exp(-concerning_scores[num_cols]))
     macro_scores = 1 / (1 + np.exp(-macro_scores))
 
