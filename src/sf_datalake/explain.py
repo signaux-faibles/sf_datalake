@@ -22,8 +22,8 @@ def explanation_data(
     """Compute Shapeley coefficients + expected value for predictions.
 
     Shapeley coefficients represent the contribution to a model output. The computed
-    units depend on the explained model. For instance, for logistic regression, the
-    coefficients computed by shap correspond to log-odds.
+    units depend on the explained model. For instance, for logistic regression, and
+    gradient-boosted trees, the coefficients computed by shap are in log-odds units.
 
     Args:
         model: A pyspark model used for prediction.
@@ -79,9 +79,9 @@ def explanation_data(
     else:
         raise NotImplementedError(f"{model} models are not supported.")
 
-    # Here the `TreeExplainer` may output a list of two elements corresponding to the
+    # Here tree-based models may output a list of two elements corresponding to the
     # two (complementary) classes. Weirdly enough, this seems to happen only with
-    # random forest or tree classifiers… Hence the `[1]` item getting.
+    # random forest or decision tree classifiers… Hence the `[1]` item getting.
     if isinstance(
         model,
         (
@@ -112,6 +112,13 @@ def explanation_scores(
     DataFrame containing concerning feature names and values. The number of concerning
     features to be returned is read from configuration `N_CONCERNING_MICRO` field.
 
+    Contributions are first summed within feature groups:
+    - at a "meso" scale: lagged variables and such, for a given feature.
+    - at a "group" scale: features that   to the same thematic.
+
+    In case contributions are expressed as log-odds, they are first mapped to the [0, 1]
+    range before being returned.
+
     Args:
         config: The run configuration. It should contain `FEATURE GROUPS`, `MESO_GROUPS`
           and `N_CONCERNING_MICRO` info.
@@ -125,11 +132,6 @@ def explanation_scores(
           features contributions.
 
     """
-
-    def min_max_scale(X: pd.DataFrame, vmin: float, vmax: float):
-        scale = (vmax - vmin) / (X.values.max() - X.values.min())
-        return scale * X + vmin - X.values.min() * scale
-
     # Sum "micro" variables that belong to a given group and drop them.
     for group, features in config["MESO_GROUPS"].items():
         shap_df[group] = shap_df[features].sum(axis=1)
@@ -139,20 +141,16 @@ def explanation_scores(
     macro_scores = pd.DataFrame([], index=shap_df.index)
     for group, features in config["FEATURE_GROUPS"].items():
         macro_scores.loc[:, f"{group}_macro_score"] = shap_df[features].sum(axis=1)
-    macro_scores = min_max_scale(macro_scores, vmin=-1, vmax=1)
 
     # Concerning (highest scoring) features
     n_concerning = config["N_CONCERNING_MICRO"]
     sorter = np.argsort(-shap_df.values, axis=1)[:, :n_concerning]
     concerning_feat = pd.DataFrame(shap_df.columns[sorter], index=shap_df.index)
-    concerning_values = min_max_scale(
-        pd.DataFrame(
-            shap_df.values[np.arange(len(shap_df))[:, np.newaxis], sorter],
-            index=shap_df.index,
-        ),
-        vmin=-1,
-        vmax=1,
+    concerning_values = pd.DataFrame(
+        shap_df.values[np.arange(len(shap_df))[:, np.newaxis], sorter],
+        index=shap_df.index,
     )
+
     concerning_feat.columns = [f"concerning_feat_{n}" for n in range(n_concerning)]
     concerning_values.columns = [f"concerning_val_{n}" for n in range(n_concerning)]
     concerning_scores = concerning_feat.join(concerning_values)

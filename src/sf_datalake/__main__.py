@@ -11,6 +11,8 @@ import random
 import sys
 from os import path
 
+import numpy as np
+import pyspark
 from pyspark.ml import Pipeline, PipelineModel
 
 # isort: off
@@ -244,11 +246,14 @@ train_transformed = pipeline_model.transform(train_data)
 test_transformed = pipeline_model.transform(test_data)
 prediction_transformed = pipeline_model.transform(prediction_data)
 
+# Explain predictions
 model = sf_datalake.model.get_model_from_pipeline_model(
     pipeline_model, config["MODEL"]["NAME"]
 )
-logging.info("Model weights: %.3f", model.coefficients)
-logging.info("Model intercept: %.3f", model.intercept)
+if isinstance(model, pyspark.ml.classification.LogisticRegressionModel):
+    logging.info("Model weights: %.3f", model.coefficients)
+    logging.info("Model intercept: %.3f", model.intercept)
+
 features_list = sf_datalake.utils.feature_index(config)
 shap_values, expected_value = sf_datalake.explain.explanation_data(
     features_list, model, train_transformed, prediction_transformed
@@ -256,6 +261,17 @@ shap_values, expected_value = sf_datalake.explain.explanation_data(
 macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
     config, shap_values
 )
+# Convert to [0, 1] range if shap values are expressed in log-odds units.
+if isinstance(
+    model,
+    (
+        pyspark.ml.classification.LogisticRegressionModel,
+        pyspark.ml.classification.GBTClassificationModel,
+    ),
+):
+    num_cols = concerning_scores.select_dtypes(include="number").cols
+    concerning_scores.loc[:, num_cols] = 1 / (1 + np.exp(-concerning_scores[num_cols]))
+    macro_scores = 1 / (1 + np.exp(-macro_scores))
 
 # Write outputs.
 sf_datalake.io.write_predictions(
