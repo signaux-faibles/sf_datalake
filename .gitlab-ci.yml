@@ -36,7 +36,7 @@ workflow:
 .python:
   tags:
     - ci
-  image: python:3.6.8
+  image: python:3.6.8-jessie
   before_script:
     - source venv/bin/activate
   cache:
