@@ -116,6 +116,14 @@
             "ratio_dette",
             "ratio_dette_moy12m",
             "dette_par_effectif_slope3m"
+        ],
+        "paydex_bin": [
+            "paydex_bin_ohcat0",
+            "paydex_bin_ohcat1",
+            "paydex_bin_ohcat2",
+            "paydex_bin_ohcat3",
+            "paydex_bin_ohcat4",
+            "paydex_bin_ohcat5"
         ]
     },
     "FEATURE_GROUPS": {
