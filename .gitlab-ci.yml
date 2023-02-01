@@ -72,8 +72,8 @@ prepare_python_venv:
   script:
     - python -V  # Print out python version for debugging
     - pip install -U pip
-    - pip install virtualenv==15.1.0
-    - virtualenv --always-copy venv
+    - pip install virtualenv==20.16.2
+    - virtualenv venv
 
 prepare_new_working_directory:
   stage: .pre
@@ -118,7 +118,7 @@ install_package:
     - job: "prepare_new_working_directory"
     - job: "prepare_python_venv"
   script:
-    - pip install -v .[pack]
+    - pip install -v .[pack] --no-binary=shap
 
 venv_pack:
   stage: build
