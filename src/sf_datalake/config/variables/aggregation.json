@@ -8,7 +8,6 @@
         "montant_part_ouvriere": "sum",
         "montant_part_patronale": "sum",
         "effectif": "sum",
-        "apart_heures_consommees_cumulees": "sum",
         "apart_heures_consommees": "sum",
         "time_til_failure": "min"
     },
