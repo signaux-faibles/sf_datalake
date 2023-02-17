@@ -171,9 +171,7 @@ if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(config["FEATURES"]):
 
 ## Pre-processing pipeline
 
-filter_steps = [
-    sf_datalake.transform.WorkforceFilter(),
-]
+filter_steps = []
 if with_paydex:
     filter_steps.append(sf_datalake.transform.HasPaydexFilter())
 normalizing_steps = [
