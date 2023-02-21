@@ -52,7 +52,7 @@ parser.add_argument(
 args = parser.parse_args()
 time_comp_config = sf_datalake.io.load_variables(args.time_computations)
 agg_config = sf_datalake.io.load_variables(args.aggregation)
-input_ds = sf_datalake.io.load_data({"input": args.input}, file_format="orc")["input"]
+input_ds = sf_datalake.io.load_data({"input": args.input}, file_format="csv")["input"]
 
 # Set every column name to lower case (if not already).
 siret_level_ds = input_ds.toDF(*(col.lower() for col in input_ds.columns))
