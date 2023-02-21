@@ -67,8 +67,8 @@ def compute_tailoring_signals(
     for name, (function, kwargs) in tailoring_steps.items():
         signal = function(**kwargs)
         signal.name = name
-        predictions_df = df.join(signal, on="siren", how="left")
-    return predictions_df
+        df = df.join(signal, on="siren", how="left")
+    return df
 
 
 def tailor_alert(

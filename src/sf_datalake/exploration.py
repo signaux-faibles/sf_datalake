@@ -134,41 +134,6 @@ def accounting_year_duration(
     return ayd
 
 
-def is_centered(df: pyspark.sql.DataFrame, tol: float) -> Tuple[bool, List]:
-    """Check if a DataFrame has a `features` column with centered individual variables.
-
-    The `features` column is the result of at least a `VectorAssembler()`.
-
-    Args:
-        df: Input DataFrame.
-        tol: A tolerance for the zero equality test.
-
-    Returns:
-        A couple consisting of:
-          - A bool set to True if variables are centered else False.
-          - A list of each column's mean.
-
-    Example:
-        is_centered(train_transformed.select(["features"]), tol = 1E-8)
-
-    """
-    assert "features" in df.columns, "Input DataFrame doesn't have a 'features' column."
-
-    df = df.withColumn(
-        "features_array", sf_datalake.utils.dense_to_array_udf("features")
-    )
-    n_features = len(df.first()["features"])
-
-    df_agg = df.agg(
-        F.array(*[F.avg(F.col("features_array")[i]) for i in range(n_features)]).alias(
-            "mean"
-        )
-    )
-    all_col_means = df_agg.select(F.col("mean")).collect()[0]["mean"]
-
-    return (all(x < tol for x in all_col_means), all_col_means)
-
-
 def one_way_anova(
     df: pyspark.sql.DataFrame, categorical_var: str, continuous_var: str
 ) -> dict:
