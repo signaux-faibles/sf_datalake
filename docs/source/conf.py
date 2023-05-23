@@ -24,7 +24,7 @@ copyright = "2021-2023, Signaux Faibles contributors"
 author = "Signaux Faibles contributors"
 
 # The full version, including alpha/beta/rc tags
-release = "2023.2.dev1"
+release = "2023.5.dev1"
 
 
 # -- General configuration ---------------------------------------------------
