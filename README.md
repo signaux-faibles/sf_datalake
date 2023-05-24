@@ -54,7 +54,7 @@ This will install git hooks that should enforce a set of properties before commi
 - `.ci/` - Contains configuration associated with the maacdo API in order to execute jobs on a cluster using a CI pipeline. This is quite specific to the infrastructure used within the "signaux faibles" project.
 - `docs/` - Sphinx auto-documentation sources.
 - `src/` Contains all the python package source code, see the docs pages for a thorough description or the `__init__.py` module docstring.
- - `preprocessing/` - Production of datasets from raw data. Datasets loading and handling, exploration and feature engineering utilities.
+    - `preprocessing/` - Production of datasets from raw data. Datasets loading and handling, exploration and feature engineering utilities.
 - `test/` - Tests (unitary, integration) associated with the code. They may be executed anytime using `pytest`.
 - `.gitlab-ci.yml` - The gitlab CI/CD tools configuration file.
 - `LICENSE` - The legal license associated with this repository.
