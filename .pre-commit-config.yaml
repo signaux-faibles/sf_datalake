@@ -1,8 +1,6 @@
-default_language_version:
-    python: python3.6
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.1.0
+  rev: v4.4.0
   hooks:
   - id: trailing-whitespace
   - id: end-of-file-fixer
@@ -14,12 +12,12 @@ repos:
   - id: pretty-format-json
     args: ["--autofix", "--indent=4", "--no-sort-keys"]
 - repo: https://github.com/psf/black
-  rev: 22.1.0
+  rev: 23.7.0
   hooks:
   - id: black
   - id: black-jupyter
 - repo: https://github.com/PyCQA/isort
-  rev: 5.10.1
+  rev: 5.12.0
   hooks:
   - id: isort
 - repo: local
