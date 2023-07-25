@@ -1,5 +1,5 @@
 {
-    "DATASET": "/projets/TSF/donnees/agg/full_dataset",
+    "DATASET": "/projets/TSF/data/preprocessed/datasets/full_dataset",
     "IDENTIFIERS": [
         "periode",
         "siren"
