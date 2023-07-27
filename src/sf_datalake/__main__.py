@@ -184,9 +184,7 @@ normalizing_steps = [
     #     inputCols=[""], start="date_deb_tva", end="date_fin_tva"
     # ),
 ]
-feature_engineering_steps = [
-    sf_datalake.transform.Covid19Adapter(config),
-]
+feature_engineering_steps = []
 if with_paydex:
     feature_engineering_steps.append(
         sf_datalake.transform.PaydexOneHotEncoder(
