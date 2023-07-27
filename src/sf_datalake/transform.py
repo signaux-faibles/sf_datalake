@@ -262,13 +262,13 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-metho
         assert {
             "montant_part_ouvriere",
             "montant_part_patronale",
-            "cotisation_moy12m",
+            "cotisation_mean12m",
         } <= set(dataset.columns)
 
         return dataset.withColumn(
             "ratio_dette",
             (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
-            / dataset["cotisation_moy12m"],
+            / dataset["cotisation_mean12m"],
         )
 
 
@@ -404,7 +404,7 @@ class MissingValuesHandler(
         if fill:
             for feature in features:
                 for var, val in value.items():
-                    if re.match(rf"{var}_(diff|slope|moy|lag)\d+m$", feature):
+                    if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", feature):
                         value[feature] = val
                         break
             if not set(features) <= set(value):
@@ -689,7 +689,7 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
             dataset: DataFrame to transform containing time-series data.
 
         Returns:
-            DataFrame with new "var_moy[n]m" columns, where [n] is a number of months
+            DataFrame with new "var_mean[n]m" columns, where [n] is a number of months
             over which `var`'s average is computed.
 
         """
@@ -718,7 +718,7 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
         feat = self.getOrDefault("inputCol")
         for n in n_months:
             dataset = dataset.withColumn(
-                f"{feat}_moy{n}m",
+                f"{feat}_mean{n}m",
                 F.avg(F.col(feat)).over(time_windows[n]),
             )
 
