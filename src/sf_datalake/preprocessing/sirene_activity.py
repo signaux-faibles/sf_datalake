@@ -1,12 +1,13 @@
 """Extract activity period of companines
 
 USAGE
-    python sirene_activity.py -- <output_directory> 
+    python sirene_activity.py -- <output_directory>
 """
 import argparse
 import os
 import sys
 from os import path
+
 import pyspark.sql.functions as F
 
 # isort: off
@@ -18,10 +19,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 import sf_datalake.utils
 
-
-parser = argparse.ArgumentParser(
-    description="Filter company on activity date"
-)
+parser = argparse.ArgumentParser(description="Filter company on activity date")
 parser.add_argument(
     "--sf",
     dest="sf_data",
@@ -42,19 +40,21 @@ parser.add_argument(
 args = parser.parse_args()
 
 spark = sf_datalake.utils.get_spark_session()
-#Load data
+# Load data
 df_et_hist = spark.read.csv(args.et_hist_data, header=True)
 df_et_hist = df_et_hist.select(
-    ["siret",
+    [
+        "siret",
         "etatAdministratifEtablissement",
         "dateDebut",
-        "dateFin",                                   
-])
+        "dateFin",
+    ]
+)
 # dropna
 df_et_hist = df_et_hist.dropna(subset=["dateDebut", "etatAdministratifEtablissement"])
 # parse date
-df_et_hist = df_et_hist.withColumn("dateDebut", F.to_date("dateDebut","yyyy-mm-dd"))
-df_et_hist = df_et_hist.withColumn("dateFin", F.to_date("dateFin","yyyy-mm-dd"))
+df_et_hist = df_et_hist.withColumn("dateDebut", F.to_date("dateDebut", "yyyy-mm-dd"))
+df_et_hist = df_et_hist.withColumn("dateFin", F.to_date("dateFin", "yyyy-mm-dd"))
 # keep only head office
 df_et_hist = df_et_hist.filter(df_et_hist.etatAdministratifEtablissement == "A")
 df_et_hist = df_et_hist.drop("etatAdministratifEtablissement")
@@ -62,10 +62,30 @@ df_et_hist = df_et_hist.drop("etatAdministratifEtablissement")
 df_sf = spark.read.csv(args.sf_data, header=True)
 
 output_ds = (
-    df_et_hist.join(
-        df_sf,
-        on = (df_et_hist.siret == df_sf.siret),
-        how = "inner")
-    ).drop(df_et_hist.siret)
+    df_et_hist.join(df_sf, on=(df_et_hist.siret == df_sf.siret), how="inner")
+).drop(df_et_hist.siret)
+
+# Filter to keep only active periods
+output_ds = output_ds.withColumn(
+    "dateFin",
+    F.when(
+        F.col("dateFin").isNull(),
+        F.to_date(F.lit("2100-01-01"),
+        "yyyy-MM-dd"
+        )
+    )
+    .otherwise(F.col("dateFin")))
+output_ds = output_ds.withColumn(
+    "dateDebut",
+    F.when(
+        F.col("dateDebut").isNull(),
+        F.to_date(F.lit("2100-01-01"),
+        "yyyy-MM-dd"
+        )
+        ).
+        otherwise(F.col("dateDebut")))
+output_ds = output_ds.withColumn("periode", F.to_date("periode","yyyy-mm-dd"))
+output_ds = output_ds.filter(output_ds.periode >= output_ds.dateDebut)
+output_ds = output_ds.filter(output_ds.periode < output_ds.dateFin)
 
 output_ds.write.format("orc").save(args.output)
