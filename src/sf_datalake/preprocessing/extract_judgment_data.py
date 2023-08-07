@@ -35,7 +35,7 @@ args = parser.parse_args()
 
 
 df = spark.read.csv(
-    args.INPUT_FILE,
+    args.input,
     sep="|",
     inferSchema=True,
     header=True,
