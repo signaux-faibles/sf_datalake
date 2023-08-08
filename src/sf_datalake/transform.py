@@ -731,7 +731,9 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
     Args:
         inputCol: The column that will be used to derive lagged variables.
         n_months: Number of months that will be considered for lags.
-
+        bfill (bool) : A boolean, used to specify if a backward completion is applied to output dataset.
+        ffill (bool) : A boolean, used to specify if a forward completion is applied to output dataset.
+    
     """
 
     n_months = Param(
@@ -746,12 +748,23 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         "A reference date, used to compute number of months between rows.",
     )
 
+    bfill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "bfill",
+        "A boolean, used to specify if a backward completion is applied to output dataset",
+    )
+
+    ffill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ffill",
+        "A boolean, used to specify if a forward completion is applied to output dataset",
+    )
+    
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, n_months=None, ref_date=dt.date(2014, 1, 1))
+        self._setDefault(inputCol=None, n_months=None, bfill=True, ffill= True, ref_date=dt.date(2014, 1, 1))
         self.setParams(**kwargs)
-
     @keyword_only
     def setParams(self, **kwargs):
         """Set parameters for this LagOperator transformer.
@@ -759,6 +772,8 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         Args:
             inputCol (str): The column that will be used to derive lagged variables.
             n_months (int or list): Number of months that will be considered for lags.
+            bfill (bool) : A boolean, used to specify if a backward completion is applied to output dataset.
+            ffill (bool) : A boolean, used to specify if a forward completion is applied to output dataset.
 
         """
         return self._set(**kwargs)
@@ -782,6 +797,8 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         """
         input_col = self.getOrDefault("inputCol")
         n_months = self.getOrDefault("n_months")
+        bfill = self.getOrDefault("bfill")
+        ffill = self.getOrDefault("ffill")
         if isinstance(n_months, int):
             n_months = [n_months]
         elif isinstance(n_months, list):
@@ -799,11 +816,29 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         lag_window = (
             Window().partitionBy("siren").orderBy(F.col("months_from_ref").asc())
         )
+
+        forward_window = (
+            Window().partitionBy("siren").orderBy(F.col("periode").asc()).rowsBetween(Window.unboundedPreceding, Window.currentRow)
+        )
+
+
+        backward_window = (
+            Window().partitionBy("siren").orderBy(F.col("periode").asc()).rowsBetween(Window.currentRow, Window.unboundedFollowing)
+        )
+
         for n in n_months:
             dataset = dataset.withColumn(
                 f"{input_col}_lag{n}m",
-                F.lag(F.col(input_col), n, 0.0).over(lag_window),
+                F.lag(F.col(input_col), n).over(lag_window),
             )
+            if ffill :
+                dataset = dataset.withColumn( f"{input_col}_lag{n}m_ffill",
+                                         F.last( f"{input_col}_lag{n}m",
+                                                    ignorenulls=True).over(forward_window))
+            if bfill :
+                dataset = dataset.withColumn( f"{input_col}_lag{n}m_bfill",
+                                         F.first( f"{input_col}_lag{n}m",
+                                                    ignorenulls=True).over(backward_window))
 
         return dataset.drop("ref_date", "months_from_ref")
 
