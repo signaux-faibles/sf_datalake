@@ -207,7 +207,7 @@ building_steps = [
         inputCols=(
             config["IDENTIFIERS"]
             + list(config["FEATURES"])  # features dict keys to list
-            + [config["TARGET"]["outputCol"]]  # contains a single string
+            + [config["TARGET"]["class_col"]]  # contains a single string
         )
     ),
     sf_datalake.transform.MissingValuesHandler(
@@ -232,7 +232,7 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
 transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
 model_stages = [
     sf_datalake.model.get_model_from_conf(
-        config["MODEL"], target_col=config["TARGET"]["outputCol"]
+        config["MODEL"], target_col=config["TARGET"]["class_col"]
     )
 ]
 
