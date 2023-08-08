@@ -63,6 +63,7 @@ def load_data(
     data_paths: Dict[str, str],
     file_format: str = None,
     sep: str = ",",
+    infer_schema: bool = True,
 ) -> Dict[str, pyspark.sql.DataFrame]:
     """Loads one or more orc-stored datasets and returns them in a dict.
 
@@ -72,21 +73,23 @@ def load_data(
           the returned dict.
         file_format: The file format, can be either "csv" or "orc".
         sep: Separator character, in case `file_format` is "csv".
+        infer_schema: If true, spark will infer types, in case `file_format` is "csv".
 
     Returns:
         A dictionary of datasets as pyspark DataFrame objects.
 
     """
-    datasets = {}
+    read_options = (
+        {"inferSchema": infer_schema, "header": True, "sep": sep}
+        if file_format == "csv"
+        else {}
+    )
+    datasets: Dict[str, pyspark.sql.DataFrame] = {}
 
     spark = sf_datalake.utils.get_spark_session()
     for name, file_path in data_paths.items():
-        if file_format is None:
-            file_format = path.splitext(file_path)[-1][1:]
-        if file_format == "csv":
-            df = spark.read.csv(file_path, sep=sep, inferSchema=True, header=True)
-        elif file_format == "orc":
-            df = spark.read.orc(file_path)
+        if file_format in ("csv", "orc"):
+            df = spark.read.format(file_format).options(**read_options).load(file_path)
         else:
             raise ValueError(f"Unknown file format {file_format}.")
         datasets[name] = df
