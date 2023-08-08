@@ -85,9 +85,9 @@
         ]
     },
     "TARGET": {
-        "outputCol": "failure",
+        "class_col": "failure",
         "n_months": 18,
-        "inputCol": "time_til_failure"
+        "judgment_date_col": "date_jugement"
     },
     "MESO_GROUPS": {
         "cotisation_urssaf": [

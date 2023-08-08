@@ -199,8 +199,8 @@ if with_paydex:
 
 building_steps = [
     sf_datalake.transform.TargetVariable(
-        inputCol=config["TARGET"]["inputCol"],
-        outputCol=config["TARGET"]["outputCol"],
+        inputCol=config["TARGET"]["judgment_date_col"],
+        outputCol=config["TARGET"]["class_col"],
         n_months=config["TARGET"]["n_months"],
     ),
     sf_datalake.transform.ColumnSelector(
