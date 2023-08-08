@@ -3,7 +3,6 @@
 import datetime as dt
 import itertools
 import logging
-import math
 import re
 from typing import List
 
@@ -921,7 +920,8 @@ class TargetVariable(
         """Set parameters for this transformer.
 
         Args:
-            inputCol (str): The column that will be used to derive target.
+            inputCol (str): The column that will be used to derive target. It should
+              contain the failure (judgment) date.
             outputCol (str): The new target variable column.
             n_months (int): Number of months that will be considered as target
               threshold.
@@ -939,13 +939,15 @@ class TargetVariable(
             Transformed DataFrame with an extra target column.
 
         """
-        dataset = dataset.fillna(value={self.getOrDefault("inputCol"): math.inf})
         return dataset.withColumn(
             self.getOrDefault("outputCol"),
             (
-                dataset[self.getOrDefault("inputCol")] <= self.getOrDefault("n_months")
-            ).cast(T.IntegerType()),
-        )  # Pyspark models except integer or floating labels.
+                F.add_months(dataset["periode"], months=self.getOrDefault("n_months"))
+                <= dataset[self.getOrDefault("inputCol")]
+            ).cast(
+                T.IntegerType()
+            ),  # Pyspark models except integer or floating labels.
+        ).fillna(value={self.getOrDefault("outputCol"): 0})
 
 
 class ColumnSelector(

@@ -199,15 +199,15 @@ if with_paydex:
 
 building_steps = [
     sf_datalake.transform.TargetVariable(
-        inputCol=config["TARGET"]["inputCol"],
-        outputCol=config["TARGET"]["outputCol"],
+        inputCol=config["TARGET"]["judgment_date_col"],
+        outputCol=config["TARGET"]["class_col"],
         n_months=config["TARGET"]["n_months"],
     ),
     sf_datalake.transform.ColumnSelector(
         inputCols=(
             config["IDENTIFIERS"]
             + list(config["FEATURES"])  # features dict keys to list
-            + [config["TARGET"]["outputCol"]]  # contains a single string
+            + [config["TARGET"]["class_col"]]  # contains a single string
         )
     ),
     sf_datalake.transform.MissingValuesHandler(
@@ -232,7 +232,7 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
 transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
 model_stages = [
     sf_datalake.model.get_model_from_conf(
-        config["MODEL"], target_col=config["TARGET"]["outputCol"]
+        config["MODEL"], target_col=config["TARGET"]["class_col"]
     )
 ]
 
