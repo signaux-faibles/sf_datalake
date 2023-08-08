@@ -63,9 +63,7 @@ df_judg = df.filter(
 
 
 # Get first judgment within input time period and only keep this judgment.
-df_first_judg_date = df_judg.groupby("siren").agg(F.min("djug").alias("djug"))
+df_first_judg_date = df_judg.groupby("siren").agg(F.min("djug").alias("date_jugement"))
 
 # Write output
-df_first_judg_date.withColumnRenamed("djug", "date_jugement").write.csv(
-    args.output, header=True
-)
+df_first_judg_date.write.orc(args.output)
