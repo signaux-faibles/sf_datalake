@@ -44,8 +44,6 @@ def load_data(
     data_paths: Dict[str, str],
     file_format: str = None,
     sep: str = ",",
-    spl_ratio: float = None,
-    seed: int = 1234,
 ) -> Dict[str, pyspark.sql.DataFrame]:
     """Loads one or more orc-stored datasets and returns them in a dict.
 
@@ -55,9 +53,6 @@ def load_data(
           the returned dict.
         file_format: The file format, can be either "csv" or "orc".
         sep: Separator character, in case `file_format` is "csv".
-        spl_ratio: If stated, the size of the return sampled datasets, as a fraction of
-          the full datasets respective sizes.
-        seed: A random seed, used for sub-sampling in case spl_ratio is < 1.
 
     Returns:
         A dictionary of datasets as pyspark DataFrame objects.
@@ -75,8 +70,6 @@ def load_data(
             df = spark.read.orc(file_path)
         else:
             raise ValueError(f"Unknown file format {file_format}.")
-        if spl_ratio is not None:
-            df = df.sample(fraction=spl_ratio, seed=seed)
         datasets[name] = df
     return datasets
 

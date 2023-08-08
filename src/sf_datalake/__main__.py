@@ -155,9 +155,10 @@ sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
 dataset = sf_datalake.io.load_data(
     {"dataset": config["DATASET"]},
     file_format="orc",
-    spl_ratio=config["SAMPLE_RATIO"],
-    seed=config["SEED"],
 )["dataset"]
+
+if config["SAMPLE_RATIO"] != 1.0:
+    dataset = dataset.sample(fraction=config["SAMPLE_RATIO"], seed=config["SEED"])
 
 
 # Switches
