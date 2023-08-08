@@ -1046,3 +1046,89 @@ class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
         if "effectif" not in dataset.columns:
             raise KeyError("Dataset has no 'effectif' column.")
         return dataset.filter(F.col("effectif") >= 10)
+
+
+class LinearInterpolationOperator(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
+    """A transformer to apply linear interpolation for filling missing values.
+
+    Apply linear interpolation to dataframe to fill gaps.
+    
+    Args :
+        id_cols: string or list of column names to partition by the window function 
+        order_col: column to use to order by the window function
+        inputCols: column to be filled
+
+
+    """
+
+    id_cols = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "id_cols",
+        "Id columns to group for interpolation.",
+    )
+    order_col = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "order_col",
+        "Columns to follow for interpolation.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(id_cols="siren", order_col = "periode",  inputCols=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        inputCols (list[str]): The input dataset columns to consider for filling.
+        id_cols (str): Id columns to group for interpolation. 
+        order_col (str): Columns to follow for interpolation.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Use linear interpolation to fill empty values inside a time serie
+
+        Args:
+            dataset: DataFrame with timeseries to transform containing missing values.
+
+        Returns:
+            DataFrame where previously missing values are either interpolate.
+
+        """
+        id_cols: str = self.getOrDefault("id_cols")
+        order_col: str = self.getOrDefault("order_col")
+        features: List[str] = self.getOrDefault("inputCols")
+        for feature in features:
+            w = Window.partitionBy(id_cols).orderBy(order_col)
+            new_df = dataset.withColumn('rn',F.row_number().over(w))
+            new_df = new_df.withColumn('rn_not_null',F.when(F.col(feature).isNotNull(),F.col('rn')))
+
+            # create relative references to the start value (last value not missing)
+            w_start = Window.partitionBy(id_cols).orderBy(order_col).rowsBetween(Window.unboundedPreceding,-1)
+            new_df = new_df.withColumn('start_val',F.last(feature,True).over(w_start))
+            new_df = new_df.withColumn('start_rn',F.last('rn_not_null',True).over(w_start))
+
+            # create relative references to the end value (first value not missing)
+            w_end = Window.partitionBy(id_cols).orderBy(order_col).rowsBetween(0,Window.unboundedFollowing)
+            new_df = new_df.withColumn('end_val',F.first(feature,True).over(w_end))
+            new_df = new_df.withColumn('end_rn',F.first('rn_not_null',True).over(w_end))
+
+            if not isinstance(id_cols, list):
+                id_cols = [id_cols]
+
+            # create references to gap length and current gap position
+            new_df = new_df.withColumn('diff_rn',F.col('end_rn')-F.col('start_rn'))
+            new_df = new_df.withColumn('curr_rn',F.col('diff_rn')-(F.col('end_rn')-F.col('rn')))
+
+            # calculate linear interpolation value
+            lin_interp_func = (F.col('start_val')+(F.col('end_val')-F.col('start_val'))/F.col('diff_rn')*F.col('curr_rn'))
+            new_df = new_df.withColumn(feature,F.when(F.col(feature).isNull(),lin_interp_func).otherwise(F.col(feature)))
+
+            new_df = new_df.drop('rn', 'rn_not_null', 'start_val', 'end_val', 'start_rn', 'end_rn', 'diff_rn', 'curr_rn')
+        return new_df
