@@ -40,6 +40,25 @@ def data_path_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def write_data(
+    dataset: pyspark.sql.DataFrame,
+    output_path: str,
+    file_format: str,
+    sep: str = ",",
+):
+    """Loads one or more orc-stored datasets and returns them in a dict.
+
+    Args:
+        dataset: A dataset.
+        output_path: The output path.
+        file_format: The file format, can be either "csv" or "orc".
+        sep: Separator character, in case `file_format` is "csv".
+
+    """
+    write_options = {"header": True, "sep": sep} if file_format == "csv" else {}
+    dataset.write.format(file_format).options(**write_options).save(output_path)
+
+
 def load_data(
     data_paths: Dict[str, str],
     file_format: str = None,
