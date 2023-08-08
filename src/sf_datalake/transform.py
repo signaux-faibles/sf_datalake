@@ -3,7 +3,6 @@
 import datetime as dt
 import itertools
 import logging
-import math
 import re
 from typing import List
 
@@ -940,14 +939,15 @@ class TargetVariable(
             Transformed DataFrame with an extra target column.
 
         """
-        dataset = dataset.fillna(value={self.getOrDefault("inputCol"): math.inf})
         return dataset.withColumn(
             self.getOrDefault("outputCol"),
             (
                 F.add_months(dataset["periode"], months=self.getOrDefault("n_months"))
                 <= dataset[self.getOrDefault("inputCol")]
-            ).cast(T.IntegerType()),
-        )  # Pyspark models except integer or floating labels.
+            ).cast(
+                T.IntegerType()
+            ),  # Pyspark models except integer or floating labels.
+        ).fillna(value={self.getOrDefault("outputCol"): 0})
 
 
 class ColumnSelector(
