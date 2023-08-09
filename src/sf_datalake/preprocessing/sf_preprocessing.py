@@ -48,11 +48,17 @@ parser.add_argument(
     help="Configuration file with aggregation info.",
     default="aggregation.json",
 )
+parser.add_argument(
+    "--output_format", default="orc", help="Output dataset file format."
+)
+
 
 args = parser.parse_args()
 time_comp_config = sf_datalake.io.load_variables(args.time_computations)
 agg_config = sf_datalake.io.load_variables(args.aggregation)
-input_ds = sf_datalake.io.load_data({"input": args.input}, file_format="csv")["input"]
+input_ds = sf_datalake.io.load_data(
+    {"input": args.input}, file_format="csv", sep=",", infer_schema=True
+)["input"]
 
 # Set every column name to lower case (if not already).
 siret_level_ds = input_ds.toDF(*(col.lower() for col in input_ds.columns))
@@ -99,4 +105,4 @@ feature_engineering = [
 output_ds = PipelineModel(time_computations + feature_engineering).transform(
     siren_level_ds
 )
-sf_datalake.io.write_data(output_ds, args.output, "orc")
+sf_datalake.io.write_data(output_ds, args.output, args.output_format)

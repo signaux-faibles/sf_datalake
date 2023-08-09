@@ -30,7 +30,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 import sf_datalake.transform
-from sf_datalake.io import load_data
+from sf_datalake.io import load_data, write_data
 
 parser = argparse.ArgumentParser(
     description="Merge DGFiP and Signaux Faibles datasets into a single one."
@@ -50,9 +50,11 @@ parser.add_argument(
     help="Path to the DGFiP yearly dataset.",
 )
 parser.add_argument(
-    "--output",
-    dest="output",
-    help="Path to the output dataset.",
+    "--output_path",
+    help="Output dataset directory path.",
+)
+parser.add_argument(
+    "--output_format", default="orc", help="Output dataset file format."
 )
 
 args = parser.parse_args()
@@ -103,4 +105,4 @@ joined_df = (
     .join(df_judgments, on="siren", how="left")
 )
 
-joined_df.write.format("orc").save(args.output)
+write_data(joined_df, args.output_path, args.output_format)

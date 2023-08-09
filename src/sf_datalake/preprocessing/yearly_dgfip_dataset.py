@@ -29,6 +29,9 @@ import sf_datalake.io
 ####################
 
 parser = sf_datalake.io.data_path_parser()
+parser.add_argument(
+    "--output_format", default="orc", help="Output dataset file format."
+)
 parser.description = "Build a dataset of yearly DGFiP data."
 args = parser.parse_args()
 
@@ -64,4 +67,4 @@ df = declarations.join(
     datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
 )
 
-df.write.format("orc").save(args.output)
+sf_datalake.io.write_data(df, args.output, args.output_format)
