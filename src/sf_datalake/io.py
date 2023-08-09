@@ -40,12 +40,30 @@ def data_path_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def write_data(
+    dataset: pyspark.sql.DataFrame,
+    output_path: str,
+    file_format: str,
+    sep: str = ",",
+):
+    """Loads one or more orc-stored datasets and returns them in a dict.
+
+    Args:
+        dataset: A dataset.
+        output_path: The output path.
+        file_format: The file format, can be either "csv" or "orc".
+        sep: Separator character, in case `file_format` is "csv".
+
+    """
+    write_options = {"header": True, "sep": sep} if file_format == "csv" else {}
+    dataset.write.format(file_format).options(**write_options).save(output_path)
+
+
 def load_data(
     data_paths: Dict[str, str],
     file_format: str = None,
     sep: str = ",",
-    spl_ratio: float = None,
-    seed: int = 1234,
+    infer_schema: bool = True,
 ) -> Dict[str, pyspark.sql.DataFrame]:
     """Loads one or more orc-stored datasets and returns them in a dict.
 
@@ -55,28 +73,25 @@ def load_data(
           the returned dict.
         file_format: The file format, can be either "csv" or "orc".
         sep: Separator character, in case `file_format` is "csv".
-        spl_ratio: If stated, the size of the return sampled datasets, as a fraction of
-          the full datasets respective sizes.
-        seed: A random seed, used for sub-sampling in case spl_ratio is < 1.
+        infer_schema: If true, spark will infer types, in case `file_format` is "csv".
 
     Returns:
         A dictionary of datasets as pyspark DataFrame objects.
 
     """
-    datasets = {}
+    read_options = (
+        {"inferSchema": infer_schema, "header": True, "sep": sep}
+        if file_format == "csv"
+        else {}
+    )
+    datasets: Dict[str, pyspark.sql.DataFrame] = {}
 
     spark = sf_datalake.utils.get_spark_session()
     for name, file_path in data_paths.items():
-        if file_format is None:
-            file_format = path.splitext(file_path)[-1][1:]
-        if file_format == "csv":
-            df = spark.read.csv(file_path, sep=sep, inferSchema=True, header=True)
-        elif file_format == "orc":
-            df = spark.read.orc(file_path)
+        if file_format in ("csv", "orc"):
+            df = spark.read.format(file_format).options(**read_options).load(file_path)
         else:
             raise ValueError(f"Unknown file format {file_format}.")
-        if spl_ratio is not None:
-            df = df.sample(fraction=spl_ratio, seed=seed)
         datasets[name] = df
     return datasets
 

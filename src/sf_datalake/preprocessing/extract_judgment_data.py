@@ -31,6 +31,9 @@ parser = sf_datalake.io.data_path_parser()
 parser.description = "Extract judgment data"
 parser.add_argument("--start_date", type=str, default="2014-01-01")
 parser.add_argument("--end_date", type=str, default=datetime.date.today().isoformat())
+parser.add_argument(
+    "--output_format", default="orc", help="Output dataset file format."
+)
 args = parser.parse_args()
 
 
@@ -66,4 +69,4 @@ df_judg = df.filter(
 df_first_judg_date = df_judg.groupby("siren").agg(F.min("djug").alias("date_jugement"))
 
 # Write output
-df_first_judg_date.write.orc(args.output)
+sf_datalake.io.write_data(df_first_judg_date, args.output, args.output_format)
