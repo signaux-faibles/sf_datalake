@@ -271,30 +271,32 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-metho
         )
 
 
-class PaydexOneHotEncoder(
+class BinsOrdinalEncoder(
     Transformer, HasInputCol, HasOutputCol
 ):  # pylint: disable=too-few-public-methods
-    """A transformer to compute one-hot encoded features associated with Paydex data.
+    """A transformer that bins continuous features into ordered buckets.
+
+    The transformed feature will be encoded as a float ordinal feature (0.0, 1.0, ...)
+    and can be further one-hot encoded if needed using another Transformer.
 
     Args:
-        inputCol (str): The variable to be one-hot encoded.
+        inputCol (str): The variable to be encoded.
         bins (list): A list of bins, with adjacent and increasing number of days values,
           e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will be cast to
           floats.
-        outputCol (str): The one-hot encoded column name.
+        outputCol (str): The ordinal encoded column name.
 
     """
 
     bins = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "bins",
-        "Bins for paydex number of days one hot encoding.",
+        "Bins edges to be used to bucketize variable.",
     )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol="paydex_nb_jours", outputCol="paydex_bin", bins=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -302,33 +304,31 @@ class PaydexOneHotEncoder(
         """Set parameters for this transformer.
 
         Args:
-            inputCol (str): The variable to be one-hot encoded.
-            bins (list): A list of bins, with adjacent and increasing number of days
-              values, e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will
-              be cast to floats.
-            outputCol (str): The one-hot encoded column name.
+            inputCol (str): The variable to be encoded.
+            bins (list): A list of bins, with adjacent and increasing values, e.g.:
+              `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will be cast to
+              floats.
+            outputCol (str): The ordinal encoded column name.
 
         """
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Computes the quantile bins of payment delay (in days).
+        """Ordinal encode the variable using input bins.
 
         Args:
             dataset: DataFrame to transform.
 
         Returns:
-             Transformed DataFrame with extra `paydex_bins` columns.
+             Transformed DataFrame with extra `{var}_bins` columns.
 
         """
 
         ## Binned paydex
-        days_bins = self.getOrDefault("bins")
-        days_splits = np.unique(
-            np.array([float(v) for v in itertools.chain(*days_bins)])
-        )
+        bins = self.getOrDefault("bins")
+        splits = np.unique(np.array([float(v) for v in itertools.chain(*bins)]))
         bucketizer = pyspark.ml.feature.Bucketizer(
-            splits=days_splits,
+            splits=splits,
             handleInvalid="error",
             inputCol=self.getOrDefault("inputCol"),
             outputCol=self.getOrDefault("outputCol"),

@@ -188,7 +188,7 @@ normalizing_steps = [
 feature_engineering_steps = []
 if with_paydex:
     feature_engineering_steps.append(
-        sf_datalake.transform.PaydexOneHotEncoder(
+        sf_datalake.transform.BinsOrdinalEncoder(
             bins=config["ONE_HOT_CATEGORIES"]["paydex_bin"]
         ),
     )
