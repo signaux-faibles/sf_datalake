@@ -64,7 +64,7 @@ datasets = load_data(
     {
         "sf": args.sf_data,
         "dgfip_yearly": args.dgfip_yearly,
-        "judgments": args.judgments_yearly,
+        "judgments": args.judgments,
     },
     file_format="orc",
 )
