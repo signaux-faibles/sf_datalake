@@ -18,7 +18,6 @@ from os import path
 from typing import List
 
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.sql.types import StringType, StructField, StructType
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -49,9 +48,6 @@ parser.add_argument(
     help="Configuration file with aggregation info.",
     default="aggregation.json",
 )
-parser.add_argument(
-    "-p", "--perimeter", help="CSV file containing a restricted whitelist of SIREN."
-)
 
 args = parser.parse_args()
 time_comp_config = sf_datalake.io.load_variables(args.time_computations)
@@ -69,15 +65,6 @@ siret_level_ds = input_ds.toDF(*(col.lower() for col in input_ds.columns))
 siren_converter = sf_datalake.transform.SiretToSiren()
 aggregator = sf_datalake.transform.SirenAggregator(agg_config)
 siren_level_ds = PipelineModel([siren_converter, aggregator]).transform(siret_level_ds)
-
-# Filter to pre-defined perimeter
-spark = sf_datalake.utils.get_spark_session()
-siren_perimeter = spark.read.csv(
-    args.perimeter,
-    header=True,
-    schema=StructType([StructField("siren", StringType(), False)]),
-)
-siren_level_ds = siren_level_ds.join(siren_perimeter, on="siren", how="left_semi")
 
 
 #####################
@@ -112,4 +99,4 @@ feature_engineering = [
 output_ds = PipelineModel(time_computations + feature_engineering).transform(
     siren_level_ds
 )
-output_ds.write.format("orc").save(args.output)
+sf_datalake.io.write_data(output_ds, args.output, "orc")
