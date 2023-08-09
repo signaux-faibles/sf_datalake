@@ -1,9 +1,15 @@
-"""Extract activity period of companines
+"""Carry out some the activity period of comapnies in siren perio.
+
+This script will filter the period according to company activity periods
+
+An output dataset will be stored as a csv file
+
+
 
 USAGE
-    python sirene_activity.py -- <output_directory>
+    python sirene_activity.py <input_directory> <output_directory>
+    --et-hist-file [sirene_et_hist_filename] 
 """
-import argparse
 import os
 import sys
 from os import path
@@ -18,30 +24,21 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # pylint: disable=C0413
 
 import sf_datalake.utils
+import sf_datalake.io
 
-parser = argparse.ArgumentParser(description="Filter a dataset using companies activity dates.")
-parser.add_argument(
-    "--input_data",
-    dest="input_data",
-    help="Path to input dataset.",
-)
+parser = sf_datalake.io.data_path_parser()
+parser.description = "Filter a dataset using companies activity dates."
 parser.add_argument(
     "--et_hist_file",
     dest="et_hist_data",
     help="The historical 'Établissement' sirene database.",
 )
 
-parser.add_argument(
-    "--output",
-    dest="output",
-    help="Path to the output dataset.",
-)
-
 args = parser.parse_args()
 
 spark = sf_datalake.utils.get_spark_session()
 df_et_hist = spark.read.csv(args.et_hist_data, header=True)
-df_input = spark.read.csv(args.input_data, header=True, inferSchema=True)
+df_input = spark.read.csv(args.input, header=True, inferSchema=True)
 df_et_hist = df_et_hist.select(
     [
         "siret",
@@ -50,7 +47,7 @@ df_et_hist = df_et_hist.select(
         "dateFin",
     ]
 )
-# dropna
+
 df_et_hist = df_et_hist.dropna(subset=["dateDebut", "etatAdministratifEtablissement"])
 # parse date
 df_et_hist = df_et_hist.withColumn("dateDebut", F.to_date("dateDebut", "yyyy-mm-dd"))
@@ -60,6 +57,8 @@ df_input = df_input.withColumn("periode", F.to_date("periode", "yyyy-mm-dd"))
 # keep only active companies
 df_et_hist = df_et_hist.filter(df_et_hist.etatAdministratifEtablissement == "A")
 df_et_hist = df_et_hist.drop("etatAdministratifEtablissement")
+
+# Manage dateFin Null values
 df_et_hist = df_et_hist.withColumn(
     "dateFin",
     F.when(
@@ -69,11 +68,9 @@ df_et_hist = df_et_hist.withColumn(
 
 output_ds = (
     df_et_hist.join(df_input, on=[df_et_hist.siret == df_input.siret,
-                                df_input.periode >= df_et_hist.dateDebut, 
-                                df_input.periode < df_et_hist.dateFin ] , 
+                                df_input.periode >= df_et_hist.dateDebut,
+                                df_input.periode < df_et_hist.dateFin ],
                                 how="inner")
-).drop(df_et_hist.siret)
-
-# Filter to keep only active periods
+).drop(df_et_hist.siret, df_et_hist.dateDebut, df_et_hist.dateFin)
 
 output_ds.write.options(header='True').csv(args.output)
