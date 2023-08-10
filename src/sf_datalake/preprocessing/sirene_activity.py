@@ -65,8 +65,8 @@ df_et_hist = df_et_hist.withColumn(
     ).otherwise(F.col("dateFin")),
 )
 
-output_ds = df_et_hist.join(
-    df_input,
+output_ds = df_input.join(
+    df_et_hist,
     on=[
         df_et_hist.siret == df_input.siret,
         df_input.periode >= df_et_hist.dateDebut,
