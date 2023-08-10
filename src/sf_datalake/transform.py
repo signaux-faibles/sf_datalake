@@ -835,13 +835,13 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
             Window()
             .partitionBy("siren")
             .orderBy(F.col("periode").asc())
-            .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+            .rowsBetween(Window.currentRow, Window.unboundedFollowing)
         )
         backward_window = (
             Window()
             .partitionBy("siren")
             .orderBy(F.col("periode").asc())
-            .rowsBetween(Window.currentRow, Window.unboundedFollowing)
+            .rowsBetween(Window.unboundedPreceding, Window.currentRow)
         )
 
         for n in n_months:
