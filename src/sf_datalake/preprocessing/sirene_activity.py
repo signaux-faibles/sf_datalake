@@ -1,4 +1,4 @@
-"""This script will filter the period according to company activity periods.
+"""This script will filter a dataset according to known company activity periods.
 
 The input dataset is expected to be a csv file and the output dataset will also be
 stored as a csv file.
