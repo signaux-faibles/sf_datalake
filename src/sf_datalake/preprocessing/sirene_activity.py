@@ -1,14 +1,13 @@
-"""Carry out some the activity period of comapnies in siren perio.
+"""This script will filter the period according to company activity periods.
 
-This script will filter the period according to company activity periods
-
-An output dataset will be stored as a csv file
-
+The input dataset is expected to be a csv file and the output dataset will also be
+stored as a csv file.
 
 
 USAGE
     python sirene_activity.py <input_directory> <output_directory>
-    --et-hist-file [sirene_et_hist_filename] 
+    --et-hist-file [sirene_et_hist_filename]
+
 """
 import os
 import sys
@@ -23,8 +22,8 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 
-import sf_datalake.utils
 import sf_datalake.io
+import sf_datalake.utils
 
 parser = sf_datalake.io.data_path_parser()
 parser.description = "Filter a dataset using companies activity dates."
@@ -58,7 +57,7 @@ df_input = df_input.withColumn("periode", F.to_date("periode", "yyyy-mm-dd"))
 df_et_hist = df_et_hist.filter(df_et_hist.etatAdministratifEtablissement == "A")
 df_et_hist = df_et_hist.drop("etatAdministratifEtablissement")
 
-# Manage dateFin Null values
+# Imputing arbitrary large end of activity date in order for comparison to test True
 df_et_hist = df_et_hist.withColumn(
     "dateFin",
     F.when(
@@ -66,11 +65,14 @@ df_et_hist = df_et_hist.withColumn(
     ).otherwise(F.col("dateFin")),
 )
 
-output_ds = (
-    df_et_hist.join(df_input, on=[df_et_hist.siret == df_input.siret,
-                                df_input.periode >= df_et_hist.dateDebut,
-                                df_input.periode < df_et_hist.dateFin ],
-                                how="inner")
-).drop(df_et_hist.siret, df_et_hist.dateDebut, df_et_hist.dateFin)
+output_ds = df_et_hist.join(
+    df_input,
+    on=[
+        df_et_hist.siret == df_input.siret,
+        df_input.periode >= df_et_hist.dateDebut,
+        df_input.periode < df_et_hist.dateFin,
+    ],
+    how="left_semi",
+)
 
-output_ds.write.options(header='True').csv(args.output)
+output_ds.write.options(header="True").csv(args.output)
