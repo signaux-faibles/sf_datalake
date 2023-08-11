@@ -4,7 +4,7 @@ import datetime as dt
 import itertools
 import logging
 import re
-from typing import List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pyspark.ml
@@ -13,7 +13,12 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
+from pyspark.ml.feature import (
+    OneHotEncoder,
+    StandardScaler,
+    StringIndexer,
+    VectorAssembler,
+)
 from pyspark.ml.param.shared import (
     HasInputCol,
     HasInputCols,
@@ -22,103 +27,6 @@ from pyspark.ml.param.shared import (
     Params,
 )
 from pyspark.sql import Window
-
-
-def get_transformer(name: str) -> Transformer:
-    """Gets a pre-configured Transformer object by specifying its name.
-
-    Args:
-        name: Transformer object's name
-
-    Returns:
-        The selected Transformer with prepared parameters.
-
-    """
-    factory = {
-        "StandardScaler": StandardScaler(
-            withMean=True,
-            withStd=True,
-            inputCol="to_StandardScaler",
-            outputCol="from_StandardScaler",
-        ),
-        "OneHotEncoder": OneHotEncoder(dropLast=False),
-    }
-    return factory[name]
-
-
-def generate_transforming_stages(config: dict) -> List[Transformer]:
-    """Generates all stages related to feature transformation.
-
-    The stages are ready to be included in a pyspark.ml.Pipeline.
-
-    Args:
-        config: model configuration, as loaded by io.load_parameters().
-
-    Returns:
-        List of prepared Transformers.
-
-    """
-    stages: List[Transformer] = []
-    concat_input_cols: List[str] = []
-
-    for transformer_name, features in config["TRANSFORMER_FEATURES"].items():
-        # OneHotEncoder takes an un-assembled numeric column as input.
-        if transformer_name == "OneHotEncoder":
-            for feature in features:
-                ohe = get_transformer(transformer_name)
-                ohe.setInputCol(feature)
-                ohe.setOutputCol(f"ohe_{feature}")
-                concat_input_cols.append(f"ohe_{feature}")
-                stages.append(ohe)
-        else:
-            stages.extend(
-                [
-                    VectorAssembler(
-                        inputCols=features, outputCol=f"to_{transformer_name}"
-                    ),
-                    get_transformer(transformer_name),
-                ]
-            )
-            concat_input_cols.append(f"from_{transformer_name}")
-
-    # We add a final concatenation stage of all columns that should be fed to the model.
-    stages.append(VectorAssembler(inputCols=concat_input_cols, outputCol="features"))
-    return stages
-
-
-def vector_disassembler(
-    df: pyspark.sql.DataFrame,
-    columns: List[str],
-    assembled_col: str,
-    keep: List[str] = None,
-) -> pyspark.sql.DataFrame:
-    """Inverse operation of `pyspark.ml.feature.VectorAssembler` operator.
-
-    Args:.
-        df: input DataFrame.
-        columns: individual columns previously assembled by a `VectorAssembler`.
-        assembled_col: `VectorAssembler`'s output column name.
-        keep: additional columns to keep that are not part of the assembled column.
-
-    Returns:
-        A DataFrame with columns that have been "disassembled".
-
-    """
-    if keep is None:
-        keep = []
-    assert set(keep + [assembled_col]) <= set(df.columns)
-
-    def udf_vector_disassembler(col):
-        return F.udf(lambda v: v.toArray().tolist(), T.ArrayType(T.DoubleType()))(col)
-
-    df = df.select(keep + [assembled_col])
-    df = df.withColumn(
-        assembled_col, udf_vector_disassembler(F.col(assembled_col))
-    ).select(keep + [F.col(assembled_col)[i] for i in range(len(columns))])
-
-    for i, col in enumerate(columns):
-        df = df.withColumnRenamed(f"{assembled_col}[{i}]", col)
-    return df
 
 
 class DateParser(
@@ -1048,3 +956,143 @@ class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
         if "effectif" not in dataset.columns:
             raise KeyError("Dataset has no 'effectif' column.")
         return dataset.filter(F.col("effectif") >= 10)
+
+
+TRANSFORMERS_FACTORY = {
+    "scaling": {
+        "StandardScaler": StandardScaler(
+            withMean=True,
+            withStd=True,
+            inputCol="to_StandardScaler",
+            outputCol="from_StandardScaler",
+        ),
+    },
+    "encoding": {
+        "OneHotEncoder": OneHotEncoder(dropLast=False),
+        "StringIndexer": StringIndexer(),
+        "BinsOrdinalEncoder": BinsOrdinalEncoder(),
+    },
+}
+
+
+def generate_transforming_stages(
+    features_pipeline: Dict[str, List[str]], bins: Dict[str, List[str]] = None
+) -> Tuple(List[Transformer], List[str]):
+    """Generates all stages related to feature transformation.
+
+    Feature transformations are prepared in the following order:
+    - encoding stages, which operate on single feature columns.
+    - scaling stages, which operate on a set of features assembled using a
+      `VectorAssembler`.
+
+    The stages are then ready to be included in a pyspark.ml.Pipeline.
+
+    Args:
+        features_pipeline: A mapping from features to a list of transformers associated
+          with this feature.
+        bins: A mapping from feature names to a list of bins to be passed to a
+          Bucketizer.
+
+    Returns:
+        2-uple consisting of:
+        - A list of Transformers, to be fed to a Pipeline object.
+        - A list of strings, corresponding to all feature columns that will be fed to
+          the model.
+
+    """
+    # pylint: disable=too-many-locals
+    stages: List[Transformer] = []
+    model_features: List[str] = []
+    scalers_input_cols: Dict[Transformer, List[str]] = {}
+    final_assembler_input: List[str] = []
+
+    for feature, transformers_names in features_pipeline.items():
+        encoders_names: List[str] = [
+            encoder_name
+            for encoder_name in transformers_names
+            if encoder_name in TRANSFORMERS_FACTORY["encoding"]
+        ]
+        encoders: List[Transformer] = [
+            TRANSFORMERS_FACTORY["encoding"][encoder_name]
+            for encoder_name in encoders_names
+        ]
+        enc_input_col = feature
+        # Encoding
+        for encoder in encoders:
+            encoder.setParams(inputCol=enc_input_col)
+            if encoder.isinstance(BinsOrdinalEncoder):
+                suffix = "bin"
+                encoder.setParams(
+                    bins=bins[feature],
+                )
+            elif encoder.isinstance(StringIndexer):
+                suffix = "ix"
+            elif encoder.isinstance(OneHotEncoder):
+                suffix = "onehot"
+            enc_output_col = enc_input_col + f"_{suffix}"
+            encoder.setParams(outputCol=enc_output_col)
+            stages.append(encoder)
+            # If there are multiple encoders, the next one will act on the current's
+            # output
+            enc_input_col = enc_output_col
+
+        # Scaling
+        scaler_name = set(transformers_names) - set(encoders_names)
+        if scaler_name:  # assuming there can be at most one scaler per feature.
+            scalers_input_cols.setdefault(scaler_name.pop, []).append(enc_output_col)
+        else:
+            model_features.append(enc_output_col)
+            final_assembler_input.append(enc_output_col)
+
+    for scaler_name, input_cols in scalers_input_cols.items():
+        stages.append(
+            VectorAssembler(inputCols=input_cols, outputCol=f"{scaler_name}_input")
+        )
+        stages.append(
+            TRANSFORMERS_FACTORY[scaler_name](
+                inputCol=f"{scaler_name}_input", outputCol=f"{scaler_name}_output"
+            )
+        )
+        model_features.append(input_cols)
+        final_assembler_input.append(f"{scaler_name}_output")
+
+    # Build final assembler to be fed to model.
+    stages.append(
+        VectorAssembler(inputCols=final_assembler_input, outputCol="features")
+    )
+    return stages, model_features
+
+
+def vector_disassembler(
+    df: pyspark.sql.DataFrame,
+    columns: List[str],
+    assembled_col: str,
+    keep: List[str] = None,
+) -> pyspark.sql.DataFrame:
+    """Inverse operation of `pyspark.ml.feature.VectorAssembler` operator.
+
+    Args:.
+        df: input DataFrame.
+        columns: name of individual columns previously assembled by a `VectorAssembler`.
+        assembled_col: `VectorAssembler`'s output column name.
+        keep: additional columns to keep that are not part of the assembled column.
+
+    Returns:
+        A DataFrame with columns that have been "disassembled".
+
+    """
+    if keep is None:
+        keep = []
+    assert set(keep + [assembled_col]) <= set(df.columns)
+
+    def udf_vector_disassembler(col):
+        return F.udf(lambda v: v.toArray().tolist(), T.ArrayType(T.DoubleType()))(col)
+
+    df = df.select(keep + [assembled_col])
+    df = df.withColumn(
+        assembled_col, udf_vector_disassembler(F.col(assembled_col))
+    ).select(keep + [F.col(assembled_col)[i] for i in range(len(columns))])
+
+    for i, col in enumerate(columns):
+        df = df.withColumnRenamed(f"{assembled_col}[{i}]", col)
+    return df

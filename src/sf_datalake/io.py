@@ -229,7 +229,7 @@ def dump_configuration(
             "TEST_DATES",
             "PREDICTION_DATE",
             "MODEL",
-            "FEATURES",
+            "FEATURES_PIPELINE",
         }
     sub_config = {k: v for k, v in config.items() if k in dump_keys}
 

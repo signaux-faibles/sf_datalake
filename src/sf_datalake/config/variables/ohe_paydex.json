@@ -24,40 +24,101 @@
         "rto_af_solidite_financiere": 0.0,
         "rto_invest_ca": 0.0
     },
-    "FEATURES": {
-        "mnt_af_bfonc_bfr": "StandardScaler",
-        "mnt_af_bfonc_tresorerie": "StandardScaler",
-        "rto_af_ratio_rent_mbe": "StandardScaler",
-        "mnt_af_bfonc_frng": "StandardScaler",
-        "mnt_af_ca": "StandardScaler",
-        "mnt_af_sig_ebe_ret": "StandardScaler",
-        "rto_af_rent_eco": "StandardScaler",
-        "rto_af_solidite_financiere": "StandardScaler",
-        "rto_invest_ca": "StandardScaler",
-        "cotisation": "StandardScaler",
-        "cotisation_mean12m": "StandardScaler",
-        "montant_part_ouvriere": "StandardScaler",
-        "montant_part_ouvriere_lag1m": "StandardScaler",
-        "montant_part_ouvriere_lag12m": "StandardScaler",
-        "montant_part_ouvriere_lag2m": "StandardScaler",
-        "montant_part_ouvriere_lag3m": "StandardScaler",
-        "montant_part_ouvriere_lag6m": "StandardScaler",
-        "montant_part_patronale": "StandardScaler",
-        "montant_part_patronale_lag1m": "StandardScaler",
-        "montant_part_patronale_lag12m": "StandardScaler",
-        "montant_part_patronale_lag2m": "StandardScaler",
-        "montant_part_patronale_lag3m": "StandardScaler",
-        "montant_part_patronale_lag6m": "StandardScaler",
-        "effectif": "StandardScaler",
-        "apart_heures_consommees": "StandardScaler",
-        "ratio_dette_mean12m": "StandardScaler",
-        "ratio_dette": "StandardScaler",
-        "dette_par_effectif_slope3m": "StandardScaler",
-        "paydex_nb_jours_diff12m": "StandardScaler",
-        "paydex_bin": "OneHotEncoder"
+    "FEATURES_PIPELINE": {
+        "mnt_af_bfonc_bfr": [
+            "StandardScaler"
+        ],
+        "mnt_af_bfonc_tresorerie": [
+            "StandardScaler"
+        ],
+        "rto_af_ratio_rent_mbe": [
+            "StandardScaler"
+        ],
+        "mnt_af_bfonc_frng": [
+            "StandardScaler"
+        ],
+        "mnt_af_ca": [
+            "StandardScaler"
+        ],
+        "mnt_af_sig_ebe_ret": [
+            "StandardScaler"
+        ],
+        "rto_af_rent_eco": [
+            "StandardScaler"
+        ],
+        "rto_af_solidite_financiere": [
+            "StandardScaler"
+        ],
+        "rto_invest_ca": [
+            "StandardScaler"
+        ],
+        "cotisation": [
+            "StandardScaler"
+        ],
+        "cotisation_mean12m": [
+            "StandardScaler"
+        ],
+        "montant_part_ouvriere": [
+            "StandardScaler"
+        ],
+        "montant_part_ouvriere_lag1m": [
+            "StandardScaler"
+        ],
+        "montant_part_ouvriere_lag12m": [
+            "StandardScaler"
+        ],
+        "montant_part_ouvriere_lag2m": [
+            "StandardScaler"
+        ],
+        "montant_part_ouvriere_lag3m": [
+            "StandardScaler"
+        ],
+        "montant_part_ouvriere_lag6m": [
+            "StandardScaler"
+        ],
+        "montant_part_patronale": [
+            "StandardScaler"
+        ],
+        "montant_part_patronale_lag1m": [
+            "StandardScaler"
+        ],
+        "montant_part_patronale_lag12m": [
+            "StandardScaler"
+        ],
+        "montant_part_patronale_lag2m": [
+            "StandardScaler"
+        ],
+        "montant_part_patronale_lag3m": [
+            "StandardScaler"
+        ],
+        "montant_part_patronale_lag6m": [
+            "StandardScaler"
+        ],
+        "effectif": [
+            "StandardScaler"
+        ],
+        "apart_heures_consommees": [
+            "StandardScaler"
+        ],
+        "ratio_dette_mean12m": [
+            "StandardScaler"
+        ],
+        "ratio_dette": [
+            "StandardScaler"
+        ],
+        "dette_par_effectif_slope3m": [
+            "StandardScaler"
+        ],
+        "paydex_nb_jours_diff12m": [
+            "StandardScaler"
+        ],
+        "paydex_nb_jours": [
+            "BinsOrdinalEncoder",
+            "OneHotEncoder"
+        ]
     },
-    "ONE_HOT_CATEGORIES": {
-        "paydex_bin": [
+    "ORDINAL_ENCODING_BINS": {
+        "paydex": [
             [
                 "-inf",
                 "0"

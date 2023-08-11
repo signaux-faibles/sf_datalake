@@ -26,6 +26,7 @@ def explanation_data(
     gradient-boosted trees, the coefficients computed by shap are in log-odds units.
 
     Args:
+        features_list: A list of features.
         model: A pyspark model used for prediction.
         train_data: Training dataset (as output by model pipeline).
         prediction_data: Prediction dataset (as output by model pipeline).
