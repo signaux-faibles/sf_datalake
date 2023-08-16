@@ -876,6 +876,8 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         inputCol: The column that will be used to derive the diff.
         n_months: Number of months that will be considered for the difference.
         slope: If True, divide the computed difference by its duration in months.
+        bfill: If set, performs a backward completion on missing lag data.
+        ffill: If set, performs a forward completion on missing lag data.
 
     """
 
@@ -889,11 +891,30 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         "n_months",
         "Number of months for diff computation.",
     )
+    bfill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "bfill",
+        "A boolean, used to specify if a backward completion is applied to missing lag \
+        data.",
+    )
+
+    ffill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ffill",
+        "A boolean, used to specify if a forward completion is applied to missing lag \
+        data.",
+    )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, n_months=None, slope=False)
+        self._setDefault(
+            inputCol=None,
+            n_months=None,
+            slope=False,
+            bfill=False,
+            ffill=False,
+        )
         self.setParams(**kwargs)
 
     @keyword_only
@@ -927,6 +948,8 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         """
         input_col = self.getOrDefault("inputCol")
         n_months = self.getOrDefault("n_months")
+        bfill = self.getOrDefault("bfill")
+        ffill = self.getOrDefault("ffill")
         compute_slope = self.getOrDefault("slope")
         if isinstance(n_months, int):
             n_months = [n_months]
@@ -942,7 +965,10 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
             n for n in n_months if f"{input_col}_lag{n}m" not in dataset.columns
         ]
         dataset = PipelineModel(
-            [LagOperator(inputCol=input_col, n_months=n) for n in missing_lags]
+            [
+                LagOperator(inputCol=input_col, n_months=n, bfill=bfill, ffill=ffill)
+                for n in missing_lags
+            ]
         ).transform(dataset)
 
         # Compute diffs
