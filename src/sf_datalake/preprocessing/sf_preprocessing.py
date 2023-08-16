@@ -17,6 +17,7 @@ import sys
 from os import path
 from typing import List
 
+import pyspark.sql.functions as F
 from pyspark.ml import PipelineModel, Transformer
 
 # isort: off
@@ -57,11 +58,16 @@ args = parser.parse_args()
 time_comp_config = sf_datalake.io.load_variables(args.time_computations)
 agg_config = sf_datalake.io.load_variables(args.aggregation)
 input_ds = sf_datalake.io.load_data(
-    {"input": args.input}, file_format="csv", sep=",", infer_schema=True
+    {"input": args.input}, file_format="csv", sep=",", infer_schema=False
 )["input"]
 
 # Set every column name to lower case (if not already).
 siret_level_ds = input_ds.toDF(*(col.lower() for col in input_ds.columns))
+
+# Cast 'periode' to a "beginning of the month" date.
+siret_level_ds = siret_level_ds.withColumn(
+    "periode", F.to_date(F.date_trunc("month", F.col("periode")))
+)
 
 #####################
 # SIREN aggregation #

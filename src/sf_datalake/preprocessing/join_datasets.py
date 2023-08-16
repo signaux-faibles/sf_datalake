@@ -78,9 +78,7 @@ siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
 df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
 df_judgments = siren_normalizer.transform(datasets["judgments"])
 df_altares = siren_normalizer.transform(datasets["judgments"])
-df_sf = siren_normalizer.transform(datasets["sf"]).withColumn(
-    "periode", F.to_date(F.date_trunc("month", F.col("periode")))
-)  # TODO: Should be done during sf preprocessing script.
+df_sf = siren_normalizer.transform(datasets["sf"])
 
 # Join datasets and drop (time, SIREN) duplicates with the highest
 # null values ratio from the DGFiP ratios dataset
