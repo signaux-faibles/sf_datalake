@@ -18,7 +18,7 @@ from os import path
 from typing import List
 
 import pyspark.sql.functions as F
-from pyspark.ml import Transformer
+from pyspark.ml import PipelineModel, Transformer
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -87,6 +87,7 @@ for feature, n_months in time_agg_config["MOVING_AVERAGE"].items():
         time_computations.append(
             sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
         )
+df = PipelineModel(time_computations).transform(df)
 
 selected_cols = []
 for sel_col in ["siren", "periode", "paydex", "fpi_30", "fpi_90"]:
