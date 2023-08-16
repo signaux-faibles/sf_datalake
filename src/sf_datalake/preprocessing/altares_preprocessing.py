@@ -75,12 +75,16 @@ time_computations: List[Transformer] = []
 for feature, n_months in time_agg_config["LAG"].items():
     if feature in df.columns:
         time_computations.append(
-            sf_datalake.transform.LagOperator(inputCol=feature, n_months=n_months)
+            sf_datalake.transform.LagOperator(
+                inputCol=feature, n_months=n_months, ffill=True
+            )
         )
 for feature, n_months in time_agg_config["DIFF"].items():
     if feature in df.columns:
         time_computations.append(
-            sf_datalake.transform.DiffOperator(inputCol=feature, n_months=n_months)
+            sf_datalake.transform.DiffOperator(
+                inputCol=feature, n_months=n_months, ffill=True
+            )
         )
 for feature, n_months in time_agg_config["MOVING_AVERAGE"].items():
     if feature in df.columns:
