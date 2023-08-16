@@ -847,7 +847,7 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
             dataset = dataset.withColumn(
                 f"{input_col}_lag{n}m",
                 F.lag(F.col(input_col), n).over(lag_window),
-            ).drop("ref_date", "months_from_ref")
+            )
             if ffill or bfill:
                 # When we do a backward fill, we use a forward_window: we're looking for
                 # future (lagged) values from periods of time where lag values were
@@ -861,7 +861,7 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
                     ),
                 )
 
-        return dataset
+        return dataset.drop("ref_date", "months_from_ref")
 
 
 class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
