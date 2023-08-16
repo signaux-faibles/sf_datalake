@@ -90,7 +90,7 @@ for feature, n_months in time_agg_config["MOVING_AVERAGE"].items():
 
 selected_cols = []
 for sel_col in ["siren", "periode", "paydex", "fpi_30", "fpi_90"]:
-    selected_cols.append(df_col for df_col in df.columns if df_col.startswith(sel_col))
+    selected_cols.extend(df_col for df_col in df.columns if df_col.startswith(sel_col))
 
 sf_datalake.io.write_data(
     df.select(selected_cols),
