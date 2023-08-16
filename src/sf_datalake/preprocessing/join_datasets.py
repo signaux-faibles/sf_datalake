@@ -42,8 +42,11 @@ parser.add_argument(
 )
 parser.add_argument(
     "--judgments",
-    dest="judgments",
     help="Path to the preprocessed judgments dataset.",
+)
+parser.add_argument(
+    "--altares",
+    help="Path to the preprocessed altares dataset.",
 )
 parser.add_argument(
     "--dgfip_yearly",
@@ -74,13 +77,14 @@ datasets = load_data(
 siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
 df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
 df_judgments = siren_normalizer.transform(datasets["judgments"])
+df_altares = siren_normalizer.transform(datasets["judgments"])
 df_sf = siren_normalizer.transform(datasets["sf"]).withColumn(
     "periode", F.to_date(F.date_trunc("month", F.col("periode")))
-)
+)  # TODO: Should be done during sf preprocessing script.
 
 # Join datasets and drop (time, SIREN) duplicates with the highest
 # null values ratio from the DGFiP ratios dataset
-# TODO: Handle this preprocessing before this script
+# TODO: Handle this step during dgfip data preprocessing script
 df_dgfip_yearly = df_dgfip_yearly.withColumn(
     "null_ratio",
     sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_yearly.columns])
@@ -88,6 +92,7 @@ df_dgfip_yearly = df_dgfip_yearly.withColumn(
 )
 w = Window().partitionBy(["siren", "periode"]).orderBy(F.col("null_ratio").asc())
 
+# Join all datasets
 joined_df = (
     df_sf.join(
         df_dgfip_yearly,
@@ -103,6 +108,7 @@ joined_df = (
     .filter(F.col("n_row") == 1)
     .drop("n_row")
     .join(df_judgments, on="siren", how="left")
+    .join(df_altares, on="siren", how="left")
 )
 
 write_data(joined_df, args.output_path, args.output_format)
