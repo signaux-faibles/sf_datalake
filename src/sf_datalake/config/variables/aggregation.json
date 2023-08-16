@@ -11,7 +11,5 @@
         "apart_heures_consommees": "sum",
         "time_til_failure": "min"
     },
-    "NO_AGGREGATION": [
-        "paydex"
-    ]
+    "NO_AGGREGATION": []
 }

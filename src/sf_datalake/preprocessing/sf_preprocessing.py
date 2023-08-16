@@ -79,14 +79,11 @@ siren_level_ds = (
             "siret",
             "apart_heures_autorisees",
             "apart_heures_consommees",
-            "code_commune",
-            "code_naf",
             "cotisation",
             "effectif",
             "montant_part_ouvriere",
             "montant_part_patronale",
             "raison_sociale",
-            "region",
         ]
     )
 )
