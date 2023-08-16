@@ -70,8 +70,26 @@ siret_level_ds = input_ds.toDF(*(col.lower() for col in input_ds.columns))
 # Filter out public institutions and companies and aggregate at SIREN level
 siren_converter = sf_datalake.transform.SiretToSiren()
 aggregator = sf_datalake.transform.SirenAggregator(agg_config)
-siren_level_ds = PipelineModel([siren_converter, aggregator]).transform(siret_level_ds)
-
+siren_level_ds = (
+    PipelineModel([siren_converter, aggregator])
+    .transform(siret_level_ds)
+    .select(
+        [
+            "periode",
+            "siret",
+            "apart_heures_autorisees",
+            "apart_heures_consommees",
+            "code_commune",
+            "code_naf",
+            "cotisation",
+            "effectif",
+            "montant_part_ouvriere",
+            "montant_part_patronale",
+            "raison_sociale",
+            "region",
+        ]
+    )
+)
 
 #####################
 # Time Computations #
@@ -79,17 +97,20 @@ siren_level_ds = PipelineModel([siren_converter, aggregator]).transform(siret_le
 
 time_computations: List[Transformer] = []
 for feature, n_months in time_comp_config["LAG"].items():
-    time_computations.append(
-        sf_datalake.transform.LagOperator(inputCol=feature, n_months=n_months)
-    )
+    if feature in siren_level_ds.columns:
+        time_computations.append(
+            sf_datalake.transform.LagOperator(inputCol=feature, n_months=n_months)
+        )
 for feature, n_months in time_comp_config["DIFF"].items():
-    time_computations.append(
-        sf_datalake.transform.DiffOperator(inputCol=feature, n_months=n_months)
-    )
+    if feature in siren_level_ds.columns:
+        time_computations.append(
+            sf_datalake.transform.DiffOperator(inputCol=feature, n_months=n_months)
+        )
 for feature, n_months in time_comp_config["MOVING_AVERAGE"].items():
-    time_computations.append(
-        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
-    )
+    if feature in siren_level_ds.columns:
+        time_computations.append(
+            sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
+        )
 
 
 #######################
