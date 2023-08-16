@@ -76,14 +76,12 @@ siren_level_ds = (
     .select(
         [
             "periode",
-            "siret",
-            "apart_heures_autorisees",
+            "siren",
             "apart_heures_consommees",
             "cotisation",
             "effectif",
             "montant_part_ouvriere",
             "montant_part_patronale",
-            "raison_sociale",
         ]
     )
 )
