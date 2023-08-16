@@ -12,6 +12,6 @@
         "time_til_failure": "min"
     },
     "NO_AGGREGATION": [
-        "paydex_nb_jours"
+        "paydex"
     ]
 }

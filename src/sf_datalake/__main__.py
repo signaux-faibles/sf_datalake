@@ -163,7 +163,7 @@ if config["SAMPLE_RATIO"] != 1.0:
 
 # Switches
 with_paydex = False
-if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(config["FEATURES"]):
+if {"paydex_bin", "paydex_diff12m"} & set(config["FEATURES"]):
     with_paydex = True
     logging.info(
         "Paydex data features were requested through the provided configuration file. \

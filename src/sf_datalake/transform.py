@@ -294,7 +294,7 @@ class PaydexOneHotEncoder(
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol="paydex_nb_jours", outputCol="paydex_bin", bins=None)
+        self._setDefault(inputCol="paydex", outputCol="paydex_bin", bins=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -1080,8 +1080,7 @@ class HasPaydexFilter(Transformer):  # pylint: disable=too-few-public-methods
 
         """
         return dataset.filter(
-            F.col("paydex_nb_jours").isNotNull()
-            & F.col("paydex_nb_jours_diff12m").isNotNull()
+            F.col("paydex").isNotNull() & F.col("paydex_diff12m").isNotNull()
         )
 
 
