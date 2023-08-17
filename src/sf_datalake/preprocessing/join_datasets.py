@@ -106,7 +106,7 @@ joined_df = (
     .filter(F.col("n_row") == 1)
     .drop("n_row")
     .join(df_judgments, on="siren", how="left")
-    .join(df_altares, on="siren", how="left")
+    .join(df_altares, on=["siren", "periode"], how="left")
 )
 
 write_data(joined_df, args.output_path, args.output_format)
