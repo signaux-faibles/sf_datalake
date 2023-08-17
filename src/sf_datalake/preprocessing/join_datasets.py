@@ -68,6 +68,7 @@ datasets = load_data(
         "sf": args.sf_data,
         "dgfip_yearly": args.dgfip_yearly,
         "judgments": args.judgments,
+        "altares": args.altares,
     },
     file_format="orc",
 )
@@ -77,7 +78,7 @@ datasets = load_data(
 siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
 df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
 df_judgments = siren_normalizer.transform(datasets["judgments"])
-df_altares = siren_normalizer.transform(datasets["judgments"])
+df_altares = siren_normalizer.transform(datasets["altares"])
 df_sf = siren_normalizer.transform(datasets["sf"])
 
 # Join datasets and drop (time, SIREN) duplicates with the highest
