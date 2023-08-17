@@ -8,10 +8,7 @@
         "montant_part_ouvriere": "sum",
         "montant_part_patronale": "sum",
         "effectif": "sum",
-        "apart_heures_consommees": "sum",
-        "time_til_failure": "min"
+        "apart_heures_consommees": "sum"
     },
-    "NO_AGGREGATION": [
-        "paydex_nb_jours"
-    ]
+    "NO_AGGREGATION": []
 }
