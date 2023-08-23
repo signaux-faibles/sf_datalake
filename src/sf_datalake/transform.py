@@ -14,7 +14,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler, Imputer
+from pyspark.ml.feature import Imputer, OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.ml.param.shared import (
     HasInputCol,
     HasInputCols,
@@ -345,14 +345,14 @@ class MissingValuesHandler(
     Uses pyspark.sql.DataFrame.fillna method to fill missing values if required.
 
     Args:
-      inputCols: The input dataset columns to consider for filling. 
-      Categorical cols are not allowed. 
+      inputCols: The input dataset columns to consider for filling.
+      Categorical cols are not allowed.
       fill: If True, fill missing values. Defaults to True.
       value: Value to replace null values with. It must be a mapping from column name
         (string) to replacement value. The replacement value must be an int, float,
         boolean, or string.
       fix_val: If True, fill missing values using the `value` arg. Defaults to True.
-      stat_strategy : strategy for the Imputer class. 
+      stat_strategy : strategy for the Imputer class.
         The possible values are : 'mean', 'median' and 'mode'
 
 
@@ -389,13 +389,13 @@ class MissingValuesHandler(
     def setParams(self, **kwargs):
         """Set parameters for this transformer.
 
-        inputCols (list[str]): The input dataset columns to consider for filling. 
-        Categorical cols are not allowed. 
+        inputCols (list[str]): The input dataset columns to consider for filling.
+        Categorical cols are not allowed.
         fill (bool):If True, fill missing values. Defaults to True.
         value (dict): Value to replace null values with. It must be a mapping from
-          column name (string) to replacement value. 
+          column name (string) to replacement value.
           The replacement value must be an int, float, boolean, or string.
-        fix_val (bool): If True, fill missing values using the `value` arg. 
+        fix_val (bool): If True, fill missing values using the `value` arg.
         Defaults to True.
         stat_strategy (string) : strategy for the Imputer class.
           The possible values are : 'mean', 'median' and 'mode'.
@@ -417,12 +417,12 @@ class MissingValuesHandler(
 
         """
         fill: bool = self.getOrDefault("fill")
-        stat_strategy : str = self.getOrDefault("stat_strategy")
-        fix_val : bool = self.getOrDefault("fix_val")
+        stat_strategy: str = self.getOrDefault("stat_strategy")
+        fix_val: bool = self.getOrDefault("fix_val")
         value: dict = self.getOrDefault("value")
         features: List[str] = self.getOrDefault("inputCols")
         if fill:
-            if fix_val :
+            if fix_val:
                 for feature in features:
                     for var, val in value.items():
                         if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", feature):
@@ -435,18 +435,19 @@ class MissingValuesHandler(
                         set(features) - set(value),
                     )
                 dataset = dataset.fillna(
-                    {feature: val for feature,
-                     val in value.items() if feature in features
+                    {
+                        feature: val
+                        for feature, val in value.items()
+                        if feature in features
                     }
                 )
-        else :
+        else:
             imputer = Imputer(strategy=stat_strategy)
             imputer.setInputCols(features)
             imputer.setOutputCols(features)
             model = imputer.fit(dataset)
             dataset = model.transform(dataset)
         return dataset.dropna()
-
 
 
 class IdentifierNormalizer(
@@ -1085,9 +1086,9 @@ class LinearInterpolationOperator(
     """A transformer to apply linear interpolation for filling missing values.
 
     Apply linear interpolation to dataframe to fill gaps.
-    
+
     Args :
-        id_cols: string or list of column names to partition by the window function 
+        id_cols: string or list of column names to partition by the window function
         order_col: column to use to order by the window function
         inputCols: column to be filled
 
@@ -1108,7 +1109,7 @@ class LinearInterpolationOperator(
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(id_cols="siren", order_col = "periode",  inputCols=None)
+        self._setDefault(id_cols="siren", order_col="periode", inputCols=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -1116,7 +1117,7 @@ class LinearInterpolationOperator(
         """Set parameters for this transformer.
 
         inputCols (list[str]): The input dataset columns to consider for filling.
-        id_cols (str): Id columns to group for interpolation. 
+        id_cols (str): Id columns to group for interpolation.
         order_col (str): Columns to follow for interpolation.
 
         """
@@ -1137,29 +1138,61 @@ class LinearInterpolationOperator(
         features: List[str] = self.getOrDefault("inputCols")
         for feature in features:
             w = Window.partitionBy(id_cols).orderBy(order_col)
-            new_df = dataset.withColumn('rn',F.row_number().over(w))
-            new_df = new_df.withColumn('rn_not_null',F.when(F.col(feature).isNotNull(),F.col('rn')))
+            new_df = dataset.withColumn("rn", F.row_number().over(w))
+            new_df = new_df.withColumn(
+                "rn_not_null", F.when(F.col(feature).isNotNull(), F.col("rn"))
+            )
 
             # create relative references to the start value (last value not missing)
-            w_start = Window.partitionBy(id_cols).orderBy(order_col).rowsBetween(Window.unboundedPreceding,-1)
-            new_df = new_df.withColumn('start_val',F.last(feature,True).over(w_start))
-            new_df = new_df.withColumn('start_rn',F.last('rn_not_null',True).over(w_start))
+            w_start = (
+                Window.partitionBy(id_cols)
+                .orderBy(order_col)
+                .rowsBetween(Window.unboundedPreceding, -1)
+            )
+            new_df = new_df.withColumn("start_val", F.last(feature, True).over(w_start))
+            new_df = new_df.withColumn(
+                "start_rn", F.last("rn_not_null", True).over(w_start)
+            )
 
             # create relative references to the end value (first value not missing)
-            w_end = Window.partitionBy(id_cols).orderBy(order_col).rowsBetween(0,Window.unboundedFollowing)
-            new_df = new_df.withColumn('end_val',F.first(feature,True).over(w_end))
-            new_df = new_df.withColumn('end_rn',F.first('rn_not_null',True).over(w_end))
+            w_end = (
+                Window.partitionBy(id_cols)
+                .orderBy(order_col)
+                .rowsBetween(0, Window.unboundedFollowing)
+            )
+            new_df = new_df.withColumn("end_val", F.first(feature, True).over(w_end))
+            new_df = new_df.withColumn(
+                "end_rn", F.first("rn_not_null", True).over(w_end)
+            )
 
             if not isinstance(id_cols, list):
                 id_cols = [id_cols]
 
             # create references to gap length and current gap position
-            new_df = new_df.withColumn('diff_rn',F.col('end_rn')-F.col('start_rn'))
-            new_df = new_df.withColumn('curr_rn',F.col('diff_rn')-(F.col('end_rn')-F.col('rn')))
+            new_df = new_df.withColumn("diff_rn", F.col("end_rn") - F.col("start_rn"))
+            new_df = new_df.withColumn(
+                "curr_rn", F.col("diff_rn") - (F.col("end_rn") - F.col("rn"))
+            )
 
             # calculate linear interpolation value
-            lin_interp_func = (F.col('start_val')+(F.col('end_val')-F.col('start_val'))/F.col('diff_rn')*F.col('curr_rn'))
-            new_df = new_df.withColumn(feature,F.when(F.col(feature).isNull(),lin_interp_func).otherwise(F.col(feature)))
+            lin_interp_func = F.col("start_val") + (
+                F.col("end_val") - F.col("start_val")
+            ) / F.col("diff_rn") * F.col("curr_rn")
+            new_df = new_df.withColumn(
+                feature,
+                F.when(F.col(feature).isNull(), lin_interp_func).otherwise(
+                    F.col(feature)
+                ),
+            )
 
-            new_df = new_df.drop('rn', 'rn_not_null', 'start_val', 'end_val', 'start_rn', 'end_rn', 'diff_rn', 'curr_rn')
+            new_df = new_df.drop(
+                "rn",
+                "rn_not_null",
+                "start_val",
+                "end_val",
+                "start_rn",
+                "end_rn",
+                "diff_rn",
+                "curr_rn",
+            )
         return new_df
