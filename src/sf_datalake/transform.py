@@ -856,8 +856,18 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
                 lookup_function = F.first if bfill else F.last
                 dataset = dataset.withColumn(
                     f"{input_col}_lag{n}m",
-                    lookup_function(f"{input_col}_lag{n}m", ignorenulls=True).over(
-                        fill_window
+                    F.when(
+                        F.count(
+                            F.when(
+                                F.isnull(f"{input_col}_lag{n}m"), f"{input_col}_lag{n}m"
+                            )
+                        ).over(fill_window)
+                        != F.count(F.col(f"{input_col}_lag{n}m")).over(fill_window),
+                        lookup_function(f"{input_col}_lag{n}m", ignorenulls=True).over(
+                            fill_window
+                        ),
+                    ).otherwise(
+                        lookup_function(input_col, ignorenulls=True).over(fill_window)
                     ),
                 )
 
