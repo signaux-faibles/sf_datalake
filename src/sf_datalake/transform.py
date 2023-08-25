@@ -1094,12 +1094,13 @@ class LinearInterpolationOperator(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to apply linear interpolation for filling missing values.
 
-    Apply linear interpolation to dataframe to fill gaps.
+    Apply linear interpolation to dataframe to fill gaps \
+        group by companies accoding to a time index.
 
     Args :
-        id_cols: string or list of column names to partition by the window function
-        order_col: column to use to order by the window function
-        inputCols: column to be filled
+        id_cols: Entity index of the dataset.
+        order_col: Time index of the dataset.
+        inputCols: column to be filled.
 
 
     """
@@ -1133,13 +1134,13 @@ class LinearInterpolationOperator(
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Use linear interpolation to fill empty values inside a time serie
+        """Use linear interpolation to fill missing time-series values.
 
         Args:
             dataset: DataFrame with timeseries to transform containing missing values.
 
         Returns:
-            DataFrame where previously missing values are either interpolate.
+            DataFrame where previously time-series missing values are interpolate.
 
         """
         id_cols: str = self.getOrDefault("id_cols")
@@ -1158,9 +1159,11 @@ class LinearInterpolationOperator(
                 .orderBy(order_col)
                 .rowsBetween(Window.unboundedPreceding, -1)
             )
-            new_df = new_df.withColumn("start_val", F.last(feature, True).over(w_start))
             new_df = new_df.withColumn(
-                "start_rn", F.last("rn_not_null", True).over(w_start)
+                "left_bound_val", F.last(feature, ignorenulls=True).over(w_start)
+            )
+            new_df = new_df.withColumn(
+                "left_bound_rn", F.last("rn_not_null", ignorenulls=True).over(w_start)
             )
 
             # create relative references to the end value (first value not missing)
@@ -1169,24 +1172,26 @@ class LinearInterpolationOperator(
                 .orderBy(order_col)
                 .rowsBetween(0, Window.unboundedFollowing)
             )
-            new_df = new_df.withColumn("end_val", F.first(feature, True).over(w_end))
             new_df = new_df.withColumn(
-                "end_rn", F.first("rn_not_null", True).over(w_end)
+                "right_bound_val", F.first(feature, ignorenulls=True).over(w_end)
+            )
+            new_df = new_df.withColumn(
+                "right_bound_rn", F.first("rn_not_null", ignorenulls=True).over(w_end)
             )
 
-            if not isinstance(id_cols, list):
-                id_cols = [id_cols]
-
             # create references to gap length and current gap position
-            new_df = new_df.withColumn("diff_rn", F.col("end_rn") - F.col("start_rn"))
             new_df = new_df.withColumn(
-                "curr_rn", F.col("diff_rn") - (F.col("end_rn") - F.col("rn"))
+                "interval_length_rn", F.col("right_bound_rn") - F.col("left_bound_rn")
+            )
+            new_df = new_df.withColumn(
+                "curr_rn",
+                F.col("interval_length_rn") - (F.col("right_bound_rn") - F.col("rn")),
             )
 
             # calculate linear interpolation value
-            lin_interp_func = F.col("start_val") + (
-                F.col("end_val") - F.col("start_val")
-            ) / F.col("diff_rn") * F.col("curr_rn")
+            lin_interp_func = F.col("left_bound_val") + (
+                F.col("right_bound_val") - F.col("left_bound_val")
+            ) / F.col("interval_length_rn") * F.col("curr_rn")
             new_df = new_df.withColumn(
                 feature,
                 F.when(F.col(feature).isNull(), lin_interp_func).otherwise(
@@ -1194,14 +1199,13 @@ class LinearInterpolationOperator(
                 ),
             )
 
-            new_df = new_df.drop(
-                "rn",
-                "rn_not_null",
-                "start_val",
-                "end_val",
-                "start_rn",
-                "end_rn",
-                "diff_rn",
-                "curr_rn",
-            )
-        return new_df
+        return new_df.drop(
+            "rn",
+            "rn_not_null",
+            "left_bound_val",
+            "right_bound_val",
+            "left_bound_rn",
+            "right_bound_rn",
+            "interval_length_rn",
+            "curr_rn",
+        )
