@@ -2,7 +2,6 @@
 
 import datetime as dt
 import itertools
-import logging
 import math
 import re
 from typing import List
@@ -350,8 +349,7 @@ class MissingValuesHandler(
       fill: If True, fill missing values. Defaults to True.
       value: Value to replace null values with. It must be a mapping from column name
         (string) to replacement value. The replacement value must be an int, float,
-        boolean, or string.
-      fix_val: If True, fill missing values using the `value` arg. Defaults to True.
+        boolean, or string. If it is None, stat imputaion is applied.
       stat_strategy : strategy for the Imputer class.
         The possible values are : 'mean', 'median' and 'mode'
 
@@ -362,11 +360,6 @@ class MissingValuesHandler(
         Params._dummy(),  # pylint: disable=protected-access
         "fill",
         "Switch for filling null values.",
-    )
-    fix_val = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "fix_val",
-        "Switch for filling null values with config predefined values.",
     )
     value = Param(
         Params._dummy(),  # pylint: disable=protected-access
@@ -382,7 +375,7 @@ class MissingValuesHandler(
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(fill=True, value=None, fix_val=True, stat_strategy="median")
+        self._setDefault(fill=True, value=None, stat_strategy="median")
         self.setParams(**kwargs)
 
     @keyword_only
@@ -393,10 +386,9 @@ class MissingValuesHandler(
         Categorical cols are not allowed.
         fill (bool):If True, fill missing values. Defaults to True.
         value (dict): Value to replace null values with. It must be a mapping from
-          column name (string) to replacement value.
+          column name (string) to replacement value. If it is None,
+          stat imputaion is applied.
           The replacement value must be an int, float, boolean, or string.
-        fix_val (bool): If True, fill missing values using the `value` arg.
-        Defaults to True.
         stat_strategy (string) : strategy for the Imputer class.
           The possible values are : 'mean', 'median' and 'mode'.
         """
@@ -418,22 +410,15 @@ class MissingValuesHandler(
         """
         fill: bool = self.getOrDefault("fill")
         stat_strategy: str = self.getOrDefault("stat_strategy")
-        fix_val: bool = self.getOrDefault("fix_val")
         value: dict = self.getOrDefault("value")
         features: List[str] = self.getOrDefault("inputCols")
         if fill:
-            if fix_val:
+            if value is not None:
                 for feature in features:
                     for var, val in value.items():
                         if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", feature):
                             value[feature] = val
                             break
-
-                if not set(features) <= set(value):
-                    logging.warning(
-                        "No corresponding fill value found for features %s",
-                        set(features) - set(value),
-                    )
                 dataset = dataset.fillna(
                     {
                         feature: val
@@ -441,13 +426,37 @@ class MissingValuesHandler(
                         if feature in features
                     }
                 )
-        else:
-            imputer = Imputer(strategy=stat_strategy)
-            imputer.setInputCols(features)
-            imputer.setOutputCols(features)
-            model = imputer.fit(dataset)
-            dataset = model.transform(dataset)
-        return dataset.dropna()
+                if not set(features) <= set(value):
+                    feature_to_impute = list(set(features) - set(value))
+                    dtypes = [
+                        dtype
+                        for name, dtype in dataset.select(feature_to_impute).dtypes
+                    ]
+                    for dtype in dtypes:
+                        if dtype in ("bool", "timestamp", "string"):
+                            raise Exception(
+                                "impossible to impute in \
+                                a statistical way categorical variable"
+                            )
+                    imputer = Imputer(strategy=stat_strategy)
+                    imputer.setInputCols(feature_to_impute)
+                    imputer.setOutputCols(feature_to_impute)
+                    model = imputer.fit(dataset)
+                    dataset = model.transform(dataset)
+            else:
+                dtypes = [dtype for name, dtype in dataset.select(features).dtypes]
+                for dtype in dtypes:
+                    if dtype in ("bool", "timestamp", "string"):
+                        raise Exception(
+                            "impossible to impute in \
+                                a statistical way categorical variable"
+                        )
+                imputer = Imputer(strategy=stat_strategy)
+                imputer.setInputCols(features)
+                imputer.setOutputCols(features)
+                model = imputer.fit(dataset)
+                dataset = model.transform(dataset)
+        return dataset
 
 
 class IdentifierNormalizer(
