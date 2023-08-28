@@ -844,20 +844,31 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         )
 
         for n in n_months:
+            output_col = f"{input_col}_lag{n}m"
             dataset = dataset.withColumn(
-                f"{input_col}_lag{n}m",
+                output_col,
                 F.lag(F.col(input_col), n).over(lag_window),
             )
+            # Fill missing values
             if ffill or bfill:
                 # When we do a backward fill, we use a forward_window: we're looking for
                 # future (lagged) values from periods of time where lag values were
                 # unavailable.
-                fill_window = backward_window if ffill else forward_window
+                fill_window = forward_window if bfill else backward_window
                 lookup_function = F.first if bfill else F.last
                 dataset = dataset.withColumn(
-                    f"{input_col}_lag{n}m",
-                    lookup_function(f"{input_col}_lag{n}m", ignorenulls=True).over(
-                        fill_window
+                    output_col,
+                    F.when(
+                        # If not all computed lagged values are null, use them for
+                        # filling.
+                        F.count(F.when(F.isnull(output_col), output_col)).over(
+                            fill_window
+                        )
+                        != F.count(F.col(output_col)).over(fill_window),
+                        lookup_function(output_col, ignorenulls=True).over(fill_window),
+                    ).otherwise(
+                        # Otherwise, use the non-lagged input column values.
+                        lookup_function(input_col, ignorenulls=True).over(fill_window)
                     ),
                 )
 
