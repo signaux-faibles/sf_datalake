@@ -412,8 +412,8 @@ class MissingValuesHandler(
             dataset = dataset.fillna(
                 {var: val for var, val in value.items() if var in input_cols}
             )
-        else:
-            dtypes = [dtype for name, dtype in dataset.select(input_cols).dtypes]
+        elif stat_strategy is not None:
+            dtypes = [dtype for _, dtype in dataset.select(input_cols).dtypes]
             if any(dtype in ("bool", "timestamp", "string") for dtype in dtypes):
                 raise ValueError(
                     "Statistical imputation of a non-numerical variable is not \
