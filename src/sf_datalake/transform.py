@@ -4,7 +4,7 @@ import datetime as dt
 import itertools
 import math
 import re
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import pyspark.ml
@@ -1092,16 +1092,15 @@ class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
 class LinearInterpolationOperator(
     Transformer, HasInputCols
 ):  # pylint: disable=too-few-public-methods
-    """A transformer to apply linear interpolation for filling missing values.
+    """A transformer that fills missing values using linear interpolation.
 
-    Apply linear interpolation to dataframe to fill gaps \
-        group by companies accoding to a time index.
+    Data is grouped using the `id_cols` columns and ordered using the `time_col`, any
+    null values gap between non-null values will be filled.
 
     Args :
-        id_cols: Entity index of the dataset.
-        order_col: Time index of the dataset.
-        inputCols: column to be filled.
-
+        inputCols: Columns to filled.
+        id_cols: Entity index, along which the dataset will be partitioned.
+        time_col: Time index, used to sort the dataset.
 
     """
 
@@ -1110,25 +1109,27 @@ class LinearInterpolationOperator(
         "id_cols",
         "Id columns to group for interpolation.",
     )
-    order_col = Param(
+    time_col = Param(
         Params._dummy(),  # pylint: disable=protected-access
-        "order_col",
+        "time_col",
         "Columns to follow for interpolation.",
     )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(id_cols="siren", order_col="periode", inputCols=None)
+        self._setDefault(id_cols="siren", time_col="periode", inputCols=None)
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, **kwargs):
         """Set parameters for this transformer.
 
-        inputCols (list[str]): The input dataset columns to consider for filling.
-        id_cols (str): Id columns to group for interpolation.
-        order_col (str): Columns to follow for interpolation.
+        Args:
+            inputCols (list[str]): Columns to fill.
+            id_cols (str or list[str]): Entity index, along which the dataset will be
+              partitioned.
+            time_col (str): Time index, used to sort the dataset.
 
         """
         return self._set(**kwargs)
@@ -1137,69 +1138,71 @@ class LinearInterpolationOperator(
         """Use linear interpolation to fill missing time-series values.
 
         Args:
-            dataset: DataFrame with timeseries to transform containing missing values.
+            dataset: DataFrame with time-series columns containing missing values.
 
         Returns:
-            DataFrame where previously time-series missing values are interpolate.
+            DataFrame where time-series missing values are filled through interpolation.
 
         """
-        id_cols: str = self.getOrDefault("id_cols")
-        order_col: str = self.getOrDefault("order_col")
-        features: List[str] = self.getOrDefault("inputCols")
-        for feature in features:
-            w = Window.partitionBy(id_cols).orderBy(order_col)
-            new_df = dataset.withColumn("rn", F.row_number().over(w))
-            new_df = new_df.withColumn(
-                "rn_not_null", F.when(F.col(feature).isNotNull(), F.col("rn"))
+        id_cols: Union[str, List[str]] = self.getOrDefault("id_cols")
+        time_col: str = self.getOrDefault("time_col")
+        input_cols: List[str] = self.getOrDefault("inputCols")
+
+        w = Window.partitionBy(id_cols).orderBy(time_col)
+        w_start = (
+            Window.partitionBy(id_cols)
+            .orderBy(time_col)
+            .rowsBetween(Window.unboundedPreceding, -1)
+        )
+        w_end = (
+            Window.partitionBy(id_cols)
+            .orderBy(time_col)
+            .rowsBetween(0, Window.unboundedFollowing)
+        )
+        output_df = dataset.withColumn("rn", F.row_number().over(w))
+
+        for col in input_cols:
+
+            # Assign index for non-null rows within partitioned windows
+            output_df = output_df.withColumn(
+                "rn_not_null", F.when(F.col(col).isNotNull(), F.col("rn"))
             )
 
-            # create relative references to the start value (last value not missing)
-            w_start = (
-                Window.partitionBy(id_cols)
-                .orderBy(order_col)
-                .rowsBetween(Window.unboundedPreceding, -1)
+            # Create relative references to the gap start value (left bound)
+            output_df = output_df.withColumn(
+                "left_bound_val", F.last(col, ignorenulls=True).over(w_start)
             )
-            new_df = new_df.withColumn(
-                "left_bound_val", F.last(feature, ignorenulls=True).over(w_start)
-            )
-            new_df = new_df.withColumn(
+            output_df = output_df.withColumn(
                 "left_bound_rn", F.last("rn_not_null", ignorenulls=True).over(w_start)
             )
 
-            # create relative references to the end value (first value not missing)
-            w_end = (
-                Window.partitionBy(id_cols)
-                .orderBy(order_col)
-                .rowsBetween(0, Window.unboundedFollowing)
+            # Create relative references to the gap end value (right bound)
+            output_df = output_df.withColumn(
+                "right_bound_val", F.first(col, ignorenulls=True).over(w_end)
             )
-            new_df = new_df.withColumn(
-                "right_bound_val", F.first(feature, ignorenulls=True).over(w_end)
-            )
-            new_df = new_df.withColumn(
+            output_df = output_df.withColumn(
                 "right_bound_rn", F.first("rn_not_null", ignorenulls=True).over(w_end)
             )
 
-            # create references to gap length and current gap position
-            new_df = new_df.withColumn(
+            # Create references to gap length and current gap position.
+            output_df = output_df.withColumn(
                 "interval_length_rn", F.col("right_bound_rn") - F.col("left_bound_rn")
             )
-            new_df = new_df.withColumn(
+            output_df = output_df.withColumn(
                 "curr_rn",
                 F.col("interval_length_rn") - (F.col("right_bound_rn") - F.col("rn")),
             )
 
-            # calculate linear interpolation value
-            lin_interp_func = F.col("left_bound_val") + (
+            # Compute linear interpolation value
+            lin_interp_col = F.col("left_bound_val") + (
                 F.col("right_bound_val") - F.col("left_bound_val")
             ) / F.col("interval_length_rn") * F.col("curr_rn")
-            new_df = new_df.withColumn(
-                feature,
-                F.when(F.col(feature).isNull(), lin_interp_func).otherwise(
-                    F.col(feature)
-                ),
+            output_df = output_df.withColumn(
+                col,
+                F.when(F.col(col).isNull(), lin_interp_col).otherwise(F.col(col)),
             )
 
-        return new_df.drop(
+        return output_df.drop(
             "rn",
             "rn_not_null",
             "left_bound_val",
