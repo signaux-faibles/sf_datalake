@@ -341,26 +341,18 @@ class MissingValuesHandler(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
-    Uses pyspark.sql.DataFrame.fillna method to fill missing values if required.
+    Uses pyspark.sql.DataFrame.fillna or an Imputer object to fill missing values.
 
     Args:
       inputCols: The input dataset columns to consider for filling.
-      Categorical cols are not allowed.
-      fill: If True, fill missing values. Defaults to True.
       value: Value to replace null values with. It must be a mapping from column name
         (string) to replacement value. The replacement value must be an int, float,
         boolean, or string. If it is None, stat imputaion is applied.
-      stat_strategy : strategy for the Imputer class.
-        The possible values are : 'mean', 'median' and 'mode'
-
+      stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median' \
+        and 'mode'
 
     """
 
-    fill = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "fill",
-        "Switch for filling null values.",
-    )
     value = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "value",
@@ -383,79 +375,54 @@ class MissingValuesHandler(
         """Set parameters for this transformer.
 
         inputCols (list[str]): The input dataset columns to consider for filling.
-        Categorical cols are not allowed.
-        fill (bool):If True, fill missing values. Defaults to True.
         value (dict): Value to replace null values with. It must be a mapping from
-          column name (string) to replacement value. If it is None,
-          stat imputaion is applied.
-          The replacement value must be an int, float, boolean, or string.
-        stat_strategy (string) : strategy for the Imputer class.
-          The possible values are : 'mean', 'median' and 'mode'.
+          column name (string) to replacement value. If it is None, stat imputaion is
+          applied.
+        stat_strategy (string) : strategy for the Imputer class. Possible values are:
+          'mean', 'median' and 'mode'.
         """
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Fills or drop entries containing missing values.
-
-        If `fill` patameter is true, missing data is filled with predefined values from
-        the `value` parameter.
+        """Fills entries containing missing values.
 
         Args:
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-            DataFrame where previously missing values are either filled, or
-            corresponding entries are dropped.
+
+            DataFrame where previously missing values are either filled.
 
         """
-        fill: bool = self.getOrDefault("fill")
         stat_strategy: str = self.getOrDefault("stat_strategy")
         value: dict = self.getOrDefault("value")
-        features: List[str] = self.getOrDefault("inputCols")
-        if fill:
-            if value is not None:
-                for feature in features:
-                    for var, val in value.items():
-                        if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", feature):
-                            value[feature] = val
-                            break
-                dataset = dataset.fillna(
-                    {
-                        feature: val
-                        for feature, val in value.items()
-                        if feature in features
-                    }
+        input_cols: List[str] = self.getOrDefault("inputCols")
+
+        if value is not None and stat_strategy is not None:
+            raise ValueError(
+                "`value` and `stat_strategy` are mutually exclusive. \
+                Use either one."
+            )
+        if value is not None:
+            for col in input_cols:
+                for var, val in value.items():
+                    if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", col):
+                        value[col] = val
+                        break
+            dataset = dataset.fillna(
+                {var: val for var, val in value.items() if var in input_cols}
+            )
+        else:
+            dtypes = [dtype for name, dtype in dataset.select(input_cols).dtypes]
+            if any(dtype in ("bool", "timestamp", "string") for dtype in dtypes):
+                raise ValueError(
+                    "Statistical imputation of a non-numerical variable is not \
+                    supported."
                 )
-                if not set(features) <= set(value):
-                    feature_to_impute = list(set(features) - set(value))
-                    dtypes = [
-                        dtype
-                        for name, dtype in dataset.select(feature_to_impute).dtypes
-                    ]
-                    for dtype in dtypes:
-                        if dtype in ("bool", "timestamp", "string"):
-                            raise Exception(
-                                "impossible to impute in \
-                                a statistical way categorical variable"
-                            )
-                    imputer = Imputer(strategy=stat_strategy)
-                    imputer.setInputCols(feature_to_impute)
-                    imputer.setOutputCols(feature_to_impute)
-                    model = imputer.fit(dataset)
-                    dataset = model.transform(dataset)
-            else:
-                dtypes = [dtype for name, dtype in dataset.select(features).dtypes]
-                for dtype in dtypes:
-                    if dtype in ("bool", "timestamp", "string"):
-                        raise Exception(
-                            "impossible to impute in \
-                                a statistical way categorical variable"
-                        )
-                imputer = Imputer(strategy=stat_strategy)
-                imputer.setInputCols(features)
-                imputer.setOutputCols(features)
-                model = imputer.fit(dataset)
-                dataset = model.transform(dataset)
+            imputer = Imputer(strategy=stat_strategy)
+            imputer.setInputCols(input_cols)
+            imputer.setOutputCols(input_cols)
+            dataset = imputer.fit(dataset).transform(dataset)
         return dataset
 
 
