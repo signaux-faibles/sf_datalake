@@ -210,12 +210,15 @@ building_steps = [
             + [config["TARGET"]["outputCol"]]  # contains a single string
         )
     ),
-    sf_datalake.transform.MissingValuesHandler(
-        inputCols=list(config["FEATURES"]),
-        fill=config["FILL_MISSING_VALUES"],
-        value=config["DEFAULT_VALUES"],
-    ),
 ]
+if config["FILL_MISSING_VALUES"]:
+    building_steps.append(
+        sf_datalake.transform.MissingValuesHandler(
+            inputCols=list(config["FEATURES"]),
+            value=config["DEFAULT_VALUES"],
+        )
+    )
+
 preprocessing_pipeline = PipelineModel(
     stages=filter_steps + normalizing_steps + feature_engineering_steps + building_steps
 )

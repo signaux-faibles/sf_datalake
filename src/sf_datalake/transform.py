@@ -369,7 +369,7 @@ class MissingValuesHandler(
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(fill=True, value=None, stat_strategy="median")
+        self._setDefault(value=None, stat_strategy="median")
         self.setParams(**kwargs)
 
     @keyword_only
