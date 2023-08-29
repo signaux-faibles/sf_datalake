@@ -341,13 +341,15 @@ class MissingValuesHandler(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
-    Uses pyspark.sql.DataFrame.fillna or an Imputer object to fill missing values.
+    Uses pyspark.sql.DataFrame.fillna or an (statistical) Imputer object to fill missing
+    values. Both strategies are mutually exclusive, so use either `value` or
+    `stat_strategy`.
 
     Args:
       inputCols: The input dataset columns to consider for filling.
       value: Value to replace null values with. It must be a mapping from column name
         (string) to replacement value. The replacement value must be an int, float,
-        boolean, or string. If it is None, stat imputaion is applied.
+        boolean, or string.
       stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median' \
         and 'mode'
 
@@ -423,6 +425,8 @@ class MissingValuesHandler(
             imputer.setInputCols(input_cols)
             imputer.setOutputCols(input_cols)
             dataset = imputer.fit(dataset).transform(dataset)
+        else:
+            raise ValueError("Either `value` or `stat_strategy` must be set.")
         return dataset
 
 
