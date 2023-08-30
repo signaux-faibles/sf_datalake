@@ -55,7 +55,8 @@ This will install git hooks that should enforce a set of properties before commi
 - `docs/` - Sphinx auto-documentation sources.
 - `src/` Contains all the python package source code, see the docs pages for a thorough description or the `__init__.py` module docstring.
     - `preprocessing/` - Production of datasets from raw data. Datasets loading and handling, exploration and feature engineering utilities.
-- `test/` - Tests (unitary, integration) associated with the code. They may be executed anytime using `pytest`.
+    - `postprocessing/` - Generation of front-end ready documents, statistical evaluation of predictions.
+- `tests/` - Tests associated with the code. They may be executed anytime using `pytest`.
 - `.gitlab-ci.yml` - The gitlab CI/CD tools configuration file.
 - `LICENSE` - The legal license associated with this repository.
 - `MANIFEST.in` - Declaration of data resources used by the package.
