@@ -2,9 +2,8 @@
 
 import datetime as dt
 import itertools
-import logging
 import re
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import pyspark.ml
@@ -13,7 +12,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
+from pyspark.ml.feature import Imputer, OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.ml.param.shared import (
     HasInputCol,
     HasInputCols,
@@ -341,32 +340,35 @@ class MissingValuesHandler(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
-    Uses pyspark.sql.DataFrame.fillna method to fill missing values if required.
+    Uses pyspark.sql.DataFrame.fillna or an (statistical) Imputer object to fill missing
+    values. Both strategies are mutually exclusive, so use either `value` or
+    `stat_strategy`.
 
     Args:
       inputCols: The input dataset columns to consider for filling.
-      fill: If True, fill missing values using the `value` arg. Defaults to True.
       value: Value to replace null values with. It must be a mapping from column name
         (string) to replacement value. The replacement value must be an int, float,
         boolean, or string.
+      stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median' \
+        and 'mode'
 
     """
 
-    fill = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "fill",
-        "Switch for filling null values.",
-    )
     value = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "value",
         "Value to replace null values with.",
     )
+    stat_strategy = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "stat_strategy",
+        "Statistic method to use into the Imputer class.",
+    )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(fill=True, value=None)
+        self._setDefault(value=None, stat_strategy=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -374,47 +376,56 @@ class MissingValuesHandler(
         """Set parameters for this transformer.
 
         inputCols (list[str]): The input dataset columns to consider for filling.
-        fill (bool): If True, fill missing values using the `value` arg. Defaults to
-          True.
         value (dict): Value to replace null values with. It must be a mapping from
-          column name (string) to replacement value. The replacement value must be an
-          int, float, boolean, or string.
-
+          column name (string) to replacement value. If it is None, stat imputaion is
+          applied.
+        stat_strategy (string) : strategy for the Imputer class. Possible values are:
+          'mean', 'median' and 'mode'.
         """
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Fills or drop entries containing missing values.
-
-        If `fill` patameter is true, missing data is filled with predefined values from
-        the `value` parameter.
+        """Fills entries containing missing values.
 
         Args:
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-            DataFrame where previously missing values are either filled, or
-            corresponding entries are dropped.
+
+            DataFrame where previously missing values are either filled.
 
         """
-        fill: bool = self.getOrDefault("fill")
+        stat_strategy: str = self.getOrDefault("stat_strategy")
         value: dict = self.getOrDefault("value")
-        features: List[str] = self.getOrDefault("inputCols")
-        if fill:
-            for feature in features:
-                for var, val in value.items():
-                    if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", feature):
-                        value[feature] = val
-                        break
-            if not set(features) <= set(value):
-                logging.warning(
-                    "No corresponding fill value found for features %s",
-                    set(features) - set(value),
-                )
-            dataset = dataset.fillna(
-                {feature: val for feature, val in value.items() if feature in features}
+        input_cols: List[str] = self.getOrDefault("inputCols")
+
+        if value is not None and stat_strategy is not None:
+            raise ValueError(
+                "`value` and `stat_strategy` are mutually exclusive. Use either one."
             )
-        return dataset.dropna()
+        if value is not None:
+            for col in input_cols:
+                for var, val in value.items():
+                    if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", col):
+                        value[col] = val
+                        break
+            dataset = dataset.fillna(
+                {var: val for var, val in value.items() if var in input_cols}
+            )
+        elif stat_strategy is not None:
+            dtypes = [dtype for _, dtype in dataset.select(input_cols).dtypes]
+            if any(dtype in {"bool", "timestamp", "string"} for dtype in dtypes):
+                raise ValueError(
+                    "Statistical imputation of a non-numerical variable is not "
+                    "supported."
+                )
+            imputer = Imputer(strategy=stat_strategy)
+            imputer.setInputCols(input_cols)
+            imputer.setOutputCols(input_cols)
+            dataset = imputer.fit(dataset).transform(dataset)
+        else:
+            raise ValueError("Either `value` or `stat_strategy` must be set.")
+        return dataset
 
 
 class IdentifierNormalizer(
@@ -1141,3 +1152,128 @@ class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
         if "effectif" not in dataset.columns:
             raise KeyError("Dataset has no 'effectif' column.")
         return dataset.filter(F.col("effectif") >= 10)
+
+
+class LinearInterpolationOperator(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
+    """A transformer that fills missing values using linear interpolation.
+
+    Data is grouped using the `id_cols` columns and ordered using the `time_col`, any
+    null values gap between non-null values will be filled.
+
+    Args :
+        inputCols: Columns to filled.
+        id_cols: Entity index, along which the dataset will be partitioned.
+        time_col: Time index, used to sort the dataset.
+
+    """
+
+    id_cols = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "id_cols",
+        "Id columns to group for interpolation.",
+    )
+    time_col = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "time_col",
+        "Columns to follow for interpolation.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(id_cols="siren", time_col="periode", inputCols=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            inputCols (list[str]): Columns to fill.
+            id_cols (str or list[str]): Entity index, along which the dataset will be
+              partitioned.
+            time_col (str): Time index, used to sort the dataset.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Use linear interpolation to fill missing time-series values.
+
+        Args:
+            dataset: DataFrame with time-series columns containing missing values.
+
+        Returns:
+            DataFrame where time-series missing values are filled through interpolation.
+
+        """
+        id_cols: Union[str, List[str]] = self.getOrDefault("id_cols")
+        time_col: str = self.getOrDefault("time_col")
+        input_cols: List[str] = self.getOrDefault("inputCols")
+
+        w = Window.partitionBy(id_cols).orderBy(time_col)
+        w_start = (
+            Window.partitionBy(id_cols)
+            .orderBy(time_col)
+            .rowsBetween(Window.unboundedPreceding, -1)
+        )
+        w_end = (
+            Window.partitionBy(id_cols)
+            .orderBy(time_col)
+            .rowsBetween(0, Window.unboundedFollowing)
+        )
+        output_df = dataset.withColumn("rn", F.row_number().over(w))
+
+        for col in input_cols:
+
+            # Assign index for non-null rows within partitioned windows
+            output_df = output_df.withColumn(
+                "rn_not_null", F.when(F.col(col).isNotNull(), F.col("rn"))
+            )
+
+            # Create relative references to the gap start value (left bound)
+            output_df = output_df.withColumn(
+                "left_bound_val", F.last(col, ignorenulls=True).over(w_start)
+            )
+            output_df = output_df.withColumn(
+                "left_bound_rn", F.last("rn_not_null", ignorenulls=True).over(w_start)
+            )
+
+            # Create relative references to the gap end value (right bound)
+            output_df = output_df.withColumn(
+                "right_bound_val", F.first(col, ignorenulls=True).over(w_end)
+            )
+            output_df = output_df.withColumn(
+                "right_bound_rn", F.first("rn_not_null", ignorenulls=True).over(w_end)
+            )
+
+            # Create references to gap length and current gap position.
+            output_df = output_df.withColumn(
+                "interval_length_rn", F.col("right_bound_rn") - F.col("left_bound_rn")
+            )
+            output_df = output_df.withColumn(
+                "curr_rn",
+                F.col("interval_length_rn") - (F.col("right_bound_rn") - F.col("rn")),
+            )
+
+            # Compute linear interpolation value
+            lin_interp_col = F.col("left_bound_val") + (
+                F.col("right_bound_val") - F.col("left_bound_val")
+            ) / F.col("interval_length_rn") * F.col("curr_rn")
+            output_df = output_df.withColumn(
+                col,
+                F.when(F.col(col).isNull(), lin_interp_col).otherwise(F.col(col)),
+            )
+
+        return output_df.drop(
+            "rn",
+            "rn_not_null",
+            "left_bound_val",
+            "right_bound_val",
+            "left_bound_rn",
+            "right_bound_rn",
+            "interval_length_rn",
+            "curr_rn",
+        )
