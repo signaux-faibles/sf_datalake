@@ -7,7 +7,7 @@ import datetime as dt
 import pytest
 from pyspark.sql import types as T
 
-from sf_datalake.transform import IdentifierNormalizer  # DateParser, SiretToSiren
+from sf_datalake.transform import DateParser, IdentifierNormalizer  # , SiretToSiren
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def parsed_date_df(spark):
     schema = T.StructType(
         [
             T.StructField("raw_date", T.StringType(), True),
-            T.StructField("parsed_date", T.DateType(), True),
+            T.StructField("ref_date", T.DateType(), True),
         ]
     )
 
@@ -50,3 +50,10 @@ def parsed_date_df(spark):
 def test_siren_padding(siren_padding_df):
     df = IdentifierNormalizer(inputCol="siren", n_pad=9).transform(siren_padding_df)
     assert all(r["siren"] == r["padded_siren"] for r in df.collect())
+
+
+def test_date_parser(parsed_date_df):
+    df = DateParser(
+        inputCol="raw_date", outputCol="parsed_date", format="yyyyMMdd"
+    ).transform(parsed_date_df)
+    assert all(r["ref_date"] == r["parsed_date"] for r in df.collect())
