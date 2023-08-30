@@ -29,15 +29,18 @@ import sf_datalake.io
 ####################
 
 parser = sf_datalake.io.data_path_parser()
+parser.add_argument(
+    "--output_format", default="orc", help="Output dataset file format."
+)
 parser.description = "Build a dataset of yearly DGFiP data."
 args = parser.parse_args()
 
 data_paths = {
-    "indmap": path.join(args.input, "etl_decla-declarations_indmap"),
-    "af": path.join(args.input, "etl_decla-declarations_af"),
-    "rar_tva": path.join(args.input, "rar_tva_exercice"),
+    "indmap": path.join(args.input, "etl_decla", "declarations_indmap.csv"),
+    "af": path.join(args.input, "etl_decla", "declarations_af.csv"),
+    "rar_tva": path.join(args.input, "cfvr", "rar_tva_exercice.csv"),
 }
-datasets = sf_datalake.io.load_data(data_paths, file_format="orc")
+datasets = sf_datalake.io.load_data(data_paths, file_format="csv", sep="|")
 
 # Set every column name to lower case (if not already).
 for name, ds in datasets.items():
@@ -64,4 +67,4 @@ df = declarations.join(
     datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
 )
 
-df.write.format("orc").save(args.output)
+sf_datalake.io.write_data(df, args.output, args.output_format)

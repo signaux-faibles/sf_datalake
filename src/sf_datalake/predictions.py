@@ -42,46 +42,59 @@ def merge_predictions_lists(predictions_paths: List[str], output_path: str):
         )
 
 
+def compute_tailoring_signals(
+    df: pd.DataFrame,
+    tailoring_steps: Dict[str, Tuple[Callable, Dict]],
+) -> pd.DataFrame:
+    """Prepares tailoring signals.
+
+    The `df` DataFrame should hold pre-computed data that can be fed to functions that
+    will determine (vector-wise along the SIREN index) if tailoring conditions are
+    met. This will add boolean "signal" columns to the input DataFrame that will, in
+    turn, be used to potentially modify the alert levels.
+
+    Args:
+        df: The input DataFrame containing necessary data for the tailoring functions.
+        tailoring_steps: A dict of {name: (function, **kwargs)} tuples of tailoring
+          functions and their associated kwargs as a dict. Each function should take the
+          predictions DataFrame as first argument and return a boolean pd.Series that
+          define rows where the corresponding tailoring condition is met.
+
+    Returns:
+        The input DataFrame, with new columns corresponding to tailoring signals.
+
+    """
+    for name, (function, kwargs) in tailoring_steps.items():
+        signal = function(**kwargs)
+        signal.name = name
+        df = df.join(signal, on="siren", how="left")
+    return df
+
+
 def tailor_alert(
     predictions_df: pd.DataFrame,
-    tailoring_steps: Dict[str, Tuple[Callable, Dict]],
-    tailoring_rule: Callable[[pd.DataFrame], int],
     pre_tailoring_alert_col: str,
     post_tailoring_alert_col: str,
+    tailoring_function: Callable[[pd.DataFrame], pd.Series],
 ) -> pd.DataFrame:
     """Updates alert levels using expert rules.
 
-    The `predictions_df` DataFrame should hold pre-computed data that can be fed, for
-    each row (SIREN), to functions that will determine if tailoring conditions are met,
-    which, in turn, will lead to a (potential) modification of alert levels.
-
     Args:
-        predictions_df: Prediction data.
-        tailoring_steps: A dict of {name: (function, **kwargs)} tuples of tailoring
-          functions and their associated kwargs as a dict. Each function should take the
-          predictions DataFrame as first argument and return a pd.Index that points rows
-          where the corresponding tailoring condition is met.
-        tailoring_rule: A mapping associating tailoring conditions to a post-tailoring
-          alert level evolution (-1, 0 or 1). It should have a single argument in order
-          to be called using `pd.df.apply` over a row's columns.
+        predictions_df: The DataFrame holding alert and tailoring signals columns.
         pre_tailoring_alert_col: Name of the column holding before-tailoring alerts (as
           an int level).
         post_tailoring_alert_col: Name of the column in which to output after-tailoring
           alerts (as an int level).
+        tailoring_function: A mapping associating tailoring conditions columns to a
+          post-tailoring alert level evolution (column of -1, 0 or 1 values).
 
     Returns:
-        A prediction DataFrame with the `post_alert_col` containing a tailored alert
+        The input DataFrame with a new "post alert" column containing a tailored alert
         level.
 
     """
-    for name, (function, kwargs) in tailoring_steps.items():
-        predictions_df[name] = False
-        tailoring_index = function(**kwargs).intersection(predictions_df.index)
-        predictions_df.loc[tailoring_index, name] = True
-
     predictions_df[post_tailoring_alert_col] = (
-        predictions_df[pre_tailoring_alert_col]
-        + predictions_df.apply(tailoring_rule, axis=1)
+        predictions_df[pre_tailoring_alert_col] + tailoring_function(predictions_df)
     ).clip(lower=0, upper=2)
 
     return predictions_df
@@ -90,7 +103,7 @@ def tailor_alert(
 def high_partial_unemployment_request_indicator(
     pu_s: pd.Series,
     threshold: pd.Timedelta,
-) -> pd.Index:
+) -> pd.Series:
     """Computes an alert indicator based on partial unemployment request.
 
     The input DataFrame / Series simply gives .
@@ -100,17 +113,18 @@ def high_partial_unemployment_request_indicator(
         threshold: A duration above which the tailoring switch is triggered.
 
     Returns:
-        The (siren) indexes where partial unemployment requests level is deemed high.
+        The siren boolean Series where partial unemployment requests level is deemed
+        high.
 
     """
-    return pu_s[pu_s > threshold].index
+    return pu_s > threshold
 
 
 def urssaf_debt_decrease_indicator(
     debt_p1: pd.Series,
     debt_p2: pd.Series,
     thresh: float = 0.1,
-) -> pd.Index:
+) -> pd.Series:
     """States if some debt value has signficantly decreased.
 
     Debt is considered over two periods of time: `p1`, and `p2`. Each series should be
@@ -124,16 +138,15 @@ def urssaf_debt_decrease_indicator(
         threshold: A threshold for the debt ratio.
 
     Returns:
-        The (siren) indexes where debt change is (relatively) significant.
+        The siren boolean Series debt change is (relatively) significant.
 
     """
     debt_p1_max = debt_p1.groupby("siren").max()
     debt_p2_min = debt_p2.groupby("siren").min()
     inter_index = debt_p1_max.index.intersection(debt_p2_min.index)
-    mask = debt_p1_max[inter_index] > 0 & (
-        debt_p2_min[inter_index] / debt_p1_max[inter_index] < thresh
+    return (debt_p1_max[inter_index] > 0) & (
+        (debt_p2_min[inter_index] / debt_p1_max[inter_index]) < thresh
     )
-    return mask[mask].index
 
 
 def urssaf_debt_vs_payment_schedule_indicator(
@@ -141,7 +154,7 @@ def urssaf_debt_vs_payment_schedule_indicator(
     contribution_s: pd.Series,
     increasing: bool = True,
     thresh: float = 0.1,
-) -> pd.Index:
+) -> pd.Series:
     """States if some debt value has increased/decreased wrt to payment schedule.
 
     Returns True for indexes where companies debt, relative to monthly average
@@ -150,7 +163,7 @@ def urssaf_debt_vs_payment_schedule_indicator(
     Args:
         debt_s: Debt data, used to decide whether or not alert level should be
           upgraded.
-        debt_s :
+        contribution_s : A monthly mean value of social contributions.
         increasing: if `True`, points out cases where computed change is greater than
           `thresh`. If `False`, points out cases where the opposite of computed change
           is greater than `thresh`.
@@ -158,25 +171,26 @@ def urssaf_debt_vs_payment_schedule_indicator(
           which the alert level should be updated.
 
     Returns:
-        The (siren) indexes where urssaf debt value is significant wrt contributions.
+        The siren boolean Series where urssaf debt value is significant wrt
+        contributions.
 
     """
     sign = 1 if increasing else -1
     debt_ratio = sign * debt_s / (contribution_s * 12)
-    return debt_ratio[debt_ratio > thresh].index
+    return debt_ratio > thresh
 
 
 def urssaf_debt_prevails_indicator(
     macro_df: pd.DataFrame,
-) -> pd.Index:
+) -> pd.Series:
     """States if URSSAF debt prevails among concerning predictors groups.
 
     Args:
         macro_df: Prediction macro-level influence for each variable category.
 
     Returns:
-        The (siren) indexes where social debt prevails.
+        The siren boolean Series where social debt prevails.
 
     """
     prevailing_mask = (macro_df.sub(macro_df["dette_urssaf"], axis=0) <= 0).all(axis=1)
-    return macro_df[prevailing_mask].index
+    return prevailing_mask

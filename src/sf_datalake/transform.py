@@ -2,10 +2,8 @@
 
 import datetime as dt
 import itertools
-import logging
-import math
 import re
-from typing import List
+from typing import List, Union
 
 import numpy as np
 import pyspark.ml
@@ -14,7 +12,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
+from pyspark.ml.feature import Imputer, OneHotEncoder, StandardScaler, VectorAssembler
 from pyspark.ml.param.shared import (
     HasInputCol,
     HasInputCols,
@@ -89,37 +87,36 @@ def generate_transforming_stages(config: dict) -> List[Transformer]:
 
 def vector_disassembler(
     df: pyspark.sql.DataFrame,
-    feature_names: List[str],
-    feature_assembled_name: str,
-    keep_col_names: List[str],
+    columns: List[str],
+    assembled_col: str,
+    keep: List[str] = None,
 ) -> pyspark.sql.DataFrame:
     """Inverse operation of `pyspark.ml.feature.VectorAssembler` operator.
 
-    Args:
-        df: input DataFrame
-        feature_names: individual features previously assembled from a VectorAssembler
-        feature_assembled_name: name of the assembled feature from a VectorAssembler
-        keep_col_names: additional features to keep that have not been assembled
+    Args:.
+        df: input DataFrame.
+        columns: individual columns previously assembled by a `VectorAssembler`.
+        assembled_col: `VectorAssembler`'s output column name.
+        keep: additional columns to keep that are not part of the assembled column.
 
     Returns:
-        A DataFrame with individual features that have been disassembled.
+        A DataFrame with columns that have been "disassembled".
 
     """
-    assert set(keep_col_names + [feature_assembled_name]) <= set(df.columns)
+    if keep is None:
+        keep = []
+    assert set(keep + [assembled_col]) <= set(df.columns)
 
     def udf_vector_disassembler(col):
         return F.udf(lambda v: v.toArray().tolist(), T.ArrayType(T.DoubleType()))(col)
 
-    df = df.select(keep_col_names + [feature_assembled_name])
+    df = df.select(keep + [assembled_col])
     df = df.withColumn(
-        feature_assembled_name, udf_vector_disassembler(F.col(feature_assembled_name))
-    ).select(
-        keep_col_names
-        + [F.col(feature_assembled_name)[i] for i in range(len(feature_names))]
-    )
+        assembled_col, udf_vector_disassembler(F.col(assembled_col))
+    ).select(keep + [F.col(assembled_col)[i] for i in range(len(columns))])
 
-    for i, feat in enumerate(feature_names):
-        df = df.withColumnRenamed(f"{feature_assembled_name}[{i}]", feat)
+    for i, col in enumerate(columns):
+        df = df.withColumnRenamed(f"{assembled_col}[{i}]", col)
     return df
 
 
@@ -263,13 +260,13 @@ class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-metho
         assert {
             "montant_part_ouvriere",
             "montant_part_patronale",
-            "cotisation_moy12m",
+            "cotisation_mean12m",
         } <= set(dataset.columns)
 
         return dataset.withColumn(
             "ratio_dette",
             (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
-            / dataset["cotisation_moy12m"],
+            / dataset["cotisation_mean12m"],
         )
 
 
@@ -296,7 +293,7 @@ class PaydexOneHotEncoder(
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol="paydex_nb_jours", outputCol="paydex_bin", bins=None)
+        self._setDefault(inputCol="paydex", outputCol="paydex_bin", bins=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -343,32 +340,35 @@ class MissingValuesHandler(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
-    Uses pyspark.sql.DataFrame.fillna method to fill missing values if required.
+    Uses pyspark.sql.DataFrame.fillna or an (statistical) Imputer object to fill missing
+    values. Both strategies are mutually exclusive, so use either `value` or
+    `stat_strategy`.
 
     Args:
       inputCols: The input dataset columns to consider for filling.
-      fill: If True, fill missing values using the `value` arg. Defaults to True.
       value: Value to replace null values with. It must be a mapping from column name
         (string) to replacement value. The replacement value must be an int, float,
         boolean, or string.
+      stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median' \
+        and 'mode'
 
     """
 
-    fill = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "fill",
-        "Switch for filling null values.",
-    )
     value = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "value",
         "Value to replace null values with.",
     )
+    stat_strategy = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "stat_strategy",
+        "Statistic method to use into the Imputer class.",
+    )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(fill=True, value=None)
+        self._setDefault(value=None, stat_strategy=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -376,47 +376,56 @@ class MissingValuesHandler(
         """Set parameters for this transformer.
 
         inputCols (list[str]): The input dataset columns to consider for filling.
-        fill (bool): If True, fill missing values using the `value` arg. Defaults to
-          True.
         value (dict): Value to replace null values with. It must be a mapping from
-          column name (string) to replacement value. The replacement value must be an
-          int, float, boolean, or string.
-
+          column name (string) to replacement value. If it is None, stat imputaion is
+          applied.
+        stat_strategy (string) : strategy for the Imputer class. Possible values are:
+          'mean', 'median' and 'mode'.
         """
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Fills or drop entries containing missing values.
-
-        If `fill` patameter is true, missing data is filled with predefined values from
-        the `value` parameter.
+        """Fills entries containing missing values.
 
         Args:
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-            DataFrame where previously missing values are either filled, or
-            corresponding entries are dropped.
+
+            DataFrame where previously missing values are either filled.
 
         """
-        fill: bool = self.getOrDefault("fill")
+        stat_strategy: str = self.getOrDefault("stat_strategy")
         value: dict = self.getOrDefault("value")
-        features: List[str] = self.getOrDefault("inputCols")
-        if fill:
-            for feature in features:
-                for var, val in value.items():
-                    if re.match(rf"{var}_(diff|slope|moy|lag)\d+m$", feature):
-                        value[feature] = val
-                        break
-            if not set(features) <= set(value):
-                logging.warning(
-                    "No corresponding fill value found for features %s",
-                    set(features) - set(value),
-                )
-            dataset = dataset.fillna(
-                {feature: val for feature, val in value.items() if feature in features}
+        input_cols: List[str] = self.getOrDefault("inputCols")
+
+        if value is not None and stat_strategy is not None:
+            raise ValueError(
+                "`value` and `stat_strategy` are mutually exclusive. Use either one."
             )
-        return dataset.dropna()
+        if value is not None:
+            for col in input_cols:
+                for var, val in value.items():
+                    if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", col):
+                        value[col] = val
+                        break
+            dataset = dataset.fillna(
+                {var: val for var, val in value.items() if var in input_cols}
+            )
+        elif stat_strategy is not None:
+            dtypes = [dtype for _, dtype in dataset.select(input_cols).dtypes]
+            if any(dtype in {"bool", "timestamp", "string"} for dtype in dtypes):
+                raise ValueError(
+                    "Statistical imputation of a non-numerical variable is not "
+                    "supported."
+                )
+            imputer = Imputer(strategy=stat_strategy)
+            imputer.setInputCols(input_cols)
+            imputer.setOutputCols(input_cols)
+            dataset = imputer.fit(dataset).transform(dataset)
+        else:
+            raise ValueError("Either `value` or `stat_strategy` must be set.")
+        return dataset
 
 
 class IdentifierNormalizer(
@@ -690,7 +699,7 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
             dataset: DataFrame to transform containing time-series data.
 
         Returns:
-            DataFrame with new "var_moy[n]m" columns, where [n] is a number of months
+            DataFrame with new "var_mean[n]m" columns, where [n] is a number of months
             over which `var`'s average is computed.
 
         """
@@ -719,7 +728,7 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
         feat = self.getOrDefault("inputCol")
         for n in n_months:
             dataset = dataset.withColumn(
-                f"{feat}_moy{n}m",
+                f"{feat}_mean{n}m",
                 F.avg(F.col(feat)).over(time_windows[n]),
             )
 
@@ -729,9 +738,14 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
 class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
     """A transformer that computes lagged values of a given time-indexed variable.
 
+    A forward or backward fill can optionally be performed when lag data is unavailable.
+    Both are mutually exclusive.
+
     Args:
         inputCol: The column that will be used to derive lagged variables.
         n_months: Number of months that will be considered for lags.
+        bfill: If set, performs a backward completion on missing lag data.
+        ffill: If set, performs a forward completion on missing lag data.
 
     """
 
@@ -747,10 +761,30 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         "A reference date, used to compute number of months between rows.",
     )
 
+    bfill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "bfill",
+        "A boolean, used to specify if a backward completion is applied to missing lag \
+        data.",
+    )
+
+    ffill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ffill",
+        "A boolean, used to specify if a forward completion is applied to missing lag \
+        data.",
+    )
+
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, n_months=None, ref_date=dt.date(2014, 1, 1))
+        self._setDefault(
+            inputCol=None,
+            n_months=None,
+            bfill=False,
+            ffill=False,
+            ref_date=dt.date(2014, 1, 1),
+        )
         self.setParams(**kwargs)
 
     @keyword_only
@@ -760,6 +794,8 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         Args:
             inputCol (str): The column that will be used to derive lagged variables.
             n_months (int or list): Number of months that will be considered for lags.
+            bfill (bool) : If set, performs a backward completion on missing lag data.
+            ffill (bool) : If set, performs a forward completion on missing lag data.
 
         """
         return self._set(**kwargs)
@@ -783,12 +819,17 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         """
         input_col = self.getOrDefault("inputCol")
         n_months = self.getOrDefault("n_months")
+        bfill = self.getOrDefault("bfill")
+        ffill = self.getOrDefault("ffill")
         if isinstance(n_months, int):
             n_months = [n_months]
         elif isinstance(n_months, list):
             pass
         else:
             raise ValueError("`n_months` should either be an int or a list of ints.")
+
+        if bfill and ffill:
+            raise ValueError("`ffill` and `bfill` are mutually exclusive.")
 
         dataset = dataset.withColumn(
             "ref_date", F.lit(self.getOrDefault("ref_date"))
@@ -800,11 +841,47 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         lag_window = (
             Window().partitionBy("siren").orderBy(F.col("months_from_ref").asc())
         )
+        forward_window = (
+            Window()
+            .partitionBy("siren")
+            .orderBy(F.col("periode").asc())
+            .rowsBetween(Window.currentRow, Window.unboundedFollowing)
+        )
+        backward_window = (
+            Window()
+            .partitionBy("siren")
+            .orderBy(F.col("periode").asc())
+            .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+        )
+
         for n in n_months:
+            output_col = f"{input_col}_lag{n}m"
             dataset = dataset.withColumn(
-                f"{input_col}_lag{n}m",
-                F.lag(F.col(input_col), n, 0.0).over(lag_window),
+                output_col,
+                F.lag(F.col(input_col), n).over(lag_window),
             )
+            # Fill missing values
+            if ffill or bfill:
+                # When we do a backward fill, we use a forward_window: we're looking for
+                # future (lagged) values from periods of time where lag values were
+                # unavailable.
+                fill_window = forward_window if bfill else backward_window
+                lookup_function = F.first if bfill else F.last
+                dataset = dataset.withColumn(
+                    output_col,
+                    F.when(
+                        # If not all computed lagged values are null, use them for
+                        # filling.
+                        F.count(F.when(F.isnull(output_col), output_col)).over(
+                            fill_window
+                        )
+                        != F.count(F.col(output_col)).over(fill_window),
+                        lookup_function(output_col, ignorenulls=True).over(fill_window),
+                    ).otherwise(
+                        # Otherwise, use the non-lagged input column values.
+                        lookup_function(input_col, ignorenulls=True).over(fill_window)
+                    ),
+                )
 
         return dataset.drop("ref_date", "months_from_ref")
 
@@ -821,6 +898,8 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         inputCol: The column that will be used to derive the diff.
         n_months: Number of months that will be considered for the difference.
         slope: If True, divide the computed difference by its duration in months.
+        bfill: If set, performs a backward completion on missing lag data.
+        ffill: If set, performs a forward completion on missing lag data.
 
     """
 
@@ -834,11 +913,30 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         "n_months",
         "Number of months for diff computation.",
     )
+    bfill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "bfill",
+        "A boolean, used to specify if a backward completion is applied to missing lag \
+        data.",
+    )
+
+    ffill = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ffill",
+        "A boolean, used to specify if a forward completion is applied to missing lag \
+        data.",
+    )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, n_months=None, slope=False)
+        self._setDefault(
+            inputCol=None,
+            n_months=None,
+            slope=False,
+            bfill=False,
+            ffill=False,
+        )
         self.setParams(**kwargs)
 
     @keyword_only
@@ -872,6 +970,8 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         """
         input_col = self.getOrDefault("inputCol")
         n_months = self.getOrDefault("n_months")
+        bfill = self.getOrDefault("bfill")
+        ffill = self.getOrDefault("ffill")
         compute_slope = self.getOrDefault("slope")
         if isinstance(n_months, int):
             n_months = [n_months]
@@ -887,7 +987,10 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
             n for n in n_months if f"{input_col}_lag{n}m" not in dataset.columns
         ]
         dataset = PipelineModel(
-            [LagOperator(inputCol=input_col, n_months=n) for n in missing_lags]
+            [
+                LagOperator(inputCol=input_col, n_months=n, bfill=bfill, ffill=ffill)
+                for n in missing_lags
+            ]
         ).transform(dataset)
 
         # Compute diffs
@@ -922,7 +1025,8 @@ class TargetVariable(
         """Set parameters for this transformer.
 
         Args:
-            inputCol (str): The column that will be used to derive target.
+            inputCol (str): The column that will be used to derive target. It should
+              contain the failure (judgment) date.
             outputCol (str): The new target variable column.
             n_months (int): Number of months that will be considered as target
               threshold.
@@ -940,13 +1044,15 @@ class TargetVariable(
             Transformed DataFrame with an extra target column.
 
         """
-        dataset = dataset.fillna(value={self.getOrDefault("inputCol"): math.inf})
         return dataset.withColumn(
             self.getOrDefault("outputCol"),
             (
-                dataset[self.getOrDefault("inputCol")] <= self.getOrDefault("n_months")
-            ).cast(T.IntegerType()),
-        )  # Pyspark models except integer or floating labels.
+                F.add_months(dataset["periode"], months=self.getOrDefault("n_months"))
+                <= dataset[self.getOrDefault("inputCol")]
+            ).cast(
+                T.IntegerType()
+            ),  # Pyspark models except integer or floating labels.
+        ).fillna(value={self.getOrDefault("outputCol"): 0})
 
 
 class ColumnSelector(
@@ -1022,8 +1128,7 @@ class HasPaydexFilter(Transformer):  # pylint: disable=too-few-public-methods
 
         """
         return dataset.filter(
-            F.col("paydex_nb_jours").isNotNull()
-            & F.col("paydex_nb_jours_diff12m").isNotNull()
+            F.col("paydex").isNotNull() & F.col("paydex_diff12m").isNotNull()
         )
 
 
@@ -1049,58 +1154,126 @@ class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
         return dataset.filter(F.col("effectif") >= 10)
 
 
-class ProbabilityFormatter(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to format the probability column in output of a model."""
+class LinearInterpolationOperator(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
+    """A transformer that fills missing values using linear interpolation.
 
-    def _transform(  # pylint: disable=no-self-use
-        self, dataset: pyspark.sql.DataFrame
-    ) -> pyspark.sql.DataFrame:
-        """Extract the positive probability and cast it as float.
+    Data is grouped using the `id_cols` columns and ordered using the `time_col`, any
+    null values gap between non-null values will be filled.
+
+    Args :
+        inputCols: Columns to filled.
+        id_cols: Entity index, along which the dataset will be partitioned.
+        time_col: Time index, used to sort the dataset.
+
+    """
+
+    id_cols = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "id_cols",
+        "Id columns to group for interpolation.",
+    )
+    time_col = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "time_col",
+        "Columns to follow for interpolation.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(id_cols="siren", time_col="periode", inputCols=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
 
         Args:
-            dataset: DataFrame to transform
-
-        Returns:
-            Transformed DataFrame with casted probability data.
+            inputCols (list[str]): Columns to fill.
+            id_cols (str or list[str]): Entity index, along which the dataset will be
+              partitioned.
+            time_col (str): Time index, used to sort the dataset.
 
         """
-        transform_udf = F.udf(lambda v: float(v[1]), T.FloatType())
-        return dataset.withColumn("probability", transform_udf("probability"))
-
-
-class Covid19Adapter(Transformer):  # pylint: disable=too-few-public-methods
-    """Adapt post-pandemic data using linear fits of features quantiles."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
+        return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Adapts post-pandemic data using linear fits of features quantiles.
-
-        Adapt post-pandemic event data through linear fits of the pre-pandemic quantiles
-        --> post-pandemic quantiles mappings (for each variable that ).
+        """Use linear interpolation to fill missing time-series values.
 
         Args:
-            dataset: DataFrame to transform.
+            dataset: DataFrame with time-series columns containing missing values.
 
         Returns:
-            Transformed DataFrame with post-pandemic data adapted to fit pre-pandemic
-              distribution.
+            DataFrame where time-series missing values are filled through interpolation.
 
         """
-        if not self.config["USE_COVID19ADAPTER"]:
-            return dataset
+        id_cols: Union[str, List[str]] = self.getOrDefault("id_cols")
+        time_col: str = self.getOrDefault("time_col")
+        input_cols: List[str] = self.getOrDefault("inputCols")
 
-        assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
-        for feat in self.config["FEATURES_TO_ADAPT"]:
-            dataset = dataset.withColumn(
-                feat,
-                F.when(
-                    F.col("periode") > self.config["PANDEMIC_EVENT_DATE"],
-                    self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][0]
-                    + self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][1]
-                    * F.col(feat),
-                ).otherwise(F.col(feat)),
+        w = Window.partitionBy(id_cols).orderBy(time_col)
+        w_start = (
+            Window.partitionBy(id_cols)
+            .orderBy(time_col)
+            .rowsBetween(Window.unboundedPreceding, -1)
+        )
+        w_end = (
+            Window.partitionBy(id_cols)
+            .orderBy(time_col)
+            .rowsBetween(0, Window.unboundedFollowing)
+        )
+        output_df = dataset.withColumn("rn", F.row_number().over(w))
+
+        for col in input_cols:
+
+            # Assign index for non-null rows within partitioned windows
+            output_df = output_df.withColumn(
+                "rn_not_null", F.when(F.col(col).isNotNull(), F.col("rn"))
             )
-        return dataset
+
+            # Create relative references to the gap start value (left bound)
+            output_df = output_df.withColumn(
+                "left_bound_val", F.last(col, ignorenulls=True).over(w_start)
+            )
+            output_df = output_df.withColumn(
+                "left_bound_rn", F.last("rn_not_null", ignorenulls=True).over(w_start)
+            )
+
+            # Create relative references to the gap end value (right bound)
+            output_df = output_df.withColumn(
+                "right_bound_val", F.first(col, ignorenulls=True).over(w_end)
+            )
+            output_df = output_df.withColumn(
+                "right_bound_rn", F.first("rn_not_null", ignorenulls=True).over(w_end)
+            )
+
+            # Create references to gap length and current gap position.
+            output_df = output_df.withColumn(
+                "interval_length_rn", F.col("right_bound_rn") - F.col("left_bound_rn")
+            )
+            output_df = output_df.withColumn(
+                "curr_rn",
+                F.col("interval_length_rn") - (F.col("right_bound_rn") - F.col("rn")),
+            )
+
+            # Compute linear interpolation value
+            lin_interp_col = F.col("left_bound_val") + (
+                F.col("right_bound_val") - F.col("left_bound_val")
+            ) / F.col("interval_length_rn") * F.col("curr_rn")
+            output_df = output_df.withColumn(
+                col,
+                F.when(F.col(col).isNull(), lin_interp_col).otherwise(F.col(col)),
+            )
+
+        return output_df.drop(
+            "rn",
+            "rn_not_null",
+            "left_bound_val",
+            "right_bound_val",
+            "left_bound_rn",
+            "right_bound_rn",
+            "interval_length_rn",
+            "curr_rn",
+        )

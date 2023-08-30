@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Generate a JSON document usable by the front-end application.
 
 This script produces a JSON document that can be used by the front-end component of the
@@ -5,6 +6,7 @@ Signaux Faibles website to display info about selected companies. It requires da
 output by the prediction model, as well as tailoring data:
 - URSSAF debt / contributions data
 - partial unemployment data
+- financial data
 - ...
 
 See the command-line interface for more details on expected inputs.
@@ -13,6 +15,7 @@ See the command-line interface for more details on expected inputs.
 
 import argparse
 import json
+import sys
 from typing import Union
 
 import pandas as pd
@@ -23,7 +26,7 @@ import sf_datalake.predictions
 import sf_datalake.utils
 
 parser = argparse.ArgumentParser(
-    description="""Generate a JSON document usable by the front-end Signaux Faibles
+    description="""Generate a JSON document to be fed to the Signaux Faibles front-end
     application."""
 )
 
@@ -51,7 +54,12 @@ path_group.add_argument(
     "-o",
     "--output_file",
     required=True,
-    help="Generated JSON document output path.",
+    help="Generated output path.",
+)
+path_group.add_argument(
+    "--export_raw",
+    action="store_true",
+    help="Do not format as JSON. Only export raw data frame.",
 )
 path_group.add_argument(
     "--variables",
@@ -75,6 +83,11 @@ path_group.add_argument(
     help="Path to a csv containing required urssaf tailoring data.",
 )
 path_group.add_argument(
+    "--financial_tailoring_data",
+    required=True,
+    help="Path to a csv containing required financial tailoring data.",
+)
+path_group.add_argument(
     "--pu_tailoring_data",
     required=True,
     help="Path to a csv containing required partial unemployment tailoring data.",
@@ -84,7 +97,7 @@ parser.add_argument(
     help="""Number of months to consider as upper threshold for partial unemployment
     tailoring.""",
     type=int,
-    default=241,
+    default=240,
 )
 parser.add_argument(
     "--concerning_threshold",
@@ -93,39 +106,53 @@ parser.add_argument(
     help="""Threshold above which a `feature * weight` product is considered
     'concerning'.""",
 )
+parser.add_argument(
+    "--algo_name",
+    type=str,
+    help="Name of the algorithm that produced the prediction",
+    default=None,
+)
 
 
-def tailoring_rule(row) -> int:
+def tailoring_rule(df_sig: pd.DataFrame) -> pd.Series:
     """Details how predictions should evolve based on tailorings.
 
-    The tailoring rule will return an int (-1, 0, or 1) that describes alert level
-    evolution based on the truth values of some of `row`'s given elements.
+    The tailoring rule will return the DataFrame with a supplementary int column
+    having -1, 0, or 1 value that describes alert level evolution based on the truth
+    values of some of the input's given elements.
 
     Args:
-        row: Any object that has a `__getitem__` method.
+        df_sig: A DataFrame with tailoring signal columns.
 
     Returns:
-        Either -1, 0, or 1, respectively corresponding to decrease, no change, increase
-        of the alert level.
+        A delta alert column column holding either -1, 0, or 1, respectively
+        corresponding to decrease, no change, increase of the alert level.
 
     """
-    tailoring = 0
-    if (
-        row["augmentation_dette_sur_cotisation_urssaf_recente"]
-        and not row["dette_urssaf_macro_preponderante"]
-    ):
-        tailoring += 1
-    if (
-        row["diminution_dette_urssaf_ancienne"]
-        and row["dette_urssaf_ancienne_significative"]
-        # TODO: check if this should be activated
-        # and not row["augmentation_dette_sur_cotisation_urssaf_recente"]
-    ):
-        tailoring -= 1
-    if row["demande_activite_partielle_elevee"]:
-        tailoring += 1
+    delta_alert_col = pd.Series(0, index=df_sig.index, dtype=int)
+    n_financial_signals = (
+        df_sig[
+            [
+                "solvabilité_faible",
+                "k_propres_négatifs",
+                "rentabilité_faible",
+            ]
+        ]
+        .sum(axis=1)
+        .astype(int)
+    )
+    delta_alert_col += n_financial_signals.map({0: 0, 1: 0, 2: 1, 3: 2})
+    delta_alert_col += (
+        df_sig["augmentation_dette_sur_cotisation_urssaf_recente"]
+        & ~df_sig["dette_urssaf_macro_preponderante"]
+    )
+    delta_alert_col -= (
+        df_sig["diminution_dette_urssaf_ancienne"]
+        & df_sig["dette_urssaf_ancienne_significative"]
+    )
+    delta_alert_col += df_sig["demande_activite_partielle_elevee"]
 
-    return min(max(tailoring, -1), 1)
+    return delta_alert_col.clip(lower=-1, upper=1)
 
 
 def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
@@ -136,6 +163,11 @@ def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
 def normalize_siret(x: Union[pd.Series, pd.Index]) -> pd.Series:
     """Left pad an iterable of SIRET with zeroes if needed."""
     return x.astype(str).str.zfill(13)
+
+
+def identity(sig):
+    """Dummy identity function."""
+    return sig
 
 
 # Parse CLI arguments, load predictions configuration and supplementary data
@@ -150,13 +182,19 @@ micro_macro = {
     for micro in micros
 }
 
+algo_name = args.algo_name
+if algo_name is None:
+    algo_name = (
+        "avec_paydex"
+        if "retards_paiement" in pred_vars["FEATURE_GROUPS"]
+        else "sans_paydex"
+    )
+
 additional_data = {
-    "idListe": "Sept 2022",
-    "batch": "2208",
-    "algo": "avec_paydex"
-    if "retards_paiement" in pred_vars["FEATURE_GROUPS"]
-    else "sans_paydex",
-    "periode": "2022-09-01T00:00:00Z",
+    "idListe": "Juin 2023",
+    "batch": "2304",
+    "algo": algo_name,
+    "periode": "2023-06-01T00:00:00Z",
 }
 
 # Load prediction lists
@@ -203,63 +241,78 @@ prediction_set["pre_tailoring_alert_group"] = prediction_set["probability"].appl
 )
 
 ### A posteriori alert tailoring
-urssaf_df = pd.read_csv(args.urssaf_tailoring_data)
-ap_df = pd.read_csv(args.pu_tailoring_data, index_col="ETAB_SIRET")
 
 # Partial unemployment
+ap_df = pd.read_csv(
+    args.pu_tailoring_data, index_col="ETAB_SIRET", dtype={"ETAB_SIREN": "str"}
+)
 ap_df.index = normalize_siret(ap_df.index)
 ap_df["siren"] = ap_df.index.str[:9]
 ap_df["n_jours"] = pd.to_timedelta(ap_df["n_jours"])
 max_pu_days = ap_df.groupby("siren")["n_jours"].max()
 
 # Urssaf tailoring
-urssaf_df = urssaf_df.set_index(normalize_siren(urssaf_df["siren"])).drop(
-    columns="siren"
-)
-urssaf_df["periode"] = pd.to_datetime(urssaf_df["periode"], utc=True).dt.tz_localize(
-    None
-)
+urssaf_df = pd.read_csv(
+    args.urssaf_tailoring_data,
+    dtype={"siren": str},
+    parse_dates=["periode"],
+).set_index("siren")
 urssaf_df["dette"] = (
     urssaf_df["montant_part_patronale"] + urssaf_df["montant_part_ouvriere"]
 )
-avg_contrib = urssaf_df.pop("cotisation_moyenne")
-avg_contrib = avg_contrib[~avg_contrib.index.duplicated()]
+assert hasattr(urssaf_df["periode"], "dt")
+
+# Financial tailoring
+financial_df = pd.read_csv(
+    args.financial_tailoring_data,
+    dtype={"siren": str},
+).set_index("siren")
 
 # Masks
 old_debt_mask = urssaf_df["periode"].between(
     pd.Timestamp("2020-01-01"), pd.Timestamp("2021-09-01")
 )
+after_old_debt_mask = urssaf_df["periode"] >= pd.Timestamp("2021-09-01")
+recent_period_start = pd.Timestamp("2022-09-01")
+recent_period_end = pd.Timestamp("2022-12-01")
 one_year_schedule_mask = urssaf_df["periode"].between(
     pd.Timestamp("2020-09-01"), pd.Timestamp("2021-08-31")
 )
 
 ### Apply tailoring
 tailoring_signals = {
+    "solvabilité_faible": (identity, {"sig": financial_df["solvabilité_faible"]}),
+    "k_propres_négatifs": (identity, {"sig": financial_df["k_propres_neg"]}),
+    "rentabilité_faible": (identity, {"sig": financial_df["rentabilité_faible"]}),
     "diminution_dette_urssaf_ancienne": (
         sf_datalake.predictions.urssaf_debt_decrease_indicator,
         {
             "debt_p1": urssaf_df[old_debt_mask]["dette"],
-            "debt_p2": urssaf_df[~old_debt_mask]["dette"],
+            "debt_p2": urssaf_df[after_old_debt_mask]["dette"],
             "thresh": 0.1,
         },
     ),
     "dette_urssaf_ancienne_significative": (
-        sf_datalake.predictions.urssaf_debt_vs_payment_schedule_indicator,
+        identity,
         {
-            "debt_s": urssaf_df[old_debt_mask].groupby("siren")["dette"].max(),
-            "contribution_s": avg_contrib,
-            "thresh": 0.1,
+            "sig": urssaf_df[one_year_schedule_mask]
+            .groupby("siren")["ratio_dette"]
+            .max()
+            * 1
+            / 12
+            > 0.1
         },
     ),
     "augmentation_dette_sur_cotisation_urssaf_recente": (
-        sf_datalake.predictions.urssaf_debt_vs_payment_schedule_indicator,
+        identity,
         {
-            "debt_s": (
-                urssaf_df[urssaf_df["periode"] == pd.Timestamp("2022-07-01")]["dette"]
-                - urssaf_df[urssaf_df["periode"] == pd.Timestamp("2022-04-01")]["dette"]
-            ),
-            "contribution_s": avg_contrib,
-            "thresh": 0.1,
+            "sig": (
+                urssaf_df[urssaf_df["periode"] == recent_period_end]["ratio_dette"]
+                - urssaf_df[urssaf_df["periode"] == recent_period_start]["ratio_dette"]
+            )
+            * 1
+            / 12
+            > 0.1
         },
     ),
     "demande_activite_partielle_elevee": (
@@ -275,13 +328,27 @@ tailoring_signals = {
     ),
 }
 
-prediction_set = sf_datalake.predictions.tailor_alert(
+prediction_set = sf_datalake.predictions.compute_tailoring_signals(
     prediction_set,
     tailoring_signals,
-    tailoring_rule,
+)
+
+## Export raw
+if args.export_raw:
+    prediction_set.to_csv(args.output_file)
+    sys.exit()
+
+# Fill missing values with False, we lose this information afterwards
+prediction_set = prediction_set.fillna(
+    value={col: 0 for col in tailoring_signals}
+).astype({col: bool for col in tailoring_signals})
+prediction_set = sf_datalake.predictions.tailor_alert(
+    prediction_set,
     pre_tailoring_alert_col="pre_tailoring_alert_group",
     post_tailoring_alert_col="post_tailoring_alert_group",
+    tailoring_function=tailoring_rule,
 )
+
 
 # Decode alert groups
 alert_categories = pd.CategoricalDtype(
@@ -307,7 +374,7 @@ if concerning_micro_threshold is not None:
 else:
     concerning_micro_variables = concerning_data[concerning_feats_columns]
 
-## Export
+## Export front json document
 for field, value in additional_data.items():
     prediction_set[field] = value
 
@@ -317,15 +384,12 @@ output_entries = prediction_set.drop(
     axis="columns",
 ).to_dict(orient="index")
 
-for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
+for siren in prediction_set[
+    prediction_set["alertPreRedressements"] != "Pas d'alerte"
+].index:
     output_entries[siren].update(
         {
             "macroRadar": macro_explanation.loc[siren].to_dict(),
-            "redressements": [
-                signal
-                for signal in tailoring_signals
-                if prediction_set.loc[siren, signal]
-            ],
             "explSelection": {
                 "selectConcerning": [
                     [micro_macro[micro], micro]
@@ -336,6 +400,17 @@ for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
             },
         }
     )
+for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
+    output_entries[siren].update(
+        {
+            "redressements": [
+                signal
+                for signal in tailoring_signals
+                if prediction_set.loc[siren, signal]
+            ],
+        },
+    )
+
 
 with open(args.output_file, mode="w", encoding="utf-8") as f:
     json.dump(

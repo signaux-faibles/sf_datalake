@@ -11,6 +11,8 @@ import random
 import sys
 from os import path
 
+import numpy as np
+import pyspark
 from pyspark.ml import Pipeline, PipelineModel
 
 # isort: off
@@ -20,13 +22,14 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 
+import sf_datalake.explain
 import sf_datalake.io
 import sf_datalake.model
 import sf_datalake.sampler
 import sf_datalake.transform
 import sf_datalake.utils
 
-_ = sf_datalake.utils.get_spark_session()
+spark = sf_datalake.utils.get_spark_session()
 parser = argparse.ArgumentParser(
     description="""
     Run a 'Signaux Faibles' distributed prediction with the chosen set of
@@ -143,21 +146,24 @@ if args.output_directory is None:
 else:
     output_directory = args.output_directory
 config["SEED"] = random.randint(0, 10000) if args.SEED is None else args.SEED
-config["TRANSFORMER_FEATURES"] = sf_datalake.utils.transformer_features_mapping(config)
+config["TRANSFORMER_FEATURES"] = {}
+for feature, transformer in config["FEATURES"].items():
+    config["TRANSFORMER_FEATURES"].setdefault(transformer, []).append(feature)
 sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
 
 # Prepare data.
 dataset = sf_datalake.io.load_data(
     {"dataset": config["DATASET"]},
     file_format="orc",
-    spl_ratio=config["SAMPLE_RATIO"],
-    seed=config["SEED"],
 )["dataset"]
+
+if config["SAMPLE_RATIO"] != 1.0:
+    dataset = dataset.sample(fraction=config["SAMPLE_RATIO"], seed=config["SEED"])
 
 
 # Switches
 with_paydex = False
-if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(config["FEATURES"]):
+if {"paydex_bin", "paydex_diff12m"} & set(config["FEATURES"]):
     with_paydex = True
     logging.info(
         "Paydex data features were requested through the provided configuration file. \
@@ -166,9 +172,7 @@ if {"paydex_bin", "paydex_nb_jours_diff12m"} & set(config["FEATURES"]):
 
 ## Pre-processing pipeline
 
-filter_steps = [
-    sf_datalake.transform.WorkforceFilter(),
-]
+filter_steps = []
 if with_paydex:
     filter_steps.append(sf_datalake.transform.HasPaydexFilter())
 normalizing_steps = [
@@ -181,9 +185,7 @@ normalizing_steps = [
     #     inputCols=[""], start="date_deb_tva", end="date_fin_tva"
     # ),
 ]
-feature_engineering_steps = [
-    sf_datalake.transform.Covid19Adapter(config),
-]
+feature_engineering_steps = []
 if with_paydex:
     feature_engineering_steps.append(
         sf_datalake.transform.PaydexOneHotEncoder(
@@ -198,23 +200,26 @@ if with_paydex:
 
 building_steps = [
     sf_datalake.transform.TargetVariable(
-        inputCol=config["TARGET"]["inputCol"],
-        outputCol=config["TARGET"]["outputCol"],
+        inputCol=config["TARGET"]["judgment_date_col"],
+        outputCol=config["TARGET"]["class_col"],
         n_months=config["TARGET"]["n_months"],
     ),
     sf_datalake.transform.ColumnSelector(
         inputCols=(
             config["IDENTIFIERS"]
             + list(config["FEATURES"])  # features dict keys to list
-            + [config["TARGET"]["outputCol"]]  # contains a single string
+            + [config["TARGET"]["class_col"]]  # contains a single string
         )
     ),
-    sf_datalake.transform.MissingValuesHandler(
-        inputCols=list(config["FEATURES"]),
-        fill=config["FILL_MISSING_VALUES"],
-        value=config["DEFAULT_VALUES"],
-    ),
 ]
+if config["FILL_MISSING_VALUES"]:
+    building_steps.append(
+        sf_datalake.transform.MissingValuesHandler(
+            inputCols=list(config["FEATURES"]),
+            value=config["DEFAULT_VALUES"],
+        )
+    )
+
 preprocessing_pipeline = PipelineModel(
     stages=filter_steps + normalizing_steps + feature_engineering_steps + building_steps
 )
@@ -231,24 +236,42 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
 transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
 model_stages = [
     sf_datalake.model.get_model_from_conf(
-        config["MODEL"], target_col=config["TARGET"]["outputCol"]
+        config["MODEL"], target_col=config["TARGET"]["class_col"]
     )
 ]
-postprocessing_stages = [sf_datalake.transform.ProbabilityFormatter()]
 
-pipeline = Pipeline(stages=transforming_stages + model_stages + postprocessing_stages)
+pipeline = Pipeline(stages=transforming_stages + model_stages)
 pipeline_model = pipeline.fit(train_data)
-_ = pipeline_model.transform(train_data)
+train_transformed = pipeline_model.transform(train_data)
+test_transformed = pipeline_model.transform(test_data)
+prediction_transformed = pipeline_model.transform(prediction_data)
+
+# Explain predictions
 model = sf_datalake.model.get_model_from_pipeline_model(
     pipeline_model, config["MODEL"]["NAME"]
 )
-logging.info("Model weights: %.3f", model.coefficients)
-logging.info("Model intercept: %.3f", model.intercept)
-test_transformed = pipeline_model.transform(test_data)
-prediction_transformed = pipeline_model.transform(prediction_data)
-macro_scores, micro_scores = sf_datalake.model.explain(
-    config, pipeline_model, prediction_transformed
+if isinstance(model, pyspark.ml.classification.LogisticRegressionModel):
+    logging.info("Model weights: %.3f", model.coefficients)
+    logging.info("Model intercept: %.3f", model.intercept)
+
+features_list = sf_datalake.utils.feature_index(config)
+shap_values, expected_value = sf_datalake.explain.explanation_data(
+    features_list, model, train_transformed, prediction_transformed
 )
+macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
+    config, shap_values
+)
+# Convert to [0, 1] range if shap values are expressed in log-odds units.
+if isinstance(
+    model,
+    (
+        pyspark.ml.classification.LogisticRegressionModel,
+        pyspark.ml.classification.GBTClassificationModel,
+    ),
+):
+    num_cols = concerning_scores.select_dtypes(include="number").columns
+    concerning_scores.loc[:, num_cols] = 1 / (1 + np.exp(-concerning_scores[num_cols]))
+    macro_scores = 1 / (1 + np.exp(-macro_scores))
 
 # Write outputs.
 sf_datalake.io.write_predictions(
@@ -258,6 +281,6 @@ sf_datalake.io.write_predictions(
 )
 sf_datalake.io.write_explanations(
     output_directory,
-    macro_scores,
-    micro_scores,
+    spark.createDataFrame(macro_scores.reset_index()),
+    spark.createDataFrame(concerning_scores.reset_index()),
 )

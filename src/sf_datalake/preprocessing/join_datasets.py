@@ -1,10 +1,18 @@
-"""Build a dataset by joining DGFiP and Signaux Faibles data.
+"""Build a dataset by joining data from various sources.
 
-The join is made along temporal and SIREN variables.
+The join is made along temporal and SIREN variables. Source files are
+expected to be ORC.
 
-USAGE
-    python join_datasets.py --sf <sf_dataset> --dgfip_yearly <DGFiP_yearly_dataset> \
-    --output <output_directory>
+Expected inputs :
+- "sf" dataset. An ill-named dataset that already aggregates different sources such as:
+  - URSSAF data
+  - DGEFP data
+  - 'sirene' database data
+  - altares 'paydex' + 'FPI' data
+- DGFiP financial ratios dataset
+- DGFiP judgment data
+
+Type python join_datasets.py --help for detailed usage.
 
 """
 import argparse
@@ -22,7 +30,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 import sf_datalake.transform
-from sf_datalake.io import load_data
+from sf_datalake.io import load_data, write_data
 
 parser = argparse.ArgumentParser(
     description="Merge DGFiP and Signaux Faibles datasets into a single one."
@@ -33,13 +41,23 @@ parser.add_argument(
     help="Path to the Signaux Faibles dataset.",
 )
 parser.add_argument(
+    "--judgments",
+    help="Path to the preprocessed judgments dataset.",
+)
+parser.add_argument(
+    "--altares",
+    help="Path to the preprocessed altares dataset.",
+)
+parser.add_argument(
     "--dgfip_yearly",
     help="Path to the DGFiP yearly dataset.",
 )
 parser.add_argument(
-    "--output",
-    dest="output",
-    help="Path to the output dataset.",
+    "--output_path",
+    help="Output dataset directory path.",
+)
+parser.add_argument(
+    "--output_format", default="orc", help="Output dataset file format."
 )
 
 args = parser.parse_args()
@@ -49,6 +67,8 @@ datasets = load_data(
     {
         "sf": args.sf_data,
         "dgfip_yearly": args.dgfip_yearly,
+        "judgments": args.judgments,
+        "altares": args.altares,
     },
     file_format="orc",
 )
@@ -57,18 +77,21 @@ datasets = load_data(
 # Prepare datasets
 siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
 df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
-df_sf = siren_normalizer.transform(datasets["sf"]).withColumn(
-    "periode", F.to_date(F.date_trunc("month", F.col("periode")))
-)
+df_judgments = siren_normalizer.transform(datasets["judgments"])
+df_altares = siren_normalizer.transform(datasets["altares"])
+df_sf = siren_normalizer.transform(datasets["sf"])
+
+# Join datasets and drop (time, SIREN) duplicates with the highest
+# null values ratio from the DGFiP ratios dataset
+# TODO: Handle this step during dgfip data preprocessing script
 df_dgfip_yearly = df_dgfip_yearly.withColumn(
     "null_ratio",
     sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_yearly.columns])
     / len(df_dgfip_yearly.columns),
 )
-
-# Join datasets and drop (time, SIREN) duplicates with the highest null values ratio
 w = Window().partitionBy(["siren", "periode"]).orderBy(F.col("null_ratio").asc())
 
+# Join all datasets
 joined_df = (
     df_sf.join(
         df_dgfip_yearly,
@@ -83,6 +106,8 @@ joined_df = (
     .withColumn("n_row", F.row_number().over(w))
     .filter(F.col("n_row") == 1)
     .drop("n_row")
+    .join(df_judgments, on="siren", how="left")
+    .join(df_altares, on=["siren", "periode"], how="left")
 )
 
-joined_df.write.format("orc").save(args.output)
+write_data(joined_df, args.output_path, args.output_format)
