@@ -369,7 +369,7 @@ class MissingValuesHandler(
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(value=None, stat_strategy="median")
+        self._setDefault(value=None, stat_strategy=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -402,8 +402,7 @@ class MissingValuesHandler(
 
         if value is not None and stat_strategy is not None:
             raise ValueError(
-                "`value` and `stat_strategy` are mutually exclusive. \
-                Use either one."
+                "`value` and `stat_strategy` are mutually exclusive. Use either one."
             )
         if value is not None:
             for col in input_cols:
@@ -416,10 +415,10 @@ class MissingValuesHandler(
             )
         elif stat_strategy is not None:
             dtypes = [dtype for _, dtype in dataset.select(input_cols).dtypes]
-            if any(dtype in ("bool", "timestamp", "string") for dtype in dtypes):
+            if any(dtype in {"bool", "timestamp", "string"} for dtype in dtypes):
                 raise ValueError(
-                    "Statistical imputation of a non-numerical variable is not \
-                    supported."
+                    "Statistical imputation of a non-numerical variable is not "
+                    "supported."
                 )
             imputer = Imputer(strategy=stat_strategy)
             imputer.setInputCols(input_cols)
