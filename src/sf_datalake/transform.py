@@ -1277,3 +1277,95 @@ class LinearInterpolationOperator(
             "interval_length_rn",
             "curr_rn",
         )
+
+
+class OversamplingOperator(Transformer):  # pylint: disable=too-few-public-methods
+    """A transformer that oversampled positive class into a dataset.
+
+    Negative class is reduced according to the oversampling_ratio in order
+    to obtain the right balanced between the two class.
+
+    Args :
+        n_samples: Line number to consider.
+        seed: Random seed for random generation.
+        oversampling_ratio: Final ratio of positive class
+        to obtained  in the dataset.
+        targetCol: Column that contains the target.
+    """
+
+    n_samples = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "n_samples",
+        "Line number to consider.",
+    )
+    seed = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "seed",
+        "Random seed for random generation.",
+    )
+    oversampling_ratio = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "oversampling_ratio",
+        "Final ratio of positive class \
+        to obtained  in the dataset",
+    )
+    targetCol = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "targetCol",
+        "Column that contains the target.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(
+            oversampling_ratio=0.2, seed=42, targetCol="failure", n_samples=None
+        )
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            n_samples (int): Line number to consider.
+            seed (int): Random seed for random generation.
+            oversampling_ratio (double) : Final ratio of positive class
+            to obtained  in the dataset
+            targetCol (str) : Column that contains the target
+
+
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Creates an oversampled data set
+
+        Args:
+            dataset: DataFrame .
+
+        Returns:
+            DataFrame oversampled according to the target column.
+
+        """
+        n_samples: int = self.getOrDefault("n_samples")
+        seed: int = self.getOrDefault("seed")
+        targetCol: List[str] = self.getOrDefault("targetCol")
+        oversampling_ratio: float = self.getOrDefault("oversampling_ratio")
+
+        will_fail_mask = dataset[targetCol].astype("boolean")
+        if n_samples is None:
+            n_samples = dataset.count()
+        n_failing = dataset.filter(will_fail_mask).count()
+        subset_size = int(n_failing / oversampling_ratio)
+
+        n_not_failing = int((1.0 - oversampling_ratio) * subset_size)
+
+        failing_subset = dataset.filter(will_fail_mask)
+        not_failing_subset = dataset.filter(~will_fail_mask).sample(
+            fraction=n_not_failing / (n_samples - n_failing), seed=seed
+        )
+        oversampled_subset = failing_subset.union(not_failing_subset)
+
+        return oversampled_subset
