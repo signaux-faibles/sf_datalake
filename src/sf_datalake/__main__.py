@@ -236,6 +236,22 @@ train_prediction_data = dataset.filter(
     dataset["periode"] >= config["TRAIN_DATES"][0]
 ).filter(dataset["periode"] < config["PREDICTION_DATE"])
 
+# Oversampled train dataset
+
+oversampling_pipeline = PipelineModel(
+    [
+        sf_datalake.transform.OversamplingOperator(
+            targetCol=config["TARGET"]["class_col"],
+            oversampling_ratio=config["TARGET_OVERSAMPLING_RATIO"],
+            seed=config["SEED"],
+        )
+    ]
+)
+oversampled_train_data = oversampling_pipeline.transform(train_data)
+oversampled_train_prediction_data = oversampling_pipeline.transform(
+    train_prediction_data
+)
+
 # Build and run Pipeline
 transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
 model_stages = [
@@ -246,12 +262,14 @@ model_stages = [
 
 pipeline = Pipeline(stages=transforming_stages + model_stages)
 # For eval
-pipeline_model_eval = pipeline.fit(train_data)
-train_transformed = pipeline_model_eval.transform(train_data)
+pipeline_model_eval = pipeline.fit(oversampled_train_data)
+train_transformed = pipeline_model_eval.transform(oversampled_train_data)
 test_transformed = pipeline_model_eval.transform(test_data)
 # For prediction
-pipeline_model_pred = pipeline.fit(train_prediction_data)
-train_pred_transformed = pipeline_model_eval.transform(train_prediction_data)
+pipeline_model_pred = pipeline.fit(oversampled_train_prediction_data)
+train_pred_transformed = pipeline_model_eval.transform(
+    oversampled_train_prediction_data
+)
 prediction_transformed = pipeline_model_pred.transform(prediction_data)
 
 # Explain predictions
