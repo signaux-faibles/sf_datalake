@@ -225,12 +225,16 @@ preprocessing_pipeline = PipelineModel(
 )
 dataset = preprocessing_pipeline.transform(dataset).cache()
 
-# Split the dataset into train, test, predict subsets.
+# Split the dataset into train, test for evaluation.
 (
     train_data,
     test_data,
-    prediction_data,
-) = sf_datalake.sampler.train_test_predict_split(dataset, config)
+) = sf_datalake.sampler.train_test_split(dataset, config)
+# Split the dataset into train, prediction for final prediction
+prediction_data = dataset.filter(dataset["periode"] == config["PREDICTION_DATE"])
+train_prediction_data = dataset.filter(
+    dataset["periode"] >= config["TRAIN_DATES"][0]
+).filter(dataset["periode"] < config["PREDICTION_DATE"])
 
 # Build and run Pipeline
 transforming_stages = sf_datalake.transform.generate_transforming_stages(config)
@@ -241,14 +245,18 @@ model_stages = [
 ]
 
 pipeline = Pipeline(stages=transforming_stages + model_stages)
-pipeline_model = pipeline.fit(train_data)
-train_transformed = pipeline_model.transform(train_data)
-test_transformed = pipeline_model.transform(test_data)
-prediction_transformed = pipeline_model.transform(prediction_data)
+# For eval
+pipeline_model_eval = pipeline.fit(train_data)
+train_transformed = pipeline_model_eval.transform(train_data)
+test_transformed = pipeline_model_eval.transform(test_data)
+# For prediction
+pipeline_model_pred = pipeline.fit(train_prediction_data)
+train_pred_transformed = pipeline_model_eval.transform(train_prediction_data)
+prediction_transformed = pipeline_model_pred.transform(prediction_data)
 
 # Explain predictions
 model = sf_datalake.model.get_model_from_pipeline_model(
-    pipeline_model, config["MODEL"]["NAME"]
+    pipeline_model_pred, config["MODEL"]["NAME"]
 )
 if isinstance(model, pyspark.ml.classification.LogisticRegressionModel):
     logging.info("Model weights: %.3f", model.coefficients)

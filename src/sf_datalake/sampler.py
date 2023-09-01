@@ -6,15 +6,13 @@ import pyspark
 import pyspark.sql
 
 
-def train_test_predict_split(
+def train_test_split(
     df: pyspark.sql.DataFrame,
     config: dict,
 ) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
-    """Splits the input DataFrame and creates an oversampled training set.
+    """Splits the input DataFrame.
 
-    The data is split into 3 parts: learn, test, prediction. The learning set is
-    sampled so that the target positive class is represented according to the ratio
-    defined under the `TARGET_OVERSAMPLING_RATIO` config parameter.
+    The data is split into 2 parts: learn, test. T
 
     Training set and test set relative sizes are defined through the
     `TRAIN_TEST_SPLIT_RATIO` config parameter.
@@ -28,19 +26,6 @@ def train_test_predict_split(
           test, prediction.
 
     """
-    will_fail_mask = df[config["TARGET"]["class_col"]].astype("boolean")
-
-    n_samples = df.count()
-    n_failing = df.filter(will_fail_mask).count()
-    subset_size = int(n_failing / config["TARGET_OVERSAMPLING_RATIO"])
-    n_not_failing = int((1.0 - config["TARGET_OVERSAMPLING_RATIO"]) * subset_size)
-
-    failing_subset = df.filter(will_fail_mask)
-    not_failing_subset = df.filter(~will_fail_mask).sample(
-        fraction=n_not_failing / (n_samples - n_failing), seed=config["SEED"]
-    )
-    oversampled_subset = failing_subset.union(not_failing_subset)
-
     # Split datasets according to dates and train/test split ratio.
     siren_train, siren_test = (
         df.select("siren")
@@ -52,10 +37,8 @@ def train_test_predict_split(
     )
 
     train = (
-        oversampled_subset.filter(
-            oversampled_subset["periode"] >= config["TRAIN_DATES"][0]
-        )
-        .filter(oversampled_subset["periode"] <= config["TRAIN_DATES"][1])
+        df.filter(df["periode"] >= config["TRAIN_DATES"][0])
+        .filter(df["periode"] <= config["TRAIN_DATES"][1])
         .join(siren_train, how="inner", on="siren")
     )
     test = (
@@ -63,5 +46,4 @@ def train_test_predict_split(
         .filter(df["periode"] <= config["TEST_DATES"][1])
         .join(siren_test, how="inner", on="siren")
     )
-    prediction = df.filter(df["periode"] == config["PREDICTION_DATE"])
-    return train, test, prediction
+    return train, test
