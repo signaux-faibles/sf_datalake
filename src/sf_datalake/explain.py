@@ -1,6 +1,6 @@
 """Explain AI predictions using shap package.
 """
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -17,7 +17,7 @@ def explanation_data(
     model: pyspark.ml.Model,
     train_data: pyspark.sql.DataFrame,
     prediction_data: pyspark.sql.DataFrame,
-    n_train_sample: int = 5000,
+    n_train_sample: int,
 ) -> Tuple[pd.DataFrame, float]:
     """Compute Shapeley coefficients + expected value for predictions.
 
@@ -103,8 +103,12 @@ def explanation_data(
     return sv, ev
 
 
+# TODO: Complete docstring
 def explanation_scores(
-    config: dict, shap_df: pd.DataFrame
+    shap_df: pd.DataFrame,
+    n_concerning: int,
+    feature_groups: Dict[str, List[str]],
+    meso_groups: Dict[str, List[str]],
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Compute plot-ready feature contribution.
 
@@ -121,9 +125,10 @@ def explanation_scores(
     range before being returned.
 
     Args:
-        config: The run configuration. It should contain `FEATURE GROUPS`, `MESO_GROUPS`
-          and `N_CONCERNING_MICRO` info.
         shap_df: The shap values associated with the features used for machine learning.
+        feature_groups:
+        meso_groups:
+        n_concerning:
 
     Returns:
         A 2-uple containing:
@@ -134,17 +139,16 @@ def explanation_scores(
 
     """
     # Sum "micro" variables that belong to a given group and drop them.
-    for group, features in config["MESO_GROUPS"].items():
+    for group, features in meso_groups.items():
         shap_df[group] = shap_df[features].sum(axis=1)
         shap_df.drop(features, axis=1, inplace=True)
 
     # 'Macro' scores per group
     macro_scores = pd.DataFrame([], index=shap_df.index)
-    for group, features in config["FEATURE_GROUPS"].items():
+    for group, features in feature_groups.items():
         macro_scores.loc[:, f"{group}_macro_score"] = shap_df[features].sum(axis=1)
 
     # Concerning (highest scoring) features
-    n_concerning = config["N_CONCERNING_MICRO"]
     sorter = np.argsort(-shap_df.values, axis=1)[:, :n_concerning]
     concerning_feat = pd.DataFrame(shap_df.columns[sorter], index=shap_df.index)
     concerning_values = pd.DataFrame(

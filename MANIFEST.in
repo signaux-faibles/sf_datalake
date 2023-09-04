@@ -1,2 +1,0 @@
-include src/sf_datalake/config/parameters/*.json
-include src/sf_datalake/config/variables/*.json

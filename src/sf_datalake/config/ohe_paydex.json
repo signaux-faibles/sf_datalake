@@ -1,10 +1,5 @@
 {
-    "DATASET": "/projets/TSF/data/preprocessed/datasets/full_dataset",
-    "IDENTIFIERS": [
-        "periode",
-        "siren"
-    ],
-    "DEFAULT_VALUES": {
+    "FILL_DEFAULT_VALUES": {
         "paydex": 0,
         "paydex_bin": 0.0,
         "cotisation": 0.0,
@@ -24,7 +19,8 @@
         "rto_af_solidite_financiere": 0.0,
         "rto_invest_ca": 0.0
     },
-    "FEATURES_PIPELINE": {
+    "FILL_IMPUTATION_STRATEGY": {},
+    "FEATURES_TRANSFORMERS": {
         "mnt_af_bfonc_bfr": [
             "StandardScaler"
         ],
@@ -61,37 +57,7 @@
         "montant_part_ouvriere": [
             "StandardScaler"
         ],
-        "montant_part_ouvriere_lag1m": [
-            "StandardScaler"
-        ],
-        "montant_part_ouvriere_lag12m": [
-            "StandardScaler"
-        ],
-        "montant_part_ouvriere_lag2m": [
-            "StandardScaler"
-        ],
-        "montant_part_ouvriere_lag3m": [
-            "StandardScaler"
-        ],
-        "montant_part_ouvriere_lag6m": [
-            "StandardScaler"
-        ],
         "montant_part_patronale": [
-            "StandardScaler"
-        ],
-        "montant_part_patronale_lag1m": [
-            "StandardScaler"
-        ],
-        "montant_part_patronale_lag12m": [
-            "StandardScaler"
-        ],
-        "montant_part_patronale_lag2m": [
-            "StandardScaler"
-        ],
-        "montant_part_patronale_lag3m": [
-            "StandardScaler"
-        ],
-        "montant_part_patronale_lag6m": [
             "StandardScaler"
         ],
         "effectif": [
@@ -100,16 +66,10 @@
         "apart_heures_consommees": [
             "StandardScaler"
         ],
-        "ratio_dette_mean12m": [
-            "StandardScaler"
-        ],
         "ratio_dette": [
             "StandardScaler"
         ],
-        "dette_par_effectif_slope3m": [
-            "StandardScaler"
-        ],
-        "paydex_nb_jours_diff12m": [
+        "dette_par_effectif": [
             "StandardScaler"
         ],
         "paydex_nb_jours": [
@@ -145,46 +105,6 @@
             ]
         ]
     },
-    "TARGET": {
-        "class_col": "failure",
-        "n_months": 18,
-        "judgment_date_col": "date_jugement"
-    },
-    "MESO_GROUPS": {
-        "cotisation_urssaf": [
-            "cotisation",
-            "cotisation_mean12m"
-        ],
-        "part_ouvriere": [
-            "montant_part_ouvriere",
-            "montant_part_ouvriere_lag1m",
-            "montant_part_ouvriere_lag2m",
-            "montant_part_ouvriere_lag3m",
-            "montant_part_ouvriere_lag6m",
-            "montant_part_ouvriere_lag12m"
-        ],
-        "part_patronale": [
-            "montant_part_patronale",
-            "montant_part_patronale_lag1m",
-            "montant_part_patronale_lag2m",
-            "montant_part_patronale_lag3m",
-            "montant_part_patronale_lag6m",
-            "montant_part_patronale_lag12m"
-        ],
-        "dette": [
-            "ratio_dette",
-            "ratio_dette_mean12m",
-            "dette_par_effectif_slope3m"
-        ],
-        "paydex_bin": [
-            "paydex_bin_ohcat0",
-            "paydex_bin_ohcat1",
-            "paydex_bin_ohcat2",
-            "paydex_bin_ohcat3",
-            "paydex_bin_ohcat4",
-            "paydex_bin_ohcat5"
-        ]
-    },
     "FEATURE_GROUPS": {
         "sante_financiere": [
             "mnt_af_bfonc_bfr",
@@ -207,11 +127,38 @@
             "dette"
         ],
         "retards_paiement": [
-            "paydex_bin",
-            "paydex_diff12m"
+            "paydex"
         ],
         "misc": [
             "effectif"
         ]
+    },
+    "TIME_SERIES": {
+        "DIFF": {
+            "paydex": [
+                12
+            ]
+        },
+        "MOVING_AVERAGE": {
+            "cotisation": [
+                12
+            ]
+        },
+        "LAG": {
+            "montant_part_ouvriere": [
+                1,
+                2,
+                3,
+                6,
+                12
+            ],
+            "montant_part_patronale": [
+                1,
+                2,
+                3,
+                6,
+                12
+            ]
+        }
     }
 }

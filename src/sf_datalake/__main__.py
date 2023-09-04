@@ -4,12 +4,11 @@ Processes datasets according to provided configuration to make predictions.
 """
 
 import argparse
-import datetime as dt
 import logging
 import os
-import random
 import sys
 from os import path
+from typing import Dict, List
 
 import numpy as np
 import pyspark
@@ -20,8 +19,9 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
-# pylint: disable=C0413
+# pylint: disable=unsubscriptable-object,wrong-import-position
 
+import sf_datalake.config
 import sf_datalake.explain
 import sf_datalake.io
 import sf_datalake.model
@@ -37,25 +37,17 @@ parser = argparse.ArgumentParser(
     """
 )
 parser.add_argument(
-    "--parameters",
+    "--configuration",
     help="""
-    Parameters file name (including '.json' extension). If not provided,
+    Configuration file name (including '.json' extension). If not provided,
     'standard.json' will be used.
     """,
     default="standard.json",
 )
-parser.add_argument(
-    "--variables",
-    help="""
-    File name (including '.json' extension) containing variables and features to
-    use in the run as well as default values and transformations to be applied on
-    features. If not provided, 'standard.json' will be used.
-    """,
-    default="standard.json",
-)
+
 parser.add_argument(
     "--dataset",
-    dest="DATASET",
+    destination="dataset_path",
     type=str,
     help="Path to the dataset that will be used for training, test and prediction.",
 )
@@ -66,42 +58,29 @@ parser.add_argument(
 )
 parser.add_argument(
     "--train_dates",
-    dest="TRAIN_DATES",
     type=str,
     nargs=2,
     help="The training set start and end dates (YYYY-MM-DD format).",
 )
 parser.add_argument(
     "--test_dates",
-    dest="TEST_DATES",
     type=str,
     nargs=2,
     help="The test set start and end dates (YYYY-MM-DD format).",
 )
 parser.add_argument(
     "--prediction_date",
-    dest="PREDICTION_DATE",
     type=str,
     help="The date over which prediction should be made (YYYY-MM-DD format).",
 )
 parser.add_argument(
     "--sample_ratio",
-    dest="SAMPLE_RATIO",
     type=float,
     help="The loaded data sample size as a fraction of its complete size.",
 )
 parser.add_argument(
-    "--oversampling",
-    dest="TARGET_OVERSAMPLING_RATIO",
-    type=float,
-    help="""
-    Enforces the ratio of positive observations ("entreprises en défaillance") to be
-    the specified ratio.
-    """,
-)
-parser.add_argument(
     "--drop_missing_values",
-    dest="FILL_MISSING_VALUES",
+    dest="fill_missing_values",
     action="store_false",
     help="""
     If specified, missing values will be dropped instead of filling data with
@@ -110,7 +89,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--seed",
-    dest="SEED",
+    dest="random_seed",
     type=int,
     help="""
     If specified, the seed used in all calls of the following functions:
@@ -124,43 +103,39 @@ parser.add_argument(
     nargs="+",
     help="""
     A sequence of configuration keys that should be dumped along with the prediction
-    results. If a key cannot be found inside the configuration, it will be silently
-    ignored.
+    results.
     """,
 )
 
-args = parser.parse_args()
+args = vars(parser.parse_args())
 
 # Parse configuration files and possibly override parameters.
 # Then, dump all used configuration inside the output directory.
-parameters = sf_datalake.io.load_parameters(args.parameters)
-variables = sf_datalake.io.load_variables(args.variables)
-config = {**parameters, **variables}
-override_args = {k: v for k, v in vars(args).items() if k in config and v is not None}
-for param, value in override_args.items():
-    config[param] = value
-if args.output_directory is None:
-    output_directory = path.join(
-        config["OUTPUT_ROOT_DIR"], str(int(dt.datetime.now().timestamp()))
-    )
-else:
-    output_directory = args.output_directory
-config["SEED"] = random.randint(0, 10000) if args.SEED is None else args.SEED
-sf_datalake.io.dump_configuration(output_directory, config, args.dump_keys)
+config_file = args.pop("configuration")
+dump_keys = args.pop("dump_keys")
+
+configuration = sf_datalake.config.ConfigurationHelper(
+    config_file=config_file, cli_args=args
+)
+configuration.dump(args.dump_keys)
 
 # Prepare data.
-dataset = sf_datalake.io.load_data(
-    {"dataset": config["DATASET"]},
+_, dataset = sf_datalake.io.load_data(
+    {"dataset": configuration.io.dataset_path},
     file_format="orc",
-)["dataset"]
+).popitem()
 
-if config["SAMPLE_RATIO"] != 1.0:
-    dataset = dataset.sample(fraction=config["SAMPLE_RATIO"], seed=config["SEED"])
+if configuration.io.sample_ratio != 1.0:
+    dataset = dataset.sample(
+        fraction=configuration.io.sample_ratio, seed=configuration.io.random_seed
+    )
 
 
 # Switches
 with_paydex = False
-if any("paydex" in feat for feat in set(config["FEATURES_PIPELINE"])):
+if any(
+    "paydex" in feat for feat in set(configuration.preprocessing.features_transformers)
+):
     with_paydex = True
     logging.info(
         "Paydex data features were requested through the provided configuration file. \
@@ -177,7 +152,7 @@ if with_paydex:
 # handled before the main script.
 normalizing_steps = [
     sf_datalake.transform.TimeNormalizer(
-        inputCols=config["FEATURE_GROUPS"]["sante_financiere"],
+        inputCols=configuration.explanation.feature_groups["sante_financiere"],
         start="date_deb_exercice",
         end="date_fin_exercice",
     ),
@@ -188,25 +163,37 @@ normalizing_steps = [
 
 building_steps = [
     sf_datalake.transform.TargetVariable(
-        inputCol=config["TARGET"]["judgment_date_col"],
-        outputCol=config["TARGET"]["class_col"],
-        n_months=config["TARGET"]["n_months"],
+        inputCol=configuration.learning.target["judgment_date_col"],
+        outputCol=configuration.learning.target["class_col"],
+        n_months=configuration.learning.target["n_months"],
     ),
     sf_datalake.transform.ColumnSelector(
         inputCols=(
-            config["IDENTIFIERS"]
-            + list(config["FEATURES_PIPELINE"])  # features dict keys to list
-            + [config["TARGET"]["class_col"]]  # contains a single string
+            configuration.preprocessing.identifiers
+            + list(
+                configuration.preprocessing.features_transformers
+            )  # features dict keys to list
+            + [configuration.learning.target["class_col"]]  # contains a single string
         )
     ),
 ]
-if config["FILL_MISSING_VALUES"]:
-    building_steps.append(
-        sf_datalake.transform.MissingValuesHandler(
-            inputCols=list(config["FEATURES_PIPELINE"]),
-            value=config["DEFAULT_VALUES"],
-        )
+imputation_strategy_features: Dict[str, List[str]] = {}
+for feature, strategy in configuration.preprocessing.fill_imputation_strategy.values():
+    imputation_strategy_features.setdefault(strategy, []).append(feature)
+
+missing_values_steps = [
+    sf_datalake.transform.MissingValuesHandler(
+        inputCols=list(configuration.preprocessing.fill_default_values),
+        value=configuration.preprocessing.fill_default_values,
+    ),
+] + [
+    sf_datalake.transform.MissingValuesHandler(
+        inputCols=features,
+        stat_strategy=strategy,
     )
+    for strategy, features in imputation_strategy_features.items()
+]
+
 
 preprocessing_pipeline = PipelineModel(
     stages=filter_steps + normalizing_steps + building_steps
@@ -218,11 +205,20 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
     train_data,
     test_data,
     prediction_data,
-) = sf_datalake.sampler.train_test_predict_split(dataset, config)
+) = sf_datalake.sampler.train_test_predict_split(
+    dataset,
+    configuration.learning.target["class_col"],
+    configuration.learning.target["oversampling_ratio"],
+    configuration.learning.train_test_split_ratio,
+    configuration.learning.train_dates,
+    configuration.learning.test_dates,
+    configuration.learning.prediction_date,
+    configuration.io.random_seed,
+)
 
 # Build and run transformation and model Pipelines
 
-### TODO: HANDLE ALL TRANSFORMING STEPS HERE
+### TODO: HANDLE ALL ENCODING AND SCALING STEPS HERE
 
 (transforming_stages, model_features,) = (
     None,
@@ -231,7 +227,8 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
 
 model_stages = [
     sf_datalake.model.get_model_from_conf(
-        config["MODEL"], target_col=config["TARGET"]["class_col"]
+        configuration.learning.model,
+        target_col=configuration.learning.target["class_col"],
     )
 ]
 pipeline = Pipeline(stages=transforming_stages + model_stages)
@@ -242,7 +239,7 @@ prediction_transformed = pipeline_model.transform(prediction_data)
 
 # Explain predictions
 model = sf_datalake.model.get_model_from_pipeline_model(
-    pipeline_model, config["MODEL"]["NAME"]
+    pipeline_model, configuration.learning.model["name"]
 )
 if isinstance(model, pyspark.ml.classification.LogisticRegressionModel):
     logging.info("Model weights: %.3f", model.coefficients)
@@ -262,10 +259,17 @@ features_list = []  ## TODO: populate
 #     ]
 
 shap_values, expected_value = sf_datalake.explain.explanation_data(
-    features_list, model, train_transformed, prediction_transformed
+    features_list,
+    model,
+    train_transformed,
+    prediction_transformed,
+    configuration.explanation.n_train_sample,
 )
 macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
-    config, shap_values
+    shap_values,
+    configuration.explanation.n_concerning_micro,
+    configuration.explanation.feature_groups,
+    configuration.explanation.meso_groups,
 )
 # Convert to [0, 1] range if shap values are expressed in log-odds units.
 if isinstance(
@@ -281,12 +285,12 @@ if isinstance(
 
 # Write outputs.
 sf_datalake.io.write_predictions(
-    output_directory,
+    configuration.io.output_directory,
     test_transformed,
     prediction_transformed,
 )
 sf_datalake.io.write_explanations(
-    output_directory,
+    configuration.io.output_directory,
     spark.createDataFrame(macro_scores.reset_index()),
     spark.createDataFrame(concerning_scores.reset_index()),
 )

@@ -2,42 +2,51 @@
 
 from typing import Tuple
 
-import pyspark
 import pyspark.sql
 
 
+# TODO: Refactor this into train / test and over / sub sampling.
+# See issue #70
 def train_test_predict_split(
     df: pyspark.sql.DataFrame,
-    config: dict,
-) -> Tuple[pyspark.sql.DataFrame, pyspark.sql.DataFrame, pyspark.sql.DataFrame]:
+    class_column: str,
+    target_oversampling_ratio: float,
+    train_test_split_ratio: float,
+    train_dates: Tuple[str],
+    test_dates: Tuple[str],
+    prediction_date: str,
+    random_seed: float,
+) -> Tuple[
+    pyspark.sql.DataFrame, pyspark.sql.DataFrame, pyspark.sql.DataFrame
+]:  # pylint: disable=too-many-arguments, too-many-locals
     """Splits the input DataFrame and creates an oversampled training set.
 
     The data is split into 3 parts: learn, test, prediction. The learning set is
     sampled so that the target positive class is represented according to the ratio
-    defined under the `TARGET_OVERSAMPLING_RATIO` config parameter.
+    defined under the `target_oversampling_ratio` parameter.
 
     Training set and test set relative sizes are defined through the
-    `TRAIN_TEST_SPLIT_RATIO` config parameter.
+    `train_test_split_ratio` parameter.
 
     Args:
         df: the DataFrame to sample
-        config: model configuration, as loaded by io.load_parameters().
+        # TODO: COMPLETE THIS
 
     Returns:
         A tuple of three DataFrame, each associated with the following stages: learn,
           test, prediction.
 
     """
-    will_fail_mask = df[config["TARGET"]["class_col"]].astype("boolean")
+    positive_class_mask = df[class_column].astype("boolean")
 
     n_samples = df.count()
-    n_failing = df.filter(will_fail_mask).count()
-    subset_size = int(n_failing / config["TARGET_OVERSAMPLING_RATIO"])
-    n_not_failing = int((1.0 - config["TARGET_OVERSAMPLING_RATIO"]) * subset_size)
+    n_failing = df.filter(positive_class_mask).count()
+    subset_size = int(n_failing / target_oversampling_ratio)
+    n_not_failing = int((1.0 - target_oversampling_ratio) * subset_size)
 
-    failing_subset = df.filter(will_fail_mask)
-    not_failing_subset = df.filter(~will_fail_mask).sample(
-        fraction=n_not_failing / (n_samples - n_failing), seed=config["SEED"]
+    failing_subset = df.filter(positive_class_mask)
+    not_failing_subset = df.filter(~positive_class_mask).sample(
+        fraction=n_not_failing / (n_samples - n_failing), seed=random_seed
     )
     oversampled_subset = failing_subset.union(not_failing_subset)
 
@@ -46,22 +55,20 @@ def train_test_predict_split(
         df.select("siren")
         .distinct()
         .randomSplit(
-            [config["TRAIN_TEST_SPLIT_RATIO"], 1 - config["TRAIN_TEST_SPLIT_RATIO"]],
-            seed=config["SEED"],
+            [train_test_split_ratio, 1 - train_test_split_ratio],
+            seed=random_seed,
         )
     )
 
     train = (
-        oversampled_subset.filter(
-            oversampled_subset["periode"] >= config["TRAIN_DATES"][0]
-        )
-        .filter(oversampled_subset["periode"] <= config["TRAIN_DATES"][1])
+        oversampled_subset.filter(oversampled_subset["periode"] >= train_dates[0])
+        .filter(oversampled_subset["periode"] <= train_dates[1])
         .join(siren_train, how="inner", on="siren")
     )
     test = (
-        df.filter(df["periode"] >= config["TEST_DATES"][0])
-        .filter(df["periode"] <= config["TEST_DATES"][1])
+        df.filter(df["periode"] >= test_dates[0])
+        .filter(df["periode"] <= test_dates[1])
         .join(siren_test, how="inner", on="siren")
     )
-    prediction = df.filter(df["periode"] == config["PREDICTION_DATE"])
+    prediction = df.filter(df["periode"] == prediction_date)
     return train, test, prediction

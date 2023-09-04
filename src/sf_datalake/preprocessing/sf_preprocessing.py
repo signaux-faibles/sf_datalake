@@ -38,16 +38,10 @@ parser.description = "Build a dataset with aggregated SIREN-level data and new t
 averaged/lagged variables."
 
 parser.add_argument(
-    "-t",
-    "--time_computations",
-    help="Configuration file containing required time-computations.",
-    default="time_series.json",
-)
-parser.add_argument(
-    "-a",
-    "--aggregation",
-    help="Configuration file with aggregation info.",
-    default="aggregation.json",
+    "-c",
+    "--configuration",
+    help="Configuration file.",
+    default="standard.json",
 )
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
@@ -55,8 +49,9 @@ parser.add_argument(
 
 
 args = parser.parse_args()
-time_comp_config = sf_datalake.io.load_variables(args.time_computations)
-agg_config = sf_datalake.io.load_variables(args.aggregation)
+config = sf_datalake.config.ConfigurationHelper(args.configuration)
+time_comp_config = config.preprocessing.time_aggregations
+siren_agg_config = config.preprocessing.siren_aggregation
 input_ds = sf_datalake.io.load_data(
     {"input": args.input}, file_format="csv", sep=",", infer_schema=False
 )["input"]
@@ -75,7 +70,7 @@ siret_level_ds = siret_level_ds.withColumn(
 
 # Filter out public institutions and companies and aggregate at SIREN level
 siren_converter = sf_datalake.transform.SiretToSiren()
-aggregator = sf_datalake.transform.SirenAggregator(agg_config)
+aggregator = sf_datalake.transform.SirenAggregator(siren_agg_config)
 siren_level_ds = (
     PipelineModel([siren_converter, aggregator])
     .transform(siret_level_ds)
@@ -95,6 +90,8 @@ siren_level_ds = (
 #####################
 # Time Computations #
 #####################
+
+# pylint: disable=unsubscriptable-object
 
 time_computations: List[Transformer] = []
 for feature, n_months in time_comp_config["LAG"].items():
