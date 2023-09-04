@@ -61,14 +61,14 @@ df_ap["DATE_DEB"].clip(lower=AP_TAILORING_START_DATE, inplace=True)
 df_ap["DATE_FIN"].clip(upper=AP_TAILORING_END_DATE, inplace=True)
 
 # Reindex
-# df_ap = df_ap.set_index(["ETAB_SIRET", "DATE_DEB"], drop=False).sort_index(
-#     level=["ETAB_SIRET", "DATE_DEB"]
-# )
-df_ap.sort_values(by="DATE_DEB", inplace=True)
+df_ap = df_ap.set_index(["ETAB_SIRET", "DATE_DEB"], drop=False).sort_index(
+    level=["ETAB_SIRET", "DATE_DEB"]
+)
+# df_ap.sort_values(by="DATE_DEB", inplace=True)
 
 # Sum number of requested days for each SIRET
 
-n_jours = pd.Series(0, index=pd.Index(df_ap["ETAP_SIRET"].drop_duplicates()))
+n_jours = pd.Series(0, index=pd.Index(df_ap["ETAB_SIRET"].drop_duplicates()))
 for siret in n_jours.index:
     df = df_ap.loc[(siret, slice(None)), ["DATE_DEB", "DATE_FIN"]].copy()
     df["group"] = (df["DATE_DEB"] > df["DATE_FIN"].shift().cummax()).cumsum()

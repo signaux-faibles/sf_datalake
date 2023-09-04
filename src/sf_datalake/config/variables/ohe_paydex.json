@@ -5,7 +5,7 @@
         "siren"
     ],
     "DEFAULT_VALUES": {
-        "paydex_nb_jours": 0,
+        "paydex": 0,
         "paydex_bin": 0.0,
         "cotisation": 0.0,
         "montant_part_ouvriere": 0.0,
@@ -208,7 +208,7 @@
         ],
         "retards_paiement": [
             "paydex_bin",
-            "paydex_nb_jours_diff12m"
+            "paydex_diff12m"
         ],
         "misc": [
             "effectif"

@@ -199,12 +199,15 @@ building_steps = [
             + [config["TARGET"]["class_col"]]  # contains a single string
         )
     ),
-    sf_datalake.transform.MissingValuesHandler(
-        inputCols=list(config["FEATURES_PIPELINE"]),
-        fill=config["FILL_MISSING_VALUES"],
-        value=config["DEFAULT_VALUES"],
-    ),
 ]
+if config["FILL_MISSING_VALUES"]:
+    building_steps.append(
+        sf_datalake.transform.MissingValuesHandler(
+            inputCols=list(config["FEATURES_PIPELINE"]),
+            value=config["DEFAULT_VALUES"],
+        )
+    )
+
 preprocessing_pipeline = PipelineModel(
     stages=filter_steps + normalizing_steps + building_steps
 )
@@ -221,10 +224,10 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
 
 ### TODO: HANDLE ALL TRANSFORMING STEPS HERE
 
-(
-    transforming_stages,
-    model_features,
-) = sf_datalake.transform.generate_transforming_stages(config)
+(transforming_stages, model_features,) = (
+    None,
+    None,
+)
 
 model_stages = [
     sf_datalake.model.get_model_from_conf(

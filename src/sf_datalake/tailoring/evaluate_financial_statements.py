@@ -51,11 +51,14 @@ parser.add_argument(
 parser.add_argument("-o", "--output_file", dest="OUTPUT_FILE")
 args = parser.parse_args()
 
-siren_perimeter = pd.read_csv(
-    args.SIREN_PERIMETER_DATA,
-    dtype={"siren": str},
-    index_col="siren",
-).index
+siren_perimeter = (
+    pd.read_csv(
+        args.SIREN_PERIMETER_DATA,
+        dtype={"siren": "str"},
+    )
+    .set_index("siren")
+    .index
+)
 
 statements: Dict[str, pd.Index] = {}
 
@@ -113,7 +116,7 @@ def reindex_to_ref(
 
 
 ## Load ratios data
-df_ratios = pd.read_csv(args.RATIOS_DATA, dtype={"siren": "str"}, index_col=["siren"])
+df_ratios = pd.read_csv(args.RATIOS_DATA, dtype={"siren": "str"}).set_index("siren")
 df_ratios["annee_exercice"] = pd.to_datetime(df_ratios["annee_exercice"], format="%Y")
 df_ratios = filter_n_most_recent(
     df_ratios, date_col="annee_exercice", min_date="2021-01-01", n_last=1
@@ -147,9 +150,8 @@ df_tva_ca3 = pd.read_csv(
     args.TVA_DATA,
     usecols=["siren", "dte_debut_periode", "dte_fin_periode", "d3310_01", "d3310_02"],
     parse_dates=["dte_debut_periode", "dte_fin_periode"],
-    index_col="siren",
-)
-df_tva_ca3.index = df_tva_ca3.index.astype(str).str.zfill(9)
+    dtype={"siren": "str"},
+).set_index("siren")
 
 df_tva_ca3[["d3310_01", "d3310_02"]] = df_tva_ca3[["d3310_01", "d3310_02"]].fillna(0)
 
