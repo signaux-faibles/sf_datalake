@@ -126,6 +126,7 @@ class ConfigurationHelper:
 
     """
 
+    # pylint: disable=not-an-iterable, unsubscriptable-object
     def __init__(self, config_file: str = None, cli_args: Dict[str, Any] = None):
         # Instantiate every attribute using dataclasses default values.
         self.learning = LearningConfiguration()
@@ -145,15 +146,33 @@ class ConfigurationHelper:
         if cli_args is not None:
             self.override(cli_args)
 
+        # Add time-aggregated variables
+        for operation in self.preprocessing.time_aggregation:
+            for variable, n_months in self.preprocessing.time_aggregation[
+                operation
+            ].items():
+                self.preprocessing.features_transformers.update(
+                    (
+                        f"{variable}_{operation}{n_month}m",
+                        self.preprocessing.features_transformers[variable],
+                    )
+                    for n_month in n_months
+                )
+
         # TODO: Check that everything is ready
 
     def override(self, source: Dict[str, Any]):
         """Override configuration attributes using external source.
 
-        We loop over all
+        We loop over all fields found inside `source`, and try to fill attributes
+        of this ConfigurationHelper's attributes.
 
         Args:
             source: Mapping that holds configuration data.
+
+        Raises:
+            ValueError if a field that cannot be related to any (sub-)attribute is found
+              in source.
 
         """
         for attr_name, attr_value in source.items():
