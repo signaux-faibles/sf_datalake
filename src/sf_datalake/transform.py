@@ -546,14 +546,16 @@ class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
 
         """
 
-        aggregated = dataset.groupBy(self.getOrDefault("grouping_cols")).agg(
-            self.getOrDefault("aggregation_map")
-        )
-        for colname, func in self.getOrDefault("aggregation_map").items():
+        grouping_cols = self.getOrDefault("grouping_cols")
+        no_aggregation = self.getOrDefault("no_aggregation")
+        agg_map = self.getOrDefault("aggregation_map")
+        if no_aggregation is None:
+            no_aggregation = []
+
+        aggregated = dataset.groupBy(grouping_cols).agg(agg_map)
+        for colname, func in agg_map.items():
             aggregated = aggregated.withColumnRenamed(f"{func}({colname})", colname)
-        siren_level = dataset.select(
-            self.getOrDefault("no_aggregation") + self.getOrDefault("grouping_cols")
-        ).distinct()
+            siren_level = dataset.select(grouping_cols + no_aggregation).distinct()
         return aggregated.join(
             siren_level,
             on=self.getOrDefault("grouping_cols"),

@@ -49,9 +49,7 @@ parser.add_argument(
 
 
 args = parser.parse_args()
-config = sf_datalake.config.ConfigurationHelper(args.configuration)
-time_comp_config = config.preprocessing.time_aggregations
-siren_agg_config = config.preprocessing.siren_aggregation
+configuration = sf_datalake.config.ConfigurationHelper(args.configuration)
 input_ds = sf_datalake.io.load_data(
     {"input": args.input}, file_format="csv", sep=",", infer_schema=False
 )["input"]
@@ -70,7 +68,11 @@ siret_level_ds = siret_level_ds.withColumn(
 
 # Filter out public institutions and companies and aggregate at SIREN level
 siren_converter = sf_datalake.transform.SiretToSiren()
-aggregator = sf_datalake.transform.SirenAggregator(siren_agg_config)
+aggregator = sf_datalake.transform.SirenAggregator(
+    grouping_cols=configuration.preprocessing.identifiers,
+    aggregation_map=configuration.preprocessing.siren_aggregation,
+    no_aggregation=[],
+)
 siren_level_ds = (
     PipelineModel([siren_converter, aggregator])
     .transform(siret_level_ds)
@@ -94,21 +96,23 @@ siren_level_ds = (
 # pylint: disable=unsubscriptable-object
 
 time_computations: List[Transformer] = []
-for feature, n_months in time_comp_config["LAG"].items():
+for feature, n_months in configuration.preprocessing.time_aggregation["LAG"].items():
     if feature in siren_level_ds.columns:
         time_computations.append(
             sf_datalake.transform.LagOperator(
                 inputCol=feature, n_months=n_months, bfill=True
             )
         )
-for feature, n_months in time_comp_config["DIFF"].items():
+for feature, n_months in configuration.preprocessing.time_aggregation["DIFF"].items():
     if feature in siren_level_ds.columns:
         time_computations.append(
             sf_datalake.transform.DiffOperator(
                 inputCol=feature, n_months=n_months, bfill=True
             )
         )
-for feature, n_months in time_comp_config["MOVING_AVERAGE"].items():
+for feature, n_months in configuration.preprocessing.time_aggregation[
+    "MOVING_AVERAGE"
+].items():
     if feature in siren_level_ds.columns:
         time_computations.append(
             sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)

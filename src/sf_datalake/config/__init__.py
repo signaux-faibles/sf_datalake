@@ -40,7 +40,7 @@ class PreprocessingConfiguration:
 
     identifiers: List[str] = field(default_factory=lambda: ["siren", "periode"])
     features_transformers: Dict[str, List[str]] = None
-    time_aggregations: Dict[str, Dict[str, List[int]]] = None
+    time_aggregation: Dict[str, Dict[str, List[int]]] = None
     siren_aggregation: Dict[str, str] = field(
         default_factory=lambda: {
             "cotisation": "sum",
