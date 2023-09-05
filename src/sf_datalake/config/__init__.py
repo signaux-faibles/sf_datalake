@@ -11,6 +11,11 @@ from typing import Any, Dict, Iterable, List, Tuple
 import importlib_metadata
 import importlib_resources
 import pyspark.sql
+from pyspark.ml.classification import (
+    GBTClassifier,
+    LogisticRegression,
+    RandomForestClassifier,
+)
 
 import sf_datalake.utils
 
@@ -30,8 +35,18 @@ class LearningConfiguration:
     train_dates: Tuple[str] = ("2016-01-01", "2019-05-31")
     test_dates: Tuple[str] = ("2019-06-01", "2020-01-31")
     prediction_date: str = "2020-02-01"
-    model: Dict[str, Any] = None
     train_test_split_ratio: float = 0.8
+    model_name: str = "LogisticRegression"
+    model_params: Dict[str, Any] = field(
+        default_factory=lambda: {
+            "LogisticRegression": {
+                "regParam": 0.12,
+                "maxIter": 50,
+                "tol": 1e-05,
+                "standardization": False,
+            },
+        }
+    )
 
 
 @dataclass
@@ -130,20 +145,48 @@ class ConfigurationHelper:
         if cli_args is not None:
             self.override(cli_args)
 
-        # Check that everything is ready
-        ## check()
+        # TODO: Check that everything is ready
 
     def override(self, source: Dict[str, Any]):
-        """Override config attributes using external source.
+        """Override configuration attributes using external source.
+
+        We loop over all
 
         Args:
             source: Mapping that holds configuration data.
 
         """
-        for obj in inspect.getmembers(self, predicate=inspect.isclass):
-            for attr_name, attr_value in source.items():
-                if hasattr(obj, attr_name):
-                    setattr(obj, attr_name, attr_value)
+        for attr_name, attr_value in source.items():
+            attr_is_set = False
+            for _, dcls in inspect.getmembers(self, predicate=is_dataclass):
+                if hasattr(dcls, attr_name):
+                    setattr(dcls, attr_name, attr_value)
+                    attr_is_set = True
+                    break
+            if not attr_is_set:
+                raise ValueError(
+                    f"Attribute '{attr_name}' could not be matched against any "
+                    "ConfigurationHelper attribute."
+                )
+
+    def get_model(self) -> pyspark.ml.Model:
+        """Returns a Model object ready to be used.
+
+        Returns:
+            The selected Model instantiated using config parameters.
+
+        """
+        model_factory = {
+            "LogisticRegression": LogisticRegression,
+            "GBTClassifier": GBTClassifier,
+            "RandomForestClassifier": RandomForestClassifier,
+        }
+        # pylint: disable=not-a-mapping, unsubscriptable-object
+        return (
+            model_factory[self.learning.model_name]
+            .setParams(**self.learning.model_params)
+            .setLabelCol(self.learning.target["class_col"])
+        )
 
     def dump(self, dump_keys: Iterable[str] = None):
         """Dumps a subset of the configuration used during a prediction run.

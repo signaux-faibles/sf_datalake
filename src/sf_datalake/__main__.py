@@ -225,13 +225,7 @@ dataset = preprocessing_pipeline.transform(dataset).cache()
     None,
 )
 
-model_stages = [
-    sf_datalake.model.get_model_from_conf(
-        configuration.learning.model,
-        target_col=configuration.learning.target["class_col"],
-    )
-]
-pipeline = Pipeline(stages=transforming_stages + model_stages)
+pipeline = Pipeline(stages=transforming_stages + [configuration.get_model()])
 pipeline_model = pipeline.fit(train_data)
 train_transformed = pipeline_model.transform(train_data)
 test_transformed = pipeline_model.transform(test_data)
@@ -239,7 +233,7 @@ prediction_transformed = pipeline_model.transform(prediction_data)
 
 # Explain predictions
 model = sf_datalake.model.get_model_from_pipeline_model(
-    pipeline_model, configuration.learning.model["name"]
+    pipeline_model, configuration.learning.model_name
 )
 if isinstance(model, pyspark.ml.classification.LogisticRegressionModel):
     logging.info("Model weights: %.3f", model.coefficients)

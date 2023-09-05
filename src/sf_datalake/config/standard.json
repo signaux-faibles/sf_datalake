@@ -94,7 +94,7 @@
             "effectif"
         ]
     },
-    "time_series": {
+    "time_aggregation": {
         "diff": {
             "paydex": [
                 12
