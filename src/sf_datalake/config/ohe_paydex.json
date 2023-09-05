@@ -51,9 +51,6 @@
         "cotisation": [
             "StandardScaler"
         ],
-        "cotisation_mean12m": [
-            "StandardScaler"
-        ],
         "montant_part_ouvriere": [
             "StandardScaler"
         ],
