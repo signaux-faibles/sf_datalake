@@ -70,8 +70,8 @@ class ExplanationConfiguration:
 class IOConfiguration:
     """# TODO: FILL THIS DOCSTRING"""
 
-    dataset_path: str = "/projets/TSF/data/preprocessed/datasets/full_dataset"
-    output_root_directory: str = "/projets/TSF/predictions"
+    root_directory: str = "/projets/TSF"
+    dataset_path: str = field(init=False)
     output_directory: str = field(init=False)
     sample_ratio: float = 1.0
     random_seed: int = random.randint(0, 10000)
@@ -79,7 +79,10 @@ class IOConfiguration:
     def __post_init__(self):
         """ """
         self.output_directory: str = path.join(
-            self.output_root_directory, str(int(dt.datetime.now().timestamp()))
+            self.root_directory, "predictions", str(int(dt.datetime.now().timestamp()))
+        )
+        self.dataset_path: str = path.join(
+            self.root_directory, "data/preprocessed/datasets/full_dataset"
         )
 
 
