@@ -39,8 +39,6 @@ class PreprocessingConfiguration:
     """# TODO: FILL THIS DOCSTRING"""
 
     identifiers: List[str] = field(default_factory=lambda: ["siren", "periode"])
-    features_transformers: Dict[str, List[str]] = None
-    time_aggregation: Dict[str, Dict[str, List[int]]] = None
     siren_aggregation: Dict[str, str] = field(
         default_factory=lambda: {
             "cotisation": "sum",
@@ -50,10 +48,15 @@ class PreprocessingConfiguration:
             "apart_heures_consommees": "sum",
         }
     )
+    # Time-series aggregates
+    time_aggregation: Dict[str, Dict[str, List[int]]] = None
     # Missing values handling
     fill_missing_values: bool = True
     fill_default_values: Dict[str, Any] = None
     fill_imputation_strategy: Dict[str, Any] = None
+    # Transformations
+    features_transformers: Dict[str, List[str]] = None
+    ordinal_encoding_bins: Dict[str, List[str]] = None
 
 
 @dataclass

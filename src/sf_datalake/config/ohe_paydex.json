@@ -1,5 +1,5 @@
 {
-    "FILL_DEFAULT_VALUES": {
+    "fill_default_values": {
         "paydex": 0,
         "paydex_bin": 0.0,
         "cotisation": 0.0,
@@ -19,8 +19,8 @@
         "rto_af_solidite_financiere": 0.0,
         "rto_invest_ca": 0.0
     },
-    "FILL_IMPUTATION_STRATEGY": {},
-    "FEATURES_TRANSFORMERS": {
+    "fill_imputation_strategy": {},
+    "features_transformers": {
         "mnt_af_bfonc_bfr": [
             "StandardScaler"
         ],
@@ -77,7 +77,7 @@
             "OneHotEncoder"
         ]
     },
-    "ORDINAL_ENCODING_BINS": {
+    "ordinal_encoding_bins": {
         "paydex": [
             [
                 "-inf",
@@ -105,7 +105,7 @@
             ]
         ]
     },
-    "FEATURE_GROUPS": {
+    "feature_groups": {
         "sante_financiere": [
             "mnt_af_bfonc_bfr",
             "mnt_af_bfonc_frng",
@@ -133,18 +133,21 @@
             "effectif"
         ]
     },
-    "TIME_SERIES": {
-        "DIFF": {
+    "time_aggregation": {
+        "diff": {
             "paydex": [
                 12
+            ],
+            "dette_par_effectif": [
+                3
             ]
         },
-        "MOVING_AVERAGE": {
+        "moving_average": {
             "cotisation": [
                 12
             ]
         },
-        "LAG": {
+        "lag": {
             "montant_part_ouvriere": [
                 1,
                 2,
