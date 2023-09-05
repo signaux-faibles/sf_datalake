@@ -495,12 +495,48 @@ class SiretToSiren(
 class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to aggregate data at a SIREN level."""
 
-    def __init__(self, config):
+    grouping_cols = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "grouping_cols",
+        "Column to group by begore aggregation",
+    )
+    aggregation_map = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "aggregation_map",
+        "Mapping between feature names and an aggregation operation.",
+    )
+    no_aggregation = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "no_aggregation",
+        "Column that should be kept as-is.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(
+            grouping_cols=["siren", "periode"],
+            aggregation_map=None,
+            no_aggregation=None,
+        )
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this SiretToSiren.
+
+        Args:
+            grouping_cols (list[str]): A list of columns to groupby before aggregation.
+            aggregation_map (dict[str, str]): A mapping between variables names and
+              aggregation operation.
+            no_aggregation (list[str]): A list of columns that should not be aggregated
+              but should be preserved in the output.
+
+        """
+        return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Aggregate data at a SIREN level by sum or average.
+        """Aggregate data at a SIREN level by sum, average, etc.
 
         Args:
             dataset: DataFrame to transform containing data at a SIRET level.
@@ -509,21 +545,18 @@ class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
             Transformed DataFrame at a SIREN level.
 
         """
-        assert {"IDENTIFIERS", "SIREN_AGGREGATION", "NO_AGGREGATION"} <= set(
-            self.config
-        )
 
-        aggregated = dataset.groupBy(self.config["IDENTIFIERS"]).agg(
-            self.config["SIREN_AGGREGATION"]
+        aggregated = dataset.groupBy(self.getOrDefault("grouping_cols")).agg(
+            self.getOrDefault("aggregation_map")
         )
-        for colname, func in self.config["SIREN_AGGREGATION"].items():
+        for colname, func in self.getOrDefault("aggregation_map").items():
             aggregated = aggregated.withColumnRenamed(f"{func}({colname})", colname)
         siren_level = dataset.select(
-            self.config["NO_AGGREGATION"] + self.config["IDENTIFIERS"]
+            self.getOrDefault("no_aggregation") + self.getOrDefault("grouping_cols")
         ).distinct()
         return aggregated.join(
             siren_level,
-            on=["siren", "periode"],
+            on=self.getOrDefault("grouping_cols"),
             how="left",
         )
 
