@@ -96,14 +96,14 @@ siren_level_ds = (
 # pylint: disable=unsubscriptable-object
 
 time_computations: List[Transformer] = []
-for feature, n_months in configuration.preprocessing.time_aggregation["LAG"].items():
+for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
     if feature in siren_level_ds.columns:
         time_computations.append(
             sf_datalake.transform.LagOperator(
                 inputCol=feature, n_months=n_months, bfill=True
             )
         )
-for feature, n_months in configuration.preprocessing.time_aggregation["DIFF"].items():
+for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
     if feature in siren_level_ds.columns:
         time_computations.append(
             sf_datalake.transform.DiffOperator(
@@ -111,7 +111,7 @@ for feature, n_months in configuration.preprocessing.time_aggregation["DIFF"].it
             )
         )
 for feature, n_months in configuration.preprocessing.time_aggregation[
-    "MOVING_AVERAGE"
+    "moving_average"
 ].items():
     if feature in siren_level_ds.columns:
         time_computations.append(
