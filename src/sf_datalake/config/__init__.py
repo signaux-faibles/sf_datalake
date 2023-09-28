@@ -1,30 +1,40 @@
+# pylint: disable=unsubscriptable-object
 """Configuration helper classes."""
 
+import dataclasses
 import datetime as dt
 import inspect
 import json
 import random
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import dataclass
 from os import path
 from typing import Any, Dict, Iterable, List, Tuple
 
 import importlib_metadata
 import importlib_resources
 import pyspark.sql
+from pyspark.ml import Transformer
 from pyspark.ml.classification import (
     GBTClassifier,
     LogisticRegression,
     RandomForestClassifier,
 )
+from pyspark.ml.feature import (
+    OneHotEncoder,
+    StandardScaler,
+    StringIndexer,
+    VectorAssembler,
+)
 
 import sf_datalake.utils
+from sf_datalake.transform import BinsOrdinalEncoder
 
 
 @dataclass
 class LearningConfiguration:
     """# TODO: FILL THIS DOCSTRING"""
 
-    target: Dict[str, Any] = field(
+    target: Dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
             "class_col": "failure",
             "n_months": 18,
@@ -37,7 +47,7 @@ class LearningConfiguration:
     prediction_date: str = "2020-02-01"
     train_test_split_ratio: float = 0.8
     model_name: str = "LogisticRegression"
-    model_params: Dict[str, Any] = field(
+    model_params: Dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
             "LogisticRegression": {
                 "regParam": 0.12,
@@ -47,14 +57,17 @@ class LearningConfiguration:
             },
         }
     )
+    feature_column: str = "features"
 
 
 @dataclass
 class PreprocessingConfiguration:
     """# TODO: FILL THIS DOCSTRING"""
 
-    identifiers: List[str] = field(default_factory=lambda: ["siren", "periode"])
-    siren_aggregation: Dict[str, str] = field(
+    identifiers: List[str] = dataclasses.field(
+        default_factory=lambda: ["siren", "periode"]
+    )
+    siren_aggregation: Dict[str, str] = dataclasses.field(
         default_factory=lambda: {
             "cotisation": "sum",
             "montant_part_ouvriere": "sum",
@@ -71,7 +84,24 @@ class PreprocessingConfiguration:
     fill_imputation_strategy: Dict[str, Any] = None
     # Transformations
     features_transformers: Dict[str, List[str]] = None
+    encoders_params: Dict[str, Transformer] = dataclasses.field(
+        default_factory=lambda: {
+            "OneHotEncoder": OneHotEncoder(dropLast=False),
+            "StringIndexer": StringIndexer(),
+            "BinsOrdinalEncoder": BinsOrdinalEncoder(),
+        }
+    )
     ordinal_encoding_bins: Dict[str, List[str]] = None
+    scalers_params: Dict[str, Transformer] = dataclasses.field(
+        default_factory=lambda: {
+            "StandardScaler": StandardScaler(
+                withMean=True,
+                withStd=True,
+                inputCol="StandardScaler_input",
+                outputCol="StandardScaler_output",
+            ),
+        }
+    )
 
 
 @dataclass
@@ -89,8 +119,8 @@ class IOConfiguration:
     """# TODO: FILL THIS DOCSTRING"""
 
     root_directory: str = "/projets/TSF"
-    dataset_path: str = field(init=False)
-    output_directory: str = field(init=False)
+    dataset_path: str = dataclasses.field(init=False)
+    output_directory: str = dataclasses.field(init=False)
     sample_ratio: float = 1.0
     random_seed: int = random.randint(0, 10000)
 
@@ -126,7 +156,7 @@ class ConfigurationHelper:
 
     """
 
-    # pylint: disable=not-an-iterable, unsubscriptable-object
+    # pylint: disable=not-an-iterable
     def __init__(self, config_file: str = None, cli_args: Dict[str, Any] = None):
         # Instantiate every attribute using dataclasses default values.
         self.learning = LearningConfiguration()
@@ -146,20 +176,24 @@ class ConfigurationHelper:
         if cli_args is not None:
             self.override(cli_args)
 
-        # Add time-aggregated variables
-        for operation in self.preprocessing.time_aggregation:
-            for variable, n_months in self.preprocessing.time_aggregation[
-                operation
-            ].items():
-                self.preprocessing.features_transformers.update(
-                    (
-                        f"{variable}_{operation}{n_month}m",
-                        self.preprocessing.features_transformers[variable],
+        # Duplicate config for time-aggregated variables.
+        def add_time_aggregate_features(attribute: dict):
+            # TODO: maybe handle diffs in a different way than other operations ?
+            for operation in self.preprocessing.time_aggregation:
+                for variable, n_months in self.preprocessing.time_aggregation[
+                    operation
+                ].items():
+                    attribute.update(
+                        (
+                            f"{variable}_{operation}{n_month}m",
+                            attribute[variable],
+                        )
+                        for n_month in n_months
                     )
-                    for n_month in n_months
-                )
 
-        # TODO: Check that everything is ready
+        add_time_aggregate_features(self.preprocessing.features_transformers)
+        add_time_aggregate_features(self.preprocessing.fill_default_values)
+        add_time_aggregate_features(self.preprocessing.fill_imputation_strategy)
 
     def override(self, source: Dict[str, Any]):
         """Override configuration attributes using external source.
@@ -177,7 +211,7 @@ class ConfigurationHelper:
         """
         for attr_name, attr_value in source.items():
             attr_is_set = False
-            for _, dcls in inspect.getmembers(self, predicate=is_dataclass):
+            for _, dcls in inspect.getmembers(self, predicate=dataclasses.is_dataclass):
                 if hasattr(dcls, attr_name):
                     setattr(dcls, attr_name, attr_value)
                     attr_is_set = True
@@ -188,8 +222,8 @@ class ConfigurationHelper:
                     "ConfigurationHelper attribute."
                 )
 
-    def get_model(self) -> pyspark.ml.Model:
-        """Returns a Model object ready to be used.
+    def get_model(self) -> pyspark.ml.Predictor:
+        """Returns a Predictor object ready to be used.
 
         Returns:
             The selected Model instantiated using config parameters.
@@ -200,10 +234,11 @@ class ConfigurationHelper:
             "GBTClassifier": GBTClassifier,
             "RandomForestClassifier": RandomForestClassifier,
         }
-        # pylint: disable=not-a-mapping, unsubscriptable-object
+        # pylint: disable=not-a-mapping
         return (
             model_factory[self.learning.model_name]
             .setParams(**self.learning.model_params)
+            .setFeaturesCol(self.learning.feature_column)
             .setLabelCol(self.learning.target["class_col"])
         )
 
@@ -219,8 +254,10 @@ class ConfigurationHelper:
         spark = sf_datalake.utils.get_spark_session()
 
         complete_dump: Dict[str, Any] = dict(
-            (attr, asdict(value))
-            for attr, value in inspect.getmembers(self, predicate=is_dataclass)
+            (attr, dataclasses.asdict(value))
+            for attr, value in inspect.getmembers(
+                self, predicate=dataclasses.is_dataclass
+            )
         )
 
         dump_dict = (
@@ -228,8 +265,103 @@ class ConfigurationHelper:
             if dump_keys is not None
             else complete_dump
         )
-
         config_df = spark.createDataFrame(pyspark.sql.Row(dump_dict))
         config_df.repartition(1).write.json(
             path.join(self.io.output_directory, "run_configuration.json")
         )
+
+    def transforming_stages(self) -> List[Transformer]:
+        """Generates all stages related to feature transformation.
+
+        Feature transformations are prepared in the following order:
+        - encoding stages, which operate on single feature columns.
+        - scaling stages, which operate on a set of features assembled using a
+          `VectorAssembler`.
+
+        Returns:
+            The stages, ready to be used inside a pyspark.ml.Pipeline.
+
+        """
+        # pylint: disable=unsupported-membership-test
+        encoding_steps: List[Transformer] = []
+        scaling_steps: List[Transformer] = []
+        scaler_inputs: Dict[str, List[str]] = {}
+
+        # Features that will be eventually passed to the model will be appended along
+        # the way to this list
+        model_features: List[str] = []
+
+        def is_encoder(name: str):
+            return name in self.preprocessing.encoders_params
+
+        def is_scaler(name: str):
+            return name in self.preprocessing.scalers_params
+
+        for feature, transformer_names in self.preprocessing.features_transformers:
+            # Encoding
+            encoders = [
+                self.preprocessing.encoders_params[transformer_name]
+                for transformer_name in transformer_names
+                if is_encoder(transformer_name)
+            ]
+            feature_encoding_steps, encoded_name = self.prepare_encoding_steps(
+                feature, encoders
+            )
+            encoding_steps.append(feature_encoding_steps)
+
+            # Check for scalers
+            if any(is_scaler, transformer_names):
+                # WARNING: We assume scaling is the last step, maybe this is bold...
+                scaler_inputs.setdefault(transformer_names[-1], []).append(encoded_name)
+            else:
+                model_features.append(encoded_name)
+
+        for scaler_name, input_cols in scaler_inputs.items():
+            scaling_steps.extend(
+                (
+                    VectorAssembler(
+                        inputCols=input_cols, outputCol=f"{scaler_name}_input"
+                    ),
+                    self.preprocessing.scalers_params[scaler_name],
+                )
+            )
+            model_features.append(f"{scaler_name}_output")
+
+        grouping_step = [
+            VectorAssembler(
+                inputCols=model_features, outputCol=self.learning.feature_column
+            )
+        ]
+
+        return encoding_steps + scaling_steps + grouping_step
+
+    def prepare_encoding_steps(self, feature: str, encoders: List[Transformer]):
+        """FILL DOCSTRING
+
+        Raises:
+            ValueError if one of the input encoders is of unknown type.
+        """
+        stages: List[Transformer] = []
+
+        enc_input_col = feature
+        for encoder in encoders:
+            encoder.setParams(inputCol=enc_input_col)
+            if encoder.isinstance(BinsOrdinalEncoder):
+                suffix = "bin"
+                encoder.setParams(
+                    bins=self.preprocessing.ordinal_encoding_bins[feature],
+                )
+            elif encoder.isinstance(StringIndexer):
+                suffix = "ix"
+            elif encoder.isinstance(OneHotEncoder):
+                suffix = "onehot"
+            else:
+                raise ValueError(f"Unknown type for encoder object: {encoder}.")
+
+            enc_output_col = enc_input_col + f"_{suffix}"
+            encoder.setParams(outputCol=enc_output_col)
+            stages.append(encoder)
+            # If there are multiple successive encoders, the next one will act on the
+            # current's output
+            enc_input_col = enc_output_col
+        return stages, enc_output_col

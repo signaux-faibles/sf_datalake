@@ -2,8 +2,7 @@
 
 import datetime as dt
 import itertools
-import re
-from typing import Dict, List, Union
+from typing import List, Union
 
 import numpy as np
 import pyspark.ml
@@ -12,12 +11,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.ml.feature import (  # VectorAssembler,
-    Imputer,
-    OneHotEncoder,
-    StandardScaler,
-    StringIndexer,
-)
+from pyspark.ml.feature import Imputer
 from pyspark.ml.param.shared import (
     HasInputCol,
     HasInputCols,
@@ -26,8 +20,6 @@ from pyspark.ml.param.shared import (
     Params,
 )
 from pyspark.sql import Window
-
-from sf_datalake.config import ConfigurationHelper
 
 
 def vector_disassembler(
@@ -349,11 +341,6 @@ class MissingValuesHandler(
                 "`value` and `stat_strategy` are mutually exclusive. Use either one."
             )
         if value is not None:
-            for col in input_cols:
-                for var, val in value.items():
-                    if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", col):
-                        value[col] = val
-                        break
             dataset = dataset.fillna(
                 {var: val for var, val in value.items() if var in input_cols}
             )
@@ -1257,120 +1244,3 @@ class LinearInterpolationOperator(
             "interval_length_rn",
             "curr_rn",
         )
-
-
-class PreprocessingHandler:
-    """# TODO: FILL THIS DOCSTRING."""
-
-    transformers_factory = {
-        "scaling": {
-            "StandardScaler": StandardScaler(
-                withMean=True,
-                withStd=True,
-                inputCol="to_StandardScaler",
-                outputCol="from_StandardScaler",
-            ),
-        },
-        "encoding": {
-            "OneHotEncoder": OneHotEncoder(dropLast=False),
-            "StringIndexer": StringIndexer(),
-            "BinsOrdinalEncoder": BinsOrdinalEncoder(),
-        },
-    }
-
-    def __init__(self, configuration: ConfigurationHelper):
-        self.stages: List[Transformer] = []
-        self.model_features: List[str] = []
-
-        for _, transformers_names in configuration.get_features_pipeline():
-            self.encoders_names: List[str] = [
-                encoder_name
-                for encoder_name in transformers_names
-                if encoder_name in self.transformers_factory["encoding"]
-            ]
-            self.encoders: List[Transformer] = [
-                self.transformers_factory["encoding"][encoder_name]
-                for encoder_name in self.encoders_names
-            ]
-
-    def mock_method(self):
-        """jsqlfjsd"""
-
-    def generate_transforming_stages(self, bins: Dict[str, List[str]] = None):
-        """generates all stages related to feature transformation.
-
-        Feature transformations are prepared in the following order:
-        - encoding stages, which operate on single feature columns.
-        - scaling stages, which operate on a set of features assembled using a
-          `VectorAssembler`.
-
-        The stages are then ready to be included in a pyspark.ml.Pipeline.
-
-        Args:
-
-            features_pipeline: A mapping from features to a list of transformers
-              associated with this feature.
-            bins: A mapping from feature names to a list of bins to be passed to a
-              Bucketizer.
-
-        Returns:
-            2-uple consisting of:
-            - A list of Transformers, to be fed to a Pipeline object.
-            - A list of strings, corresponding to all feature columns that will be fed
-              to the model.
-
-        """
-
-    # # pylint: disable=too-many-locals
-    # scalers_input_cols: Dict[Transformer, List[str]] = {}
-    # final_assembler_input: List[str] = []
-
-    # for a in b:
-    #     enc_input_col = feature
-    #     # Encoding
-    #     for encoder in encoders:
-    #         encoder.setParams(inputCol=enc_input_col)
-    #         if encoder.isinstance(BinsOrdinalEncoder):
-    #             suffix = "bin"
-    #             encoder.setParams(
-    #                 bins=bins[feature],
-    #             )
-    #         elif encoder.isinstance(StringIndexer):
-    #             suffix = "ix"
-    #         elif encoder.isinstance(OneHotEncoder):
-    #             suffix = "onehot"
-    #         enc_output_col = enc_input_col + f"_{suffix}"
-    #         encoder.setParams(outputCol=enc_output_col)
-    #         stages.append(encoder)
-    #         # If there are multiple encoders, the next one will act on the
-    #         # current's
-    #         # output
-    #         enc_input_col = enc_output_col
-
-    #     # Scaling
-    #     scaler_name = set(transformers_names) - set(encoders_names)
-    #     if scaler_name:  # assuming there can be at most one scaler per feature.
-    #         scalers_input_cols.setdefault(scaler_name.pop, []).append(
-    #             enc_output_col
-    #         )
-    #     else:
-    #         model_features.append(enc_output_col)
-    #         final_assembler_input.append(enc_output_col)
-
-    # for scaler_name, input_cols in scalers_input_cols.items():
-    #     stages.append(
-    #         VectorAssembler(inputCols=input_cols, outputCol=f"{aler_name}_input")
-    #     )
-    #     stages.append(
-    #         self.transformers_factory[scaler_name](
-    #             inputCol=f"{scaler_name}_input", outputCol=f"{scaler_name}_output"
-    #         )
-    #     )
-    #     model_features.append(input_cols)
-    #     final_assembler_input.append(f"{scaler_name}_output")
-
-    # # Build final assembler to be fed to model.
-    # stages.append(
-    #     VectorAssembler(inputCols=final_assembler_input, outputCol="features")
-    # )
-    # return stages, model_features

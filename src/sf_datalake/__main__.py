@@ -2,6 +2,7 @@
 
 Processes datasets according to provided configuration to make predictions.
 """
+# pylint: disable=unsubscriptable-object,wrong-import-position
 
 import argparse
 import logging
@@ -18,8 +19,6 @@ from pyspark.ml import Pipeline, PipelineModel
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
-
-# pylint: disable=unsubscriptable-object,wrong-import-position
 
 import sf_datalake.config
 import sf_datalake.explain
@@ -178,9 +177,9 @@ building_steps = [
 ]
 
 
-missing_values_steps = []
+missing_values_handling_steps = []
 if configuration.preprocessing.fill_default_values:
-    missing_values_steps.append(
+    missing_values_handling_steps.append(
         sf_datalake.transform.MissingValuesHandler(
             inputCols=list(configuration.preprocessing.fill_default_values),
             value=configuration.preprocessing.fill_default_values,
@@ -193,7 +192,7 @@ if configuration.preprocessing.fill_imputation_strategy:
         strategy,
     ) in configuration.preprocessing.fill_imputation_strategy.items():
         imputation_strategy_features.setdefault(strategy, []).append(feature)
-    missing_values_steps.extend(
+    missing_values_handling_steps.extend(
         sf_datalake.transform.MissingValuesHandler(
             inputCols=features,
             stat_strategy=strategy,
@@ -203,7 +202,11 @@ if configuration.preprocessing.fill_imputation_strategy:
 
 
 preprocessing_pipeline = PipelineModel(
-    stages=filter_steps + normalizing_steps + building_steps
+    stages=filter_steps
+    + normalizing_steps
+    + building_steps
+    + missing_values_handling_steps
+    + configuration.transforming_stages()
 )
 
 dataset = preprocessing_pipeline.transform(dataset)
@@ -227,41 +230,28 @@ dataset = dataset.cache()
     configuration.io.random_seed,
 )
 
-# Build and run transformation and model Pipelines
+# Build and run ML model Pipeline
 
-### TODO: HANDLE ALL ENCODING AND SCALING STEPS HERE
-
-(transforming_stages, model_features,) = (
-    None,
-    None,
-)
-
-pipeline = Pipeline(stages=transforming_stages + [configuration.get_model()])
-pipeline_model = pipeline.fit(train_data)
-train_transformed = pipeline_model.transform(train_data)
-test_transformed = pipeline_model.transform(test_data)
-prediction_transformed = pipeline_model.transform(prediction_data)
+ML_pipeline = Pipeline(stages=[configuration.get_model()])
+ML_pipeline_model = ML_pipeline.fit(train_data)
+train_transformed = ML_pipeline_model.transform(train_data)
+test_transformed = ML_pipeline_model.transform(test_data)
+prediction_transformed = ML_pipeline_model.transform(prediction_data)
 
 # Explain predictions
 model = sf_datalake.model.get_model_from_pipeline_model(
-    pipeline_model, configuration.learning.model_name
+    ML_pipeline_model, configuration.learning.model_name
 )
+
+# TODO: Update this for other models
 if isinstance(model, pyspark.ml.classification.LogisticRegressionModel):
     logging.info("Model weights: %.3f", model.coefficients)
     logging.info("Model intercept: %.3f", model.intercept)
 
 # TODO:
-# - Extend final features name list (adding onehot by getting num of ca)
-# - Adapt MESO list using e.g. regex (?)
-
-features_list = []  ## TODO: populate
-
-# for loop on every one hot encoded varlable:
-#     # Add corresponding 'meso' column names to the configuration for explanation step.
-#     config["MESO_GROUPS"][onehot_var] = [
-#         f"onehot_var{i}"
-#         for i, _ in enumerate()
-#     ]
+# - Retrieve features name list using schema metadata
+# - Adapt MESO list using e.g. regex
+features_list = []
 
 shap_values, expected_value = sf_datalake.explain.explanation_data(
     features_list,
