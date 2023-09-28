@@ -96,9 +96,6 @@
     },
     "time_aggregation": {
         "diff": {
-            "paydex": [
-                12
-            ],
             "dette_par_effectif": [
                 3
             ]
