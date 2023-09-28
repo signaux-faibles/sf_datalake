@@ -343,10 +343,10 @@ class ConfigurationHelper:
             ValueError if one of the input encoders is of unknown type.
         """
         stages: List[Transformer] = []
+        output_col: str = feature
 
-        enc_input_col = feature
         for encoder in encoders:
-            encoder.setParams(inputCol=enc_input_col)
+            encoder.setParams(inputCol=output_col)
             if encoder.isinstance(BinsOrdinalEncoder):
                 suffix = "bin"
                 encoder.setParams(
@@ -359,10 +359,7 @@ class ConfigurationHelper:
             else:
                 raise ValueError(f"Unknown type for encoder object: {encoder}.")
 
-            enc_output_col = enc_input_col + f"_{suffix}"
-            encoder.setParams(outputCol=enc_output_col)
+            output_col += f"_{suffix}"
+            encoder.setParams(outputCol=output_col)
             stages.append(encoder)
-            # If there are multiple successive encoders, the next one will act on the
-            # current's output
-            enc_input_col = enc_output_col
-        return stages, enc_output_col
+        return stages, output_col
