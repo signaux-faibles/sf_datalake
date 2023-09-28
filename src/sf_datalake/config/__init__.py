@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 import importlib_metadata
 import importlib_resources
 import pyspark.sql
-from pyspark.ml import Transformer
+from pyspark.ml import Estimator, Transformer
 from pyspark.ml.classification import (
     GBTClassifier,
     LogisticRegression,
@@ -222,8 +222,8 @@ class ConfigurationHelper:
                     "ConfigurationHelper attribute."
                 )
 
-    def get_model(self) -> pyspark.ml.Predictor:
-        """Returns a Predictor object ready to be used.
+    def get_model(self) -> Estimator:
+        """Returns an Estimator object ready to be used for a learning procedure.
 
         Returns:
             The selected Model instantiated using config parameters.
