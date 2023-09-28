@@ -183,13 +183,14 @@ class ConfigurationHelper:
                 for variable, n_months in self.preprocessing.time_aggregation[
                     operation
                 ].items():
-                    attribute.update(
-                        (
-                            f"{variable}_{operation}{n_month}m",
-                            attribute[variable],
+                    if attribute.get(variable) is not None:
+                        attribute.update(
+                            (
+                                f"{variable}_{operation}{n_month}m",
+                                attribute[variable],
+                            )
+                            for n_month in n_months
                         )
-                        for n_month in n_months
-                    )
 
         add_time_aggregate_features(self.preprocessing.features_transformers)
         add_time_aggregate_features(self.preprocessing.fill_default_values)
