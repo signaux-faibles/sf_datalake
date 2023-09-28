@@ -178,12 +178,12 @@ class ConfigurationHelper:
 
         # Duplicate config for time-aggregated variables.
         def add_time_aggregate_features(attribute: dict):
-            # TODO: maybe handle diffs in a different way than other operations ?
             for operation in self.preprocessing.time_aggregation:
                 for variable, n_months in self.preprocessing.time_aggregation[
                     operation
                 ].items():
-                    if attribute.get(variable) is not None:
+                    # TODO: This condition on "diff" should be handled differently
+                    if attribute.get(variable) is not None and operation != "diff":
                         attribute.update(
                             (
                                 f"{variable}_{operation}{n_month}m",
@@ -298,24 +298,30 @@ class ConfigurationHelper:
         def is_scaler(name: str):
             return name in self.preprocessing.scalers_params
 
-        for feature, transformer_names in self.preprocessing.features_transformers:
+        for (
+            feature_name,
+            transformer_names,
+        ) in self.preprocessing.features_transformers.items():
             # Encoding
             encoders = [
                 self.preprocessing.encoders_params[transformer_name]
                 for transformer_name in transformer_names
                 if is_encoder(transformer_name)
             ]
-            feature_encoding_steps, encoded_name = self.prepare_encoding_steps(
-                feature, encoders
-            )
-            encoding_steps.append(feature_encoding_steps)
+            if encoders:
+                (
+                    feature_encoding_steps,
+                    encoded_feature_name,
+                ) = self.prepare_encoding_steps(feature_name, encoders)
+                encoding_steps.extend(feature_encoding_steps)
+                feature_name = encoded_feature_name
 
             # Check for scalers
-            if any(is_scaler, transformer_names):
+            if any(filter(is_scaler, transformer_names)):
                 # WARNING: We assume scaling is the last step, maybe this is bold...
-                scaler_inputs.setdefault(transformer_names[-1], []).append(encoded_name)
+                scaler_inputs.setdefault(transformer_names[-1], []).append(feature_name)
             else:
-                model_features.append(encoded_name)
+                model_features.append(feature_name)
 
         for scaler_name, input_cols in scaler_inputs.items():
             scaling_steps.extend(
@@ -336,9 +342,15 @@ class ConfigurationHelper:
 
         return encoding_steps + scaling_steps + grouping_step
 
-    def prepare_encoding_steps(self, feature: str, encoders: List[Transformer]):
+    def prepare_encoding_steps(
+        self, feature: str, encoders: List[Transformer]
+    ) -> Tuple[List[Transformer], str]:
         """FILL DOCSTRING
 
+        Returns:
+            Tuple containing:
+            - A list of successive encoders.
+            - The name of the encoded feature.
         Raises:
             ValueError if one of the input encoders is of unknown type.
         """
@@ -347,14 +359,14 @@ class ConfigurationHelper:
 
         for encoder in encoders:
             encoder.setParams(inputCol=output_col)
-            if encoder.isinstance(BinsOrdinalEncoder):
+            if isinstance(encoder, BinsOrdinalEncoder):
                 suffix = "bin"
                 encoder.setParams(
                     bins=self.preprocessing.ordinal_encoding_bins[feature],
                 )
-            elif encoder.isinstance(StringIndexer):
+            elif isinstance(encoder, StringIndexer):
                 suffix = "ix"
-            elif encoder.isinstance(OneHotEncoder):
+            elif isinstance(encoder, OneHotEncoder):
                 suffix = "onehot"
             else:
                 raise ValueError(f"Unknown type for encoder object: {encoder}.")

@@ -69,7 +69,7 @@
         "dette_par_effectif": [
             "StandardScaler"
         ],
-        "paydex_nb_jours": [
+        "paydex": [
             "BinsOrdinalEncoder",
             "OneHotEncoder"
         ]
