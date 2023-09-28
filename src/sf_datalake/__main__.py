@@ -80,8 +80,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--drop_missing_values",
-    dest="fill_missing_values",
-    action="store_false",
+    action="store_true",
     help="""
     If specified, missing values will be dropped instead of filling data with
     default values.
@@ -177,28 +176,40 @@ building_steps = [
         )
     ),
 ]
-imputation_strategy_features: Dict[str, List[str]] = {}
-for feature, strategy in configuration.preprocessing.fill_imputation_strategy.values():
-    imputation_strategy_features.setdefault(strategy, []).append(feature)
 
-missing_values_steps = [
-    sf_datalake.transform.MissingValuesHandler(
-        inputCols=list(configuration.preprocessing.fill_default_values),
-        value=configuration.preprocessing.fill_default_values,
-    ),
-] + [
-    sf_datalake.transform.MissingValuesHandler(
-        inputCols=features,
-        stat_strategy=strategy,
+
+missing_values_steps = []
+if configuration.preprocessing.fill_default_values:
+    missing_values_steps.append(
+        sf_datalake.transform.MissingValuesHandler(
+            inputCols=list(configuration.preprocessing.fill_default_values),
+            value=configuration.preprocessing.fill_default_values,
+        ),
     )
-    for strategy, features in imputation_strategy_features.items()
-]
+if configuration.preprocessing.fill_imputation_strategy:
+    imputation_strategy_features: Dict[str, List[str]] = {}
+    for (
+        feature,
+        strategy,
+    ) in configuration.preprocessing.fill_imputation_strategy.items():
+        imputation_strategy_features.setdefault(strategy, []).append(feature)
+    missing_values_steps.extend(
+        sf_datalake.transform.MissingValuesHandler(
+            inputCols=features,
+            stat_strategy=strategy,
+        )
+        for strategy, features in imputation_strategy_features.items()
+    )
 
 
 preprocessing_pipeline = PipelineModel(
     stages=filter_steps + normalizing_steps + building_steps
 )
-dataset = preprocessing_pipeline.transform(dataset).cache()
+
+dataset = preprocessing_pipeline.transform(dataset)
+if configuration.preprocessing.drop_missing_values:
+    dataset = dataset.dropna()
+dataset = dataset.cache()
 
 # Split the dataset into train, test, predict subsets.
 (

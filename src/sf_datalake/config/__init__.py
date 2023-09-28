@@ -66,7 +66,7 @@ class PreprocessingConfiguration:
     # Time-series aggregates
     time_aggregation: Dict[str, Dict[str, List[int]]] = None
     # Missing values handling
-    fill_missing_values: bool = True
+    drop_missing_values: bool = True
     fill_default_values: Dict[str, Any] = None
     fill_imputation_strategy: Dict[str, Any] = None
     # Transformations
