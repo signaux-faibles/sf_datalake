@@ -46,7 +46,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--dataset",
-    destination="dataset_path",
+    dest="dataset_path",
     type=str,
     help="Path to the dataset that will be used for training, test and prediction.",
 )
