@@ -150,7 +150,7 @@ if with_paydex:
 # handled before the main script.
 normalizing_steps = [
     sf_datalake.transform.TimeNormalizer(
-        inputCols=configuration.explanation.feature_groups["sante_financiere"],
+        inputCols=configuration.explanation.topic_groups["sante_financiere"],
         start="date_deb_exercice",
         end="date_fin_exercice",
     ),
@@ -257,8 +257,7 @@ shap_values, expected_value = sf_datalake.explain.explanation_data(
 macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
     shap_values,
     configuration.explanation.n_concerning_micro,
-    configuration.explanation.feature_groups,
-    configuration.explanation.meso_groups,
+    configuration.explanation.topic_groups,
 )
 # Convert to [0, 1] range if shap values are expressed in log-odds units.
 if isinstance(

@@ -102,7 +102,7 @@
             ]
         ]
     },
-    "feature_groups": {
+    "topic_groups": {
         "sante_financiere": [
             "mnt_af_bfonc_bfr",
             "mnt_af_bfonc_frng",

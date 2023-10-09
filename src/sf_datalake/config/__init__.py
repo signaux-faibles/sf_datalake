@@ -110,8 +110,7 @@ class ExplanationConfiguration:
 
     n_train_sample: int = 5000
     n_concerning_micro: int = 3
-    feature_groups: Dict[str, List[str]] = None
-    meso_groups: Dict[str, List[str]] = None
+    topic_groups: Dict[str, List[str]] = None
 
 
 @dataclass

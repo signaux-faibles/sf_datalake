@@ -172,7 +172,7 @@ configuration = sf_datalake.config.ConfigurationHelper(args.configuration)
 
 micro_macro = {
     micro: macro
-    for macro, micros in configuration.explanation.feature_groups.items()
+    for macro, micros in configuration.explanation.topic_groups.items()
     for micro in micros
 }
 
@@ -180,7 +180,7 @@ algo_name = args.algo_name
 if algo_name is None:
     algo_name = (
         "avec_paydex"
-        if "retards_paiement" in configuration.explanation.feature_groups.keys()
+        if "retards_paiement" in configuration.explanation.topic_groups.keys()
         else "sans_paydex"
     )
 

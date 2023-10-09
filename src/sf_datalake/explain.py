@@ -107,8 +107,7 @@ def explanation_data(
 def explanation_scores(
     shap_df: pd.DataFrame,
     n_concerning: int,
-    feature_groups: Dict[str, List[str]],
-    meso_groups: Dict[str, List[str]],
+    topic_groups: Dict[str, List[str]],
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Compute plot-ready feature contribution.
 
@@ -118,16 +117,16 @@ def explanation_scores(
     features to be returned is read from configuration `N_CONCERNING_MICRO` field.
 
     Contributions are first summed within feature groups:
-    - at a "meso" scale: lagged variables and such, for a given feature.
-    - at a "group" scale: features that   to the same thematic.
+    - at a "feature" scale: lagged variables and such, for a given feature.
+    - at a "topic" scale: features that describe information within a common topic.
+      The corresponding groups will be used as main axes for visualisation.
 
     In case contributions are expressed as log-odds, they are first mapped to the [0, 1]
     range before being returned.
 
     Args:
         shap_df: The shap values associated with the features used for machine learning.
-        feature_groups:
-        meso_groups:
+        topic_groups: A grouping of features, by major topic.
         n_concerning:
 
     Returns:
@@ -138,14 +137,23 @@ def explanation_scores(
           features contributions.
 
     """
-    # Sum "micro" variables that belong to a given group and drop them.
-    for group, features in meso_groups.items():
+    # Sum "micro" variables that are associated to the same "group" then drop them.
+    feature_groups: Dict[str, str] = {}
+    macro_features = set(feature for flist in topic_groups.items() for feature in flist)
+    for feature in shap_df.columns:
+        for mfeature in macro_features:
+            if feature.startswith(mfeature):
+                feature_groups.setdefault(mfeature, []).append(feature)
+                break
+        raise ValueError(f"Could not find source variable for feature {feature}.")
+
+    for group, features in feature_groups.items():
         shap_df[group] = shap_df[features].sum(axis=1)
         shap_df.drop(features, axis=1, inplace=True)
 
     # 'Macro' scores per group
     macro_scores = pd.DataFrame([], index=shap_df.index)
-    for group, features in feature_groups.items():
+    for group, features in topic_groups.items():
         macro_scores.loc[:, f"{group}_macro_score"] = shap_df[features].sum(axis=1)
 
     # Concerning (highest scoring) features
