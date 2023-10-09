@@ -298,6 +298,8 @@ class ConfigurationHelper:
         def is_scaler(name: str):
             return name in self.preprocessing.scalers_params
 
+        # Iterate over each dataset variable, and prepare feature encoding and
+        # normalizing pipeline steps.
         for (
             feature_name,
             transformer_names,
@@ -321,6 +323,8 @@ class ConfigurationHelper:
                 # WARNING: We assume scaling is the last step, maybe this is bold...
                 scaler_inputs.setdefault(transformer_names[-1], []).append(feature_name)
             else:
+                # If there is no scaling step, we directly add the encoded feature to
+                # the model input features list.
                 model_features.append(feature_name)
 
         for scaler_name, input_cols in scaler_inputs.items():
@@ -332,6 +336,8 @@ class ConfigurationHelper:
                     self.preprocessing.scalers_params[scaler_name],
                 )
             )
+            # Scaled features are added as a single column corresponding to the
+            # associated scaler. Their names can be retrieved through dataframe schema.
             model_features.append(f"{scaler_name}_output")
 
         grouping_step = [
@@ -345,14 +351,23 @@ class ConfigurationHelper:
     def prepare_encoding_steps(
         self, feature: str, encoders: List[Transformer]
     ) -> Tuple[List[Transformer], str]:
-        """FILL DOCSTRING
+        """Generate a list of transfomer for single feature encoding.
+
+        This helper function will set parameters for successive encoders that will be
+        applied to a given feature.
+
+        Args:
+            feature: Name of the feature to be encoded.
+            encoders: Sorted list of encoders.
 
         Returns:
             Tuple containing:
             - A list of successive encoders.
             - The name of the encoded feature.
+
         Raises:
             ValueError if one of the input encoders is of unknown type.
+
         """
         stages: List[Transformer] = []
         output_col: str = feature
