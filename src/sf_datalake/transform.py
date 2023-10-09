@@ -1022,41 +1022,6 @@ class TargetVariable(
         ).fillna(value={self.getOrDefault("outputCol"): 0})
 
 
-class ColumnSelector(
-    Transformer, HasInputCols
-):  # pylint: disable=too-few-public-methods
-    """A transformer to select the columns of the dataset used in the model."""
-
-    @keyword_only
-    def __init__(self, **kwargs):
-        super().__init__()
-        self._setDefault(inputCols=None)
-        self.setParams(**kwargs)
-
-    @keyword_only
-    def setParams(self, inputCols: List[str]):
-        """Set parameters for this ColumnSelector transformer.
-
-        Args:
-            inputCols (list): The columns that will be used in the ML process.
-
-        """
-        return self._set(inputCols=inputCols)
-
-    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Select the columns of the dataset used in ML process.
-
-        Args:
-            dataset: DataFrame to select columns from.
-
-        Returns:
-            Transformed DataFrame.
-
-        """
-        dataset = dataset.select(self.getOrDefault("inputCols"))
-        return dataset
-
-
 class PrivateCompanyFilter(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer that filters a dataset according to its public/private nature."""
 

@@ -165,15 +165,6 @@ building_steps = [
         outputCol=configuration.learning.target["class_col"],
         n_months=configuration.learning.target["n_months"],
     ),
-    sf_datalake.transform.ColumnSelector(
-        inputCols=(
-            configuration.preprocessing.identifiers
-            + list(
-                configuration.preprocessing.features_transformers
-            )  # features dict keys to list
-            + [configuration.learning.target["class_col"]]  # contains a single string
-        )
-    ),
 ]
 
 
