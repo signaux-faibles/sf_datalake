@@ -18,7 +18,7 @@ from os import path
 from typing import List
 
 import pyspark.sql.functions as F
-from pyspark.ml import PipelineModel, Transformer
+from pyspark.ml import Pipeline, Transformer
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -74,8 +74,8 @@ aggregator = sf_datalake.transform.SirenAggregator(
     no_aggregation=[],
 )
 siren_level_ds = (
-    PipelineModel([siren_converter, aggregator])
-    .transform(siret_level_ds)
+    Pipeline(stages=[siren_converter, aggregator])
+    .fit(siret_level_ds)
     .select(
         [
             "periode",
@@ -118,18 +118,33 @@ for feature, n_months in configuration.preprocessing.time_aggregation[
             sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
         )
 
+time_agg_ds = Pipeline(stages=time_computations).fit(siren_level_ds)
 
 #######################
 # Feature engineering #
 #######################
 
-feature_engineering = [
-    sf_datalake.transform.DebtRatioColumnAdder(),
-    sf_datalake.transform.MovingAverage(inputCol="ratio_dette", n_months=12),
-    sf_datalake.transform.DeltaDebtPerWorkforceColumnAdder(),
-]
-
-output_ds = PipelineModel(time_computations + feature_engineering).transform(
-    siren_level_ds
+# Add "debt / contribution"
+feat_eng_ds = time_agg_ds.withColumn(
+    "dette_sur_cotisation_lissée",
+    (time_agg_ds["montant_part_ouvriere"] + time_agg_ds["montant_part_patronale"])
+    / time_agg_ds["cotisation_mean12m"],
 )
+# Moving average
+feat_eng_ds = sf_datalake.transform.MovingAverage(
+    inputCol="dette_sur_cotisation_lissée", n_months=12
+).transform(feat_eng_ds)
+# Average debt / workforce
+feat_eng_ds = feat_eng_ds.withColumn(
+    "dette_par_effectif",
+    (feat_eng_ds["montant_part_ouvriere"] + feat_eng_ds["montant_part_patronale"])
+    / feat_eng_ds["effectif"],
+)
+output_ds = sf_datalake.transform.DiffOperator(
+    inputCol="dette_par_effectif",
+    n_months=3,
+    slope=True,
+).transform(feat_eng_ds)
+
+
 sf_datalake.io.write_data(output_ds, args.output, args.output_format)

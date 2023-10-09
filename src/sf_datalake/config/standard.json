@@ -3,7 +3,7 @@
         "cotisation": 0.0,
         "montant_part_ouvriere": 0.0,
         "montant_part_patronale": 0.0,
-        "ratio_dette": 0.0,
+        "dette_sur_cotisation_liss\u00e9e": 0.0,
         "apart_heures_consommees": 0.0,
         "dette_par_effectif": 0.0,
         "effectif": 0,
@@ -61,7 +61,7 @@
         "apart_heures_consommees": [
             "StandardScaler"
         ],
-        "ratio_dette": [
+        "dette_sur_cotisation_liss\u00e9e": [
             "StandardScaler"
         ],
         "dette_par_effectif": [
@@ -85,9 +85,9 @@
             "apart_heures_consommees"
         ],
         "dette_urssaf": [
-            "cotisation_urssaf",
-            "part_ouvriere",
-            "part_patronale",
+            "cotisation",
+            "montant_part_ouvriere",
+            "montant_part_patronale",
             "dette"
         ],
         "misc": [

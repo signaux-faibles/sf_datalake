@@ -290,7 +290,7 @@ tailoring_signals = {
         identity,
         {
             "sig": urssaf_df[one_year_schedule_mask]
-            .groupby("siren")["ratio_dette"]
+            .groupby("siren")["dette_sur_cotisation_lissée"]
             .max()
             * 1
             / 12
@@ -301,8 +301,12 @@ tailoring_signals = {
         identity,
         {
             "sig": (
-                urssaf_df[urssaf_df["periode"] == recent_period_end]["ratio_dette"]
-                - urssaf_df[urssaf_df["periode"] == recent_period_start]["ratio_dette"]
+                urssaf_df[urssaf_df["periode"] == recent_period_end][
+                    "dette_sur_cotisation_lissée"
+                ]
+                - urssaf_df[urssaf_df["periode"] == recent_period_start][
+                    "dette_sur_cotisation_lissée"
+                ]
             )
             * 1
             / 12
