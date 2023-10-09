@@ -236,12 +236,19 @@ if isinstance(classifier_model, pyspark.ml.classification.LogisticRegressionMode
     logging.info("Model intercept: %.3f", classifier_model.intercept)
 
 # TODO:
-# - Retrieve features name list using schema metadata
 # - Adapt MESO list using e.g. regex
-features_list = []
+features_metadata = prediction_data.schema[
+    configuration.learning.feature_column
+].metadata["ml_attr"]
+model_features: List[str] = [None] * features_metadata["num_attrs"]
+
+for var_type, variables in features_metadata["attrs"].items():
+    for variable_dict in variables:
+        model_features[variable_dict["idx"]] = model_features[variable_dict["name"]]
+
 
 shap_values, expected_value = sf_datalake.explain.explanation_data(
-    features_list,
+    model_features,
     classifier_model,
     train_transformed,
     prediction_transformed,
