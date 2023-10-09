@@ -13,7 +13,7 @@ from typing import Dict, List
 
 import numpy as np
 import pyspark
-from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml import Pipeline
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -118,13 +118,13 @@ configuration = sf_datalake.config.ConfigurationHelper(
 configuration.dump(args.dump_keys)
 
 # Prepare data.
-_, dataset = sf_datalake.io.load_data(
+_, raw_dataset = sf_datalake.io.load_data(
     {"dataset": configuration.io.dataset_path},
     file_format="orc",
 ).popitem()
 
 if configuration.io.sample_ratio != 1.0:
-    dataset = dataset.sample(
+    raw_dataset = raw_dataset.sample(
         fraction=configuration.io.sample_ratio, seed=configuration.io.random_seed
     )
 
@@ -192,7 +192,7 @@ if configuration.preprocessing.fill_imputation_strategy:
     )
 
 
-preprocessing_pipeline = PipelineModel(
+preprocessing_pipeline = Pipeline(
     stages=filter_steps
     + normalizing_steps
     + building_steps
@@ -200,10 +200,10 @@ preprocessing_pipeline = PipelineModel(
     + configuration.transforming_stages()
 )
 
-dataset = preprocessing_pipeline.transform(dataset)
+pre_dataset = preprocessing_pipeline.transform(raw_dataset)
 if configuration.preprocessing.drop_missing_values:
-    dataset = dataset.dropna()
-dataset = dataset.cache()
+    pre_dataset = pre_dataset.dropna()
+pre_dataset = pre_dataset.cache()
 
 # Split the dataset into train, test, predict subsets.
 (
@@ -211,7 +211,7 @@ dataset = dataset.cache()
     test_data,
     prediction_data,
 ) = sf_datalake.sampler.train_test_predict_split(
-    dataset,
+    pre_dataset,
     configuration.learning.target["class_col"],
     configuration.learning.target["oversampling_ratio"],
     configuration.learning.train_test_split_ratio,
@@ -221,23 +221,19 @@ dataset = dataset.cache()
     configuration.io.random_seed,
 )
 
-# Build and run ML model Pipeline
+# Fit ML model and make predictions
 
-ML_pipeline = Pipeline(stages=[configuration.get_model()])
-ML_pipeline_model = ML_pipeline.fit(train_data)
-train_transformed = ML_pipeline_model.transform(train_data)
-test_transformed = ML_pipeline_model.transform(test_data)
-prediction_transformed = ML_pipeline_model.transform(prediction_data)
+classifier = configuration.get_model()
+classifier_model = classifier.fit(train_data)
+train_transformed = classifier_model.transform(train_data)
+test_transformed = classifier_model.transform(test_data)
+prediction_transformed = classifier_model.transform(prediction_data)
 
-# Explain predictions
-model = sf_datalake.model.get_model_from_pipeline_model(
-    ML_pipeline_model, configuration.learning.model_name
-)
 
 # TODO: Update this for other models
-if isinstance(model, pyspark.ml.classification.LogisticRegressionModel):
-    logging.info("Model weights: %.3f", model.coefficients)
-    logging.info("Model intercept: %.3f", model.intercept)
+if isinstance(classifier_model, pyspark.ml.classification.LogisticRegressionModel):
+    logging.info("Model weights: %.3f", classifier_model.coefficients)
+    logging.info("Model intercept: %.3f", classifier_model.intercept)
 
 # TODO:
 # - Retrieve features name list using schema metadata
@@ -246,7 +242,7 @@ features_list = []
 
 shap_values, expected_value = sf_datalake.explain.explanation_data(
     features_list,
-    model,
+    classifier_model,
     train_transformed,
     prediction_transformed,
     configuration.explanation.n_train_sample,
@@ -259,7 +255,7 @@ macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
 )
 # Convert to [0, 1] range if shap values are expressed in log-odds units.
 if isinstance(
-    model,
+    classifier_model,
     (
         pyspark.ml.classification.LogisticRegressionModel,
         pyspark.ml.classification.GBTClassificationModel,
