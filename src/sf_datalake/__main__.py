@@ -109,13 +109,13 @@ args = vars(parser.parse_args())
 
 # Parse configuration files and possibly override parameters.
 # Then, dump all used configuration inside the output directory.
-config_file = args.pop("configuration")
-dump_keys = args.pop("dump_keys")
+config_file: str = args.pop("configuration")
+dump_keys: List[str] = args.pop("dump_keys")
 
 configuration = sf_datalake.configuration.ConfigurationHelper(
     config_file=config_file, cli_args=args
 )
-configuration.dump(args.dump_keys)
+configuration.dump(dump_keys)
 
 # Prepare data.
 _, raw_dataset = sf_datalake.io.load_data(
@@ -223,7 +223,7 @@ pre_dataset = pre_dataset.cache()
 
 # Fit ML model and make predictions
 
-classifier = configuration.get_model()
+classifier = configuration.learning.get_model()
 classifier_model = classifier.fit(train_data)
 train_transformed = classifier_model.transform(train_data)
 test_transformed = classifier_model.transform(test_data)

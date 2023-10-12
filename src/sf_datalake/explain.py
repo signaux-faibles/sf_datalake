@@ -103,7 +103,6 @@ def explanation_data(
     return sv, ev
 
 
-# TODO: Complete docstring
 def explanation_scores(
     shap_df: pd.DataFrame,
     n_concerning: int,

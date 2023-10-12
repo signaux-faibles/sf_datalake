@@ -30,9 +30,31 @@ import sf_datalake.utils
 from sf_datalake.transform import BinsOrdinalEncoder
 
 
+def extract_dc_fields(dcls, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract some arguments to provide to some dataclass constructor."""
+    class_fields = set(field.name for field in dataclasses.fields(dcls))
+    extracted = {}
+    for k in class_fields:
+        if k in kwargs:
+            extracted[k] = kwargs.pop(k)
+    return extracted
+
+
 @dataclass
 class LearningConfiguration:
-    """# TODO: FILL THIS DOCSTRING"""
+    """Machine learning configuration.
+
+    Attributes:
+        target:
+        train_dates:
+        test_dates:
+        prediction_date:
+        train_test_split_ratio:
+        model_name:
+        model_params:
+        feature_column:
+
+    """
 
     target: Dict[str, Any] = dataclasses.field(
         default_factory=lambda: {
@@ -59,10 +81,40 @@ class LearningConfiguration:
     )
     feature_column: str = "features"
 
+    def get_model(self) -> Estimator:
+        # pylint: disable=missing-function-docstring, not-a-mapping
+        model_factory: Dict[str, Transformer] = {
+            "LogisticRegression": LogisticRegression,
+            "GBTClassifier": GBTClassifier,
+            "RandomForestClassifier": RandomForestClassifier,
+        }
+
+        return (
+            model_factory[self.model_name]
+            .setParams(**self.model_params)
+            .setFeaturesCol(self.feature_column)
+            .setLabelCol(self.target["class_col"])
+        )
+
 
 @dataclass
 class PreprocessingConfiguration:
-    """# TODO: FILL THIS DOCSTRING"""
+    """Pre-processing configuration.
+
+    Attributes:
+        identifiers:
+        default_factory:
+        siren_aggregation:
+        time_aggregation:
+        drop_missing_values:
+        fill_default_values:
+        fill_imputation_strategy:
+        features_transformers:
+        encoders_params:
+        ordinal_encoding_bins:
+        scalers_params:
+
+    """
 
     identifiers: List[str] = dataclasses.field(
         default_factory=lambda: ["siren", "periode"]
@@ -84,29 +136,50 @@ class PreprocessingConfiguration:
     fill_imputation_strategy: Dict[str, Any] = None
     # Transformations
     features_transformers: Dict[str, List[str]] = None
+    ordinal_encoding_bins: Dict[str, List[str]] = None
     encoders_params: Dict[str, Transformer] = dataclasses.field(
         default_factory=lambda: {
-            "OneHotEncoder": OneHotEncoder(dropLast=False),
-            "StringIndexer": StringIndexer(),
-            "BinsOrdinalEncoder": BinsOrdinalEncoder(),
+            "OneHotEncoder": {"dropLast": False},
+            "StringIndexer": {},
+            "BinsOrdinalEncoder": {},
         }
     )
-    ordinal_encoding_bins: Dict[str, List[str]] = None
     scalers_params: Dict[str, Transformer] = dataclasses.field(
         default_factory=lambda: {
-            "StandardScaler": StandardScaler(
-                withMean=True,
-                withStd=True,
-                inputCol="StandardScaler_input",
-                outputCol="StandardScaler_output",
-            ),
+            "StandardScaler": {
+                "withMean": True,
+                "withStd": True,
+                "inputCol": "StandardScaler_input",
+                "outputCol": "StandardScaler_output",
+            },
         }
     )
+
+    def get_scaler(self, scaler_name):  # pylint:disable=missing-function-docstring
+        scaler_factory = {
+            "StandardScaler": StandardScaler,
+        }
+        return scaler_factory[scaler_name](**self.scalers_params[scaler_name])
+
+    def get_encoder(self, encoder_name):  # pylint:disable=missing-function-docstring
+        encoder_factory = {
+            "OneHotEncoder": OneHotEncoder,
+            "StringIndexer": StringIndexer,
+            "BinsOrdinalEncoder": BinsOrdinalEncoder,
+        }
+        return encoder_factory[encoder_name](**self.encoders_params[encoder_name])
 
 
 @dataclass
 class ExplanationConfiguration:
-    """# TODO: FILL THIS DOCSTRING"""
+    """Explanation configuration.
+
+    Attributes:
+        n_train_sample:
+        n_concerning_micro:
+        topic_groups:
+
+    """
 
     n_train_sample: int = 5000
     n_concerning_micro: int = 3
@@ -115,7 +188,18 @@ class ExplanationConfiguration:
 
 @dataclass
 class IOConfiguration:
-    """# TODO: FILL THIS DOCSTRING"""
+    """Input output configuration.
+
+    Parameters for reading / writing paths, as well as sampling.
+
+    Attributes:
+        root_directory:
+        dataset_path:
+        output_directory:
+        sample_ratio:
+        random_seed:
+
+    """
 
     root_directory: str = "/projets/TSF"
     dataset_path: str = dataclasses.field(init=False)
@@ -155,28 +239,37 @@ class ConfigurationHelper:
 
     """
 
-    # pylint: disable=not-an-iterable
     def __init__(self, config_file: str = None, cli_args: Dict[str, Any] = None):
-        # Instantiate every attribute using dataclasses default values.
-        self.learning = LearningConfiguration()
-        self.preprocessing = PreprocessingConfiguration()
-        self.explanation = ExplanationConfiguration()
-        self.io = IOConfiguration()
-        self.version = importlib_metadata.version("sf_datalake")
-
-        # Parse config file
+        override_args: Dict[str, Any] = {}
         if config_file is not None:
-            with importlib_resources.files("sf_datalake.config").joinpath(
+            with importlib_resources.files("sf_datalake.configuration").joinpath(
                 f"{config_file}"
             ) as f:
-                config_dict = json.loads(f.read_text())
-            self.override(config_dict)
-        # Parse CLI
+                override_args.update(json.loads(f.read_text()))
         if cli_args is not None:
-            self.override(cli_args)
+            override_args.update(cli_args)
+
+        self.learning = LearningConfiguration(
+            **extract_dc_fields(LearningConfiguration, override_args)
+        )
+        self.preprocessing = PreprocessingConfiguration(
+            **extract_dc_fields(PreprocessingConfiguration, override_args)
+        )
+        self.explanation = ExplanationConfiguration(
+            **extract_dc_fields(ExplanationConfiguration, override_args)
+        )
+        self.io = IOConfiguration(**extract_dc_fields(IOConfiguration, override_args))
+        self.version = importlib_metadata.version("sf_datalake")
+        # There should not be any override argument left.
+        if override_args:
+            raise ValueError(
+                f"Override argument(s) '{list(override_args.keys())}' could not be "
+                "matched against any ConfigurationHelper attribute."
+            )
 
         # Duplicate config for time-aggregated variables.
         def add_time_aggregate_features(attribute: dict):
+            # pylint: disable=not-an-iterable
             for operation in self.preprocessing.time_aggregation:
                 for variable, n_months in self.preprocessing.time_aggregation[
                     operation
@@ -195,53 +288,6 @@ class ConfigurationHelper:
         add_time_aggregate_features(self.preprocessing.fill_default_values)
         add_time_aggregate_features(self.preprocessing.fill_imputation_strategy)
 
-    def override(self, source: Dict[str, Any]):
-        """Override configuration attributes using external source.
-
-        We loop over all fields found inside `source`, and try to fill attributes
-        of this ConfigurationHelper's attributes.
-
-        Args:
-            source: Mapping that holds configuration data.
-
-        Raises:
-            ValueError if a field that cannot be related to any (sub-)attribute is found
-              in source.
-
-        """
-        for attr_name, attr_value in source.items():
-            attr_is_set = False
-            for _, dcls in inspect.getmembers(self, predicate=dataclasses.is_dataclass):
-                if hasattr(dcls, attr_name):
-                    setattr(dcls, attr_name, attr_value)
-                    attr_is_set = True
-                    break
-            if not attr_is_set:
-                raise ValueError(
-                    f"Attribute '{attr_name}' could not be matched against any "
-                    "ConfigurationHelper attribute."
-                )
-
-    def get_model(self) -> Estimator:
-        """Returns an Estimator object ready to be used for a learning procedure.
-
-        Returns:
-            The selected Model instantiated using config parameters.
-
-        """
-        model_factory = {
-            "LogisticRegression": LogisticRegression,
-            "GBTClassifier": GBTClassifier,
-            "RandomForestClassifier": RandomForestClassifier,
-        }
-        # pylint: disable=not-a-mapping
-        return (
-            model_factory[self.learning.model_name]
-            .setParams(**self.learning.model_params)
-            .setFeaturesCol(self.learning.feature_column)
-            .setLabelCol(self.learning.target["class_col"])
-        )
-
     def dump(self, dump_keys: Iterable[str] = None):
         """Dumps a subset of the configuration used during a prediction run.
 
@@ -259,6 +305,7 @@ class ConfigurationHelper:
                 self, predicate=dataclasses.is_dataclass
             )
         )
+        complete_dump.update({"version": self.version})  # hackish...
 
         dump_dict = (
             {k: complete_dump[k] for k in dump_keys}
@@ -305,7 +352,7 @@ class ConfigurationHelper:
         ) in self.preprocessing.features_transformers.items():
             # Encoding
             encoders = [
-                self.preprocessing.encoders_params[transformer_name]
+                self.preprocessing.get_encoder(transformer_name)
                 for transformer_name in transformer_names
                 if is_encoder(transformer_name)
             ]
@@ -332,7 +379,7 @@ class ConfigurationHelper:
                     VectorAssembler(
                         inputCols=input_cols, outputCol=f"{scaler_name}_input"
                     ),
-                    self.preprocessing.scalers_params[scaler_name],
+                    self.preprocessing.get_scaler(scaler_name),
                 )
             )
             # Scaled features are added as a single column corresponding to the
