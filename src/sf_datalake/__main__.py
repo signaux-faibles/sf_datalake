@@ -20,7 +20,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
-import sf_datalake.config
+import sf_datalake.configuration
 import sf_datalake.explain
 import sf_datalake.io
 import sf_datalake.model
@@ -112,7 +112,7 @@ args = vars(parser.parse_args())
 config_file = args.pop("configuration")
 dump_keys = args.pop("dump_keys")
 
-configuration = sf_datalake.config.ConfigurationHelper(
+configuration = sf_datalake.configuration.ConfigurationHelper(
     config_file=config_file, cli_args=args
 )
 configuration.dump(args.dump_keys)
