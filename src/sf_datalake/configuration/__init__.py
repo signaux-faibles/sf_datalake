@@ -195,26 +195,17 @@ class IOConfiguration:
     Attributes:
         root_directory:
         dataset_path:
-        output_directory:
+        prediction_path:
         sample_ratio:
         random_seed:
 
     """
 
     root_directory: str = "/projets/TSF"
-    dataset_path: str = dataclasses.field(init=False)
-    output_directory: str = dataclasses.field(init=False)
+    dataset_path: str = "data/preprocessed/datasets/full_dataset"
+    prediction_path: str = path.join(f"predictions/{dt.datetime.now().timestamp()}")
     sample_ratio: float = 1.0
     random_seed: int = random.randint(0, 10000)
-
-    def __post_init__(self):
-        """ """
-        self.output_directory: str = path.join(
-            self.root_directory, "predictions", str(int(dt.datetime.now().timestamp()))
-        )
-        self.dataset_path: str = path.join(
-            self.root_directory, "data/preprocessed/datasets/full_dataset"
-        )
 
 
 class ConfigurationHelper:
@@ -314,7 +305,7 @@ class ConfigurationHelper:
         )
         config_df = spark.createDataFrame(pyspark.sql.Row(dump_dict))
         config_df.repartition(1).write.json(
-            path.join(self.io.output_directory, "run_configuration.json")
+            path.join(self.io.prediction_path, "run_configuration.json")
         )
 
     def transforming_stages(self) -> List[Transformer]:

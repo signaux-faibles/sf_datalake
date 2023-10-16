@@ -12,8 +12,8 @@
                 "$LAKE_PKG_TARGET#venv"
             ],
             "args": [
-                "--output_directory",
-                "${LAKE_HOME}/predictions/CI_production/${CI_PIPELINE_ID}"
+                "--prediction_path",
+                "predictions/CI_test/${CI_PIPELINE_ID}"
             ]
         }
     },
@@ -32,8 +32,8 @@
             "args": [
                 "--sample_ratio",
                 "0.001",
-                "--output_directory",
-                "${LAKE_HOME}/predictions/CI_test/${CI_PIPELINE_ID}"
+                "--prediction_path",
+                "predictions/CI_test/${CI_PIPELINE_ID}"
             ]
         }
     }

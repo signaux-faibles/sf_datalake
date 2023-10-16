@@ -35,6 +35,9 @@ parser = argparse.ArgumentParser(
     parameters and variables.
     """
 )
+path_group = parser.add_argument_group(
+    "paths", description="Path command line arguments."
+)
 parser.add_argument(
     "--configuration",
     help="""
@@ -43,17 +46,25 @@ parser.add_argument(
     """,
     default="standard.json",
 )
-
-parser.add_argument(
+path_group.add_argument(
+    "--root_directory",
+    type=str,
+    help="Data root directory.",
+)
+path_group.add_argument(
     "--dataset",
     dest="dataset_path",
     type=str,
-    help="Path to the dataset that will be used for training, test and prediction.",
+    help="""
+    Path (relative to root_directory) to the dataset that will be used for training,
+    test or prediction.""",
 )
-parser.add_argument(
-    "--output_directory",
+path_group.add_argument(
+    "--prediction_path",
     type=str,
-    help="Directory where model predictions and parameters will be saved.",
+    help="""
+    Path (relative to root_directory) where predictions and parameters will be saved.
+    """,
 )
 parser.add_argument(
     "--train_dates",
@@ -81,8 +92,8 @@ parser.add_argument(
     "--drop_missing_values",
     action="store_true",
     help="""
-    If specified, missing values will be dropped instead of filling data with
-    default values.
+    If specified, missing values will be dropped instead of filling data with default
+    values.
     """,
 )
 parser.add_argument(
@@ -273,12 +284,12 @@ if isinstance(
 
 # Write outputs.
 sf_datalake.io.write_predictions(
-    configuration.io.output_directory,
+    configuration.io.prediction_path,
     test_transformed,
     prediction_transformed,
 )
 sf_datalake.io.write_explanations(
-    configuration.io.output_directory,
+    configuration.io.prediction_path,
     spark.createDataFrame(macro_scores.reset_index()),
     spark.createDataFrame(concerning_scores.reset_index()),
 )
