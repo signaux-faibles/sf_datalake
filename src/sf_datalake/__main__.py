@@ -130,7 +130,11 @@ configuration.dump(dump_keys)
 
 # Prepare data.
 _, raw_dataset = sf_datalake.io.load_data(
-    {"dataset": configuration.io.dataset_path},
+    {
+        "dataset": path.join(
+            configuration.io.root_directory, configuration.io.dataset_path
+        )
+    },
     file_format="orc",
 ).popitem()
 
@@ -284,12 +288,12 @@ if isinstance(
 
 # Write outputs.
 sf_datalake.io.write_predictions(
-    configuration.io.prediction_path,
+    path.join(configuration.io.root_directory, configuration.io.prediction_path),
     test_transformed,
     prediction_transformed,
 )
 sf_datalake.io.write_explanations(
-    configuration.io.prediction_path,
+    path.join(configuration.io.root_directory, configuration.io.prediction_path),
     spark.createDataFrame(macro_scores.reset_index()),
     spark.createDataFrame(concerning_scores.reset_index()),
 )

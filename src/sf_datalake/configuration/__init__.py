@@ -305,7 +305,11 @@ class ConfigurationHelper:
         )
         config_df = spark.createDataFrame(pyspark.sql.Row(dump_dict))
         config_df.repartition(1).write.json(
-            path.join(self.io.prediction_path, "run_configuration.json")
+            path.join(
+                self.io.root_directory,
+                self.io.prediction_path,
+                "run_configuration.json",
+            )
         )
 
     def transforming_stages(self) -> List[Transformer]:
