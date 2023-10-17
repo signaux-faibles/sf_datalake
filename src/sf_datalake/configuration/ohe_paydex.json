@@ -1,7 +1,6 @@
 {
     "fill_default_values": {
         "paydex": 0,
-        "paydex_bin": 0.0,
         "cotisation": 0.0,
         "montant_part_ouvriere": 0.0,
         "montant_part_patronale": 0.0,
