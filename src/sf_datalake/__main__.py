@@ -212,7 +212,7 @@ preprocessing_pipeline = Pipeline(
     + normalizing_steps
     + building_steps
     + missing_values_handling_steps
-    + configuration.transforming_stages()
+    + configuration.encoding_scaling_stages()
 )
 
 pre_dataset = preprocessing_pipeline.fit(raw_dataset)

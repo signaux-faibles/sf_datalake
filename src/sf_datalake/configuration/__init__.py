@@ -312,8 +312,8 @@ class ConfigurationHelper:
             )
         )
 
-    def transforming_stages(self) -> List[Transformer]:
-        """Generates all stages related to feature transformation.
+    def encoding_scaling_stages(self) -> List[Transformer]:
+        """Generates all stages related to feature encoding and sclaing.
 
         Feature transformations are prepared in the following order:
         - encoding stages, which operate on single feature columns.
