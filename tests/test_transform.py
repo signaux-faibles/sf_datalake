@@ -1,13 +1,10 @@
-# pylint: disable=missing-function-docstring, redefined-outer-name
-"""Test the src/transform.py module.
-"""
-
+# pylint: disable=missing-function-docstring, missing-module-docstring, redefined-outer-name
 import datetime as dt
 
 import pytest
 from pyspark.sql import types as T
 
-from sf_datalake.transform import DateParser, IdentifierNormalizer  # , SiretToSiren
+from sf_datalake.transform import DateParser, IdentifierNormalizer
 
 
 @pytest.fixture

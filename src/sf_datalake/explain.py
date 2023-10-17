@@ -28,8 +28,8 @@ def explanation_data(
     Args:
         features_list: A list of features.
         model: A pyspark model used for prediction.
-        train_data: Training dataset (as output by model pipeline).
-        prediction_data: Prediction dataset (as output by model pipeline).
+        train_data: Training dataset.
+        prediction_data: Prediction dataset.
         n_train_sample: Number of training set samples used for estimating features
           correlation.
 

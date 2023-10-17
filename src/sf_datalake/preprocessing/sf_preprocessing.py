@@ -18,7 +18,7 @@ from os import path
 from typing import List
 
 import pyspark.sql.functions as F
-from pyspark.ml import Pipeline, Transformer
+from pyspark.ml import PipelineModel, Transformer
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -69,7 +69,7 @@ aggregator = sf_datalake.transform.SirenAggregator(
     no_aggregation=[],
 )
 siren_level_ds = (
-    Pipeline(stages=[siren_converter, aggregator])
+    PipelineModel(stages=[siren_converter, aggregator])
     .fit(siret_level_ds)
     .select(
         [
@@ -111,7 +111,7 @@ for feature, n_months in configuration.preprocessing.time_aggregation["mean"].it
             sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
         )
 
-time_agg_ds = Pipeline(stages=time_computations).fit(siren_level_ds)
+time_agg_ds = PipelineModel(stages=time_computations).transform(siren_level_ds)
 
 #######################
 # Feature engineering #
