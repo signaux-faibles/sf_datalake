@@ -276,8 +276,6 @@ class ConfigurationHelper:
                         )
 
         add_time_aggregate_features(self.preprocessing.features_transformers)
-        add_time_aggregate_features(self.preprocessing.fill_default_values)
-        add_time_aggregate_features(self.preprocessing.fill_imputation_strategy)
 
     def dump(self, dump_keys: Iterable[str] = None):
         """Dumps a subset of the configuration used during a prediction run.
