@@ -91,7 +91,7 @@ class LearningConfiguration:
 
         return (
             model_factory[self.model_name]
-            .setParams(**self.model_params)
+            .setParams(**(self.model_params[self.model_name]))
             .setFeaturesCol(self.feature_column)
             .setLabelCol(self.target["class_col"])
         )
