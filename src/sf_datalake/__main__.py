@@ -238,7 +238,6 @@ pre_dataset = pre_dataset.cache()
 )
 
 # Fit ML model and make predictions
-
 classifier = configuration.learning.get_model()
 classifier_model = classifier.fit(train_data)
 train_transformed = classifier_model.transform(train_data)
@@ -251,18 +250,20 @@ if isinstance(classifier_model, pyspark.ml.classification.LogisticRegressionMode
     logging.info("Model weights: %.3f", classifier_model.coefficients)
     logging.info("Model intercept: %.3f", classifier_model.intercept)
 
-# TODO:
-# - Adapt MESO list using e.g. regex
-features_metadata = prediction_data.schema[
-    configuration.learning.feature_column
-].metadata["ml_attr"]
-model_features: List[str] = [None] * features_metadata["num_attrs"]
+# Get features names
+model_features: List[str] = sf_datalake.utils.extract_column_names(
+    pre_dataset, configuration.learning.feature_column
+)
 
-for var_type, variables in features_metadata["attrs"].items():
-    for variable_dict in variables:
-        model_features[variable_dict["idx"]] = model_features[variable_dict["name"]]
+for scaler in list(configuration.preprocessing.scalers_params):
+    scaler_columns = sf_datalake.utils.extract_column_names(
+        pre_dataset, f"{scaler}_input"
+    )
+    for i, col in enumerate(model_features):
+        if col.startswith(scaler):
+            model_features[i] = scaler_columns[int(col.split("_")[-1])]
 
-
+# Compute predictions explanation
 shap_values, expected_value = sf_datalake.explain.explanation_data(
     model_features,
     classifier_model,

@@ -39,3 +39,24 @@ def numerical_columns(df: pyspark.sql.DataFrame) -> List[str]:
         for field in df.schema.fields
         if isinstance(field.dataType, numerical_types)
     ]
+
+
+def extract_column_names(df: pyspark.sql.DataFrame, assembled_column: str) -> List[str]:
+    """Get inner column names from an assembled column.
+
+    Here, "assembled" means : that has been transformed using a VectorAssembler.
+
+    Args:
+        df: A DataFrame
+        assembled_column: The "assembled" column name.
+
+    Returns:
+        A list of column names.
+
+    """
+    column_metadata = df.schema[assembled_column].metadata["ml_attr"]
+    columns = [None] * column_metadata["num_attrs"]
+    for _, variables in column_metadata["attrs"].items():
+        for variable_dict in variables:
+            columns[variable_dict["idx"]] = variable_dict["name"]
+    return columns
