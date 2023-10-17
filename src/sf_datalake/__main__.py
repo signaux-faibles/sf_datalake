@@ -215,7 +215,7 @@ preprocessing_pipeline = Pipeline(
     + configuration.transforming_stages()
 )
 
-pre_dataset = preprocessing_pipeline.transform(raw_dataset)
+pre_dataset = preprocessing_pipeline.fit(raw_dataset)
 if configuration.preprocessing.drop_missing_values:
     pre_dataset = pre_dataset.dropna()
 pre_dataset = pre_dataset.cache()
