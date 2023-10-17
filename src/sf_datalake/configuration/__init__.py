@@ -303,12 +303,12 @@ class ConfigurationHelper:
             if dump_keys is not None
             else complete_dump
         )
-        config_df = spark.createDataFrame(pyspark.sql.Row(dump_dict))
-        config_df.repartition(1).write.json(
+        config_rdd = spark.sparkContext.parallelize([json.dumps(dump_dict)])
+        config_rdd.repartition(1).saveAsTextFile(
             path.join(
                 self.io.root_directory,
                 self.io.prediction_path,
-                "run_configuration.json",
+                "run_configuration",
             )
         )
 
