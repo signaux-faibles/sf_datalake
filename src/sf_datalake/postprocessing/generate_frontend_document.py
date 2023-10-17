@@ -168,7 +168,7 @@ def identity(sig):
 # Parse CLI arguments, load predictions configuration and supplementary data
 
 args = parser.parse_args()
-configuration = sf_datalake.config.ConfigurationHelper(args.configuration)
+configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
 
 micro_macro = {
     micro: macro
