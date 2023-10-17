@@ -100,7 +100,7 @@
                 3
             ]
         },
-        "moving_average": {
+        "mean": {
             "cotisation": [
                 12
             ]

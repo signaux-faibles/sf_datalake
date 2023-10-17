@@ -37,19 +37,14 @@ parser = sf_datalake.io.data_path_parser()
 parser.description = "Build a dataset with aggregated SIREN-level data and new time \
 averaged/lagged variables."
 
-parser.add_argument(
-    "-c",
-    "--configuration",
-    help="Configuration file.",
-    default="standard.json",
-)
+parser.add_argument("-c", "--configuration", help="Configuration file.", required=True)
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
 
 
 args = parser.parse_args()
-configuration = sf_datalake.config.ConfigurationHelper(args.configuration)
+configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
 input_ds = sf_datalake.io.load_data(
     {"input": args.input}, file_format="csv", sep=",", infer_schema=False
 )["input"]
@@ -110,9 +105,7 @@ for feature, n_months in configuration.preprocessing.time_aggregation["diff"].it
                 inputCol=feature, n_months=n_months, bfill=True
             )
         )
-for feature, n_months in configuration.preprocessing.time_aggregation[
-    "moving_average"
-].items():
+for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
     if feature in siren_level_ds.columns:
         time_computations.append(
             sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
