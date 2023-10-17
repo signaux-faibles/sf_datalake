@@ -37,7 +37,7 @@ def extract_dc_fields(dcls, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     for k in class_fields:
         if k in kwargs:
             extracted[k] = kwargs.pop(k)
-    return extracted
+    return {k: v for k, v in extracted.items() if v is not None}
 
 
 @dataclass
