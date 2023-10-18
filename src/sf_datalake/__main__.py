@@ -183,6 +183,11 @@ building_steps = [
 ]
 
 
+if not configuration.preprocessing.drop_missing_values:
+    raise NotImplementedError(
+        " VectorAssembler in spark < 2.4.0 doesn't handle including missing values."
+    )
+
 missing_values_handling_steps = []
 if configuration.preprocessing.fill_default_values:
     missing_values_handling_steps.append(
@@ -198,6 +203,7 @@ if configuration.preprocessing.fill_imputation_strategy:
         strategy,
     ) in configuration.preprocessing.fill_imputation_strategy.items():
         imputation_strategy_features.setdefault(strategy, []).append(feature)
+
     missing_values_handling_steps.extend(
         sf_datalake.transform.MissingValuesHandler(
             inputCols=features,
@@ -205,7 +211,6 @@ if configuration.preprocessing.fill_imputation_strategy:
         )
         for strategy, features in imputation_strategy_features.items()
     )
-
 
 preprocessing_pipeline = Pipeline(
     stages=filter_steps
@@ -217,8 +222,6 @@ preprocessing_pipeline = Pipeline(
 
 preprocessing_pipeline_model = preprocessing_pipeline.fit(raw_dataset)
 pre_dataset = preprocessing_pipeline_model.transform(raw_dataset)
-if configuration.preprocessing.drop_missing_values:
-    pre_dataset = pre_dataset.dropna()
 pre_dataset = pre_dataset.cache()
 
 # Split the dataset into train, test, predict subsets.

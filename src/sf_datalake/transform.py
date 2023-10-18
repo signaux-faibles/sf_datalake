@@ -2,6 +2,7 @@
 
 import datetime as dt
 import itertools
+import logging
 from typing import List, Union
 
 import numpy as np
@@ -231,14 +232,18 @@ class MissingValuesHandler(
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Fills entries containing missing values.
+        """Fill entries containing missing values inplace.
 
         Args:
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-
             DataFrame where previously missing values are either filled.
+
+        Raises:
+            ValueError if:
+            - both `value` and `stat_strategy` or neither are set.
+            - statistical imputation is required on non-numerical columns.
 
         """
         stat_strategy: str = self.getOrDefault("stat_strategy")
@@ -267,6 +272,53 @@ class MissingValuesHandler(
         else:
             raise ValueError("Either `value` or `stat_strategy` must be set.")
         return dataset
+
+
+class MissingValuesDropper(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
+    """Drops missing values.
+
+    This Transformer is only a way to simply drop null values inside a Pipeline.
+    pyspark.sql.DataFrame.dropna() is called using `how=any`, meaning that any row
+    containing at least one missing value found among `inputCols` will be dropped.
+
+    Args:
+        inputCols: The input dataset columns to consider for dropping.
+
+    """
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            inputCols (list[str]): The input dataset columns to consider for dropping.
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Applies dropna to a dataset.
+
+        Args:
+            dataset: DataFrame containing missing values.
+
+        Returns:
+            DataFrame where rows with missing values are dropped.
+
+        """
+        input_cols: List[str] = self.getOrDefault("inputCols")
+        dropna_dataset = dataset.dropna(subset=input_cols)
+        if not dataset.exceptAll(dropna_dataset).limit(1).rdd.isEmpty():
+            logging.info(
+                "Some rows containing null-values in %s were dropped", input_cols
+            )
+        return dropna_dataset
 
 
 class IdentifierNormalizer(

@@ -369,6 +369,9 @@ class ConfigurationHelper:
         for scaler_name, input_cols in scaler_inputs.items():
             scaling_steps.extend(
                 (
+                    sf_datalake.transform.MissingValuesDropper(
+                        inputCols=input_cols,
+                    ),
                     VectorAssembler(
                         inputCols=input_cols, outputCol=f"{scaler_name}_input"
                     ),
@@ -380,9 +383,12 @@ class ConfigurationHelper:
             model_features.append(f"{scaler_name}_output")
 
         grouping_step = [
+            sf_datalake.transform.MissingValuesDropper(
+                inputCols=model_features,
+            ),
             VectorAssembler(
                 inputCols=model_features, outputCol=self.learning.feature_column
-            )
+            ),
         ]
 
         return encoding_steps + scaling_steps + grouping_step
