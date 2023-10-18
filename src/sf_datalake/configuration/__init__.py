@@ -385,12 +385,7 @@ class ConfigurationHelper:
         grouping_step = [
             # Filter out features that have already been assembled.
             sf_datalake.transform.MissingValuesDropper(
-                inputCols=[
-                    feature
-                    for feature in model_features
-                    if feature
-                    not in [T.ArrayType, T.MapType, T.StructType, T.StructField]
-                ],
+                inputCols=model_features,
             ),
             VectorAssembler(
                 inputCols=model_features, outputCol=self.learning.feature_column

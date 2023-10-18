@@ -3,7 +3,7 @@
 import datetime as dt
 import itertools
 import logging
-from typing import List, Union
+from typing import Iterable, List, Union
 
 import numpy as np
 import pyspark.ml
@@ -285,12 +285,22 @@ class MissingValuesDropper(
 
     Args:
         inputCols: The input dataset columns to consider for dropping.
+        ignore_type: Ignore any inputCol if its type is found inside ignore_type.
 
     """
+
+    ignore_type = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ignore_type",
+        "Columns of these types will be ignored.",
+    )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
+        self._setDefault(
+            ignore_type=(T.ArrayType, T.MapType, T.StructType, T.StructField)
+        )
         self.setParams(**kwargs)
 
     @keyword_only
@@ -299,6 +309,9 @@ class MissingValuesDropper(
 
         Args:
             inputCols (list[str]): The input dataset columns to consider for dropping.
+            ignore_type (Iterable[str]): Ignore any inputCol if its type is found inside
+              ignore_type.
+
         """
         return self._set(**kwargs)
 
@@ -313,7 +326,14 @@ class MissingValuesDropper(
 
         """
         input_cols: List[str] = self.getOrDefault("inputCols")
-        dropna_dataset = dataset.dropna(subset=input_cols)
+        ignore_type: Iterable[str] = self.getOrDefault("ignore_type")
+        dropna_dataset = dataset.dropna(
+            subset=[
+                feature
+                for feature in input_cols
+                if dataset.schema[feature].dataType not in ignore_type
+            ]
+        )
 
         if dropna_dataset.count() != dataset.count():
             logging.info(
