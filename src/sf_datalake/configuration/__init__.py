@@ -12,7 +12,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 import importlib_metadata
 import importlib_resources
-import pyspark.sql
+import pyspark.sql.types as T
 from pyspark.ml import Estimator, Transformer
 from pyspark.ml.classification import (
     GBTClassifier,
@@ -383,8 +383,14 @@ class ConfigurationHelper:
             model_features.append(f"{scaler_name}_output")
 
         grouping_step = [
+            # Filter out features that have already been assembled.
             sf_datalake.transform.MissingValuesDropper(
-                inputCols=model_features,
+                inputCols=[
+                    feature
+                    for feature in model_features
+                    if feature
+                    not in [T.ArrayType, T.MapType, T.StructType, T.StructField]
+                ],
             ),
             VectorAssembler(
                 inputCols=model_features, outputCol=self.learning.feature_column
