@@ -314,9 +314,10 @@ class MissingValuesDropper(
         """
         input_cols: List[str] = self.getOrDefault("inputCols")
         dropna_dataset = dataset.dropna(subset=input_cols)
-        if not dataset.exceptAll(dropna_dataset).limit(1).rdd.isEmpty():
+
+        if dropna_dataset.count() != dataset.count():
             logging.info(
-                "Some rows containing null-values in %s were dropped", input_cols
+                "Some rows containing null values in subset %s were dropped", input_cols
             )
         return dropna_dataset
 
