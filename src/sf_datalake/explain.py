@@ -105,8 +105,8 @@ def explanation_data(
 
 def explanation_scores(
     shap_df: pd.DataFrame,
-    n_concerning: int,
     topic_groups: Dict[str, List[str]],
+    n_concerning: int,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Compute plot-ready feature contribution.
 
@@ -120,13 +120,10 @@ def explanation_scores(
     - at a "topic" scale: features that describe information within a common topic.
       The corresponding groups will be used as main axes for visualisation.
 
-    In case contributions are expressed as log-odds, they are first mapped to the [0, 1]
-    range before being returned.
-
     Args:
         shap_df: The shap values associated with the features used for machine learning.
         topic_groups: A grouping of features, by major topic.
-        n_concerning:
+        n_concerning: Number of most influential features.
 
     Returns:
         A 2-uple containing:
@@ -138,13 +135,18 @@ def explanation_scores(
     """
     # Sum "micro" variables that are associated to the same "group" then drop them.
     feature_groups: Dict[str, str] = {}
-    macro_features = set(feature for flist in topic_groups.items() for feature in flist)
+    macro_features = set(
+        feature for flist in topic_groups.values() for feature in flist
+    )
     for feature in shap_df.columns:
         for mfeature in macro_features:
+            source_variable_found = False
             if feature.startswith(mfeature):
                 feature_groups.setdefault(mfeature, []).append(feature)
+                source_variable_found = True
                 break
-        raise ValueError(f"Could not find source variable for feature {feature}.")
+        if not source_variable_found:
+            raise ValueError(f"Could not find source variable for feature {feature}.")
 
     for group, features in feature_groups.items():
         shap_df[group] = shap_df[features].sum(axis=1)
