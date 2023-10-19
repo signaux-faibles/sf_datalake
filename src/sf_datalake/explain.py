@@ -144,8 +144,8 @@ def explanation_scores(
         feature for flist in topic_groups.values() for feature in flist
     )
     for feature in shap_df.columns:
+        source_variable_found = False
         for mfeature in macro_features:
-            source_variable_found = False
             if feature.startswith(mfeature):
                 feature_groups.setdefault(mfeature, []).append(feature)
                 source_variable_found = True
@@ -155,7 +155,6 @@ def explanation_scores(
 
     for group, features in feature_groups.items():
         shap_df[group] = shap_df[features].sum(axis=1)
-        shap_df.drop(features, axis=1, inplace=True)
 
     # 'Macro' scores per group
     macro_scores = pd.DataFrame([], index=shap_df.index)
