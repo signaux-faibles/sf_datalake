@@ -2,7 +2,6 @@
 
 import datetime as dt
 import itertools
-import logging
 from typing import Iterable, List, Union
 
 import numpy as np
@@ -334,11 +333,6 @@ class MissingValuesDropper(
                 if dataset.schema[feature].dataType not in ignore_type
             ]
         )
-
-        if dropna_dataset.count() != dataset.count():
-            logging.info(
-                "Some rows containing null values in subset %s were dropped", input_cols
-            )
         return dropna_dataset
 
 
