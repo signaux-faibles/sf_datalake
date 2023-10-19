@@ -2,7 +2,8 @@
 
 import datetime as dt
 import itertools
-from typing import Iterable, List, Union
+import logging
+from typing import List, Tuple, Union
 
 import numpy as np
 import pyspark.ml
@@ -298,7 +299,13 @@ class MissingValuesDropper(
     def __init__(self, **kwargs):
         super().__init__()
         self._setDefault(
-            ignore_type=(T.ArrayType, T.MapType, T.StructType, T.StructField)
+            ignore_type=(
+                T.ArrayType,
+                T.MapType,
+                T.StructType,
+                T.StructField,
+                T.UserDefinedType,
+            )
         )
         self.setParams(**kwargs)
 
@@ -308,7 +315,7 @@ class MissingValuesDropper(
 
         Args:
             inputCols (list[str]): The input dataset columns to consider for dropping.
-            ignore_type (Iterable[str]): Ignore any inputCol if its type is found inside
+            ignore_type (tuple[str]): Ignore any inputCol if its type is found inside
               ignore_type.
 
         """
@@ -325,14 +332,19 @@ class MissingValuesDropper(
 
         """
         input_cols: List[str] = self.getOrDefault("inputCols")
-        ignore_type: Iterable[str] = self.getOrDefault("ignore_type")
+        ignore_type: Tuple[str] = self.getOrDefault("ignore_type")
         dropna_dataset = dataset.dropna(
             subset=[
                 feature
                 for feature in input_cols
-                if dataset.schema[feature].dataType not in ignore_type
+                if isinstance(dataset.schema[feature].dataType, ignore_type)
             ]
         )
+
+        if dropna_dataset.count() != dataset.count():
+            logging.info(
+                "Some rows containing null values in subset %s were dropped", input_cols
+            )
         return dropna_dataset
 
 
