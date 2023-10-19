@@ -221,8 +221,7 @@ preprocessing_pipeline = Pipeline(
 )
 
 preprocessing_pipeline_model = preprocessing_pipeline.fit(raw_dataset)
-pre_dataset = preprocessing_pipeline_model.transform(raw_dataset)
-pre_dataset = pre_dataset.cache()
+pre_dataset = preprocessing_pipeline_model.transform(raw_dataset).cache()
 
 # Split the dataset into train, test, predict subsets.
 (
@@ -255,7 +254,7 @@ if isinstance(classifier_model, pyspark.ml.classification.LogisticRegressionMode
 
 # Get features names
 model_features: List[str] = sf_datalake.utils.extract_column_names(
-    pre_dataset, configuration.learning.feature_column
+    pre_dataset, configuration.learning.features_column
 )
 
 for scaler in list(configuration.preprocessing.scalers_params):
@@ -269,6 +268,7 @@ for scaler in list(configuration.preprocessing.scalers_params):
 # Compute predictions explanation
 shap_values, expected_value = sf_datalake.explain.explanation_data(
     model_features,
+    configuration.learning.features_column,
     classifier_model,
     train_transformed,
     prediction_transformed,
@@ -276,8 +276,8 @@ shap_values, expected_value = sf_datalake.explain.explanation_data(
 )
 macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
     shap_values,
-    configuration.explanation.n_concerning_micro,
     configuration.explanation.topic_groups,
+    configuration.explanation.n_concerning_micro,
 )
 # Convert to [0, 1] range if shap values are expressed in log-odds units.
 if isinstance(

@@ -12,7 +12,6 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 import importlib_metadata
 import importlib_resources
-import pyspark.sql.types as T
 from pyspark.ml import Estimator, Transformer
 from pyspark.ml.classification import (
     GBTClassifier,
@@ -52,7 +51,7 @@ class LearningConfiguration:
         train_test_split_ratio:
         model_name:
         model_params:
-        feature_column:
+        features_column:
 
     """
 
@@ -79,7 +78,7 @@ class LearningConfiguration:
             },
         }
     )
-    feature_column: str = "features"
+    features_column: str = "features"
 
     def get_model(self) -> Estimator:
         # pylint: disable=missing-function-docstring, not-a-mapping
@@ -92,7 +91,7 @@ class LearningConfiguration:
         return (
             model_factory[self.model_name]()
             .setParams(**(self.model_params[self.model_name]))
-            .setFeaturesCol(self.feature_column)
+            .setFeaturesCol(self.features_column)
             .setLabelCol(self.target["class_col"])
         )
 
@@ -388,7 +387,7 @@ class ConfigurationHelper:
                 inputCols=model_features,
             ),
             VectorAssembler(
-                inputCols=model_features, outputCol=self.learning.feature_column
+                inputCols=model_features, outputCol=self.learning.features_column
             ),
         ]
 

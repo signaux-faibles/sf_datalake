@@ -14,11 +14,13 @@ import sf_datalake.utils
 
 def explanation_data(
     features_list: List[str],
+    features_column: str,
     model: pyspark.ml.Model,
     train_data: pyspark.sql.DataFrame,
     prediction_data: pyspark.sql.DataFrame,
     n_train_sample: int,
 ) -> Tuple[pd.DataFrame, float]:
+    # pylint:disable=too-many-arguments
     """Compute Shapeley coefficients + expected value for predictions.
 
     Shapeley coefficients represent the contribution to a model output. The computed
@@ -26,7 +28,9 @@ def explanation_data(
     gradient-boosted trees, the coefficients computed by shap are in log-odds units.
 
     Args:
-        features_list: A list of features.
+        features_list: A list of names of features, sorted as they were inserted into
+          `features_column`.
+        features_column: A column containing the model's features.
         model: A pyspark model used for prediction.
         train_data: Training dataset.
         prediction_data: Prediction dataset.
@@ -42,18 +46,19 @@ def explanation_data(
     X_prediction = sf_datalake.transform.vector_disassembler(
         df=prediction_data,
         columns=features_list,
-        assembled_col="features",
+        assembled_col=features_column,
         keep=["siren"],
     ).toPandas()
 
     if isinstance(model, pyspark.ml.classification.LogisticRegressionModel):
+        assert n_train_sample > 0 and isinstance(
+            n_train_sample, int
+        ), "n_train_sample must be a positive integer."
         X_train_sample = (
             sf_datalake.transform.vector_disassembler(
-                df=train_data, columns=features_list, assembled_col="features"
+                df=train_data, columns=features_list, assembled_col=features_column
             )
-            .sample(
-                fraction=min(1.0, max(0.0, ((n_train_sample + 1) / train_data.count())))
-            )
+            .sample(fraction=min(1.0, n_train_sample / train_data.count()))
             .toPandas()
         )
 
