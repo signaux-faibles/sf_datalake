@@ -337,7 +337,7 @@ class MissingValuesDropper(
             subset=[
                 feature
                 for feature in input_cols
-                if isinstance(dataset.schema[feature].dataType, ignore_type)
+                if not isinstance(dataset.schema[feature].dataType, ignore_type)
             ]
         )
 
