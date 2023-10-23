@@ -33,6 +33,8 @@
             "args": [
                 "--sample_ratio",
                 "0.001",
+                "--root_directory",
+                "${LAKE_HOME}",
                 "--prediction_path",
                 "predictions/CI_test/${CI_PIPELINE_ID}",
                 "--drop_missing_values"

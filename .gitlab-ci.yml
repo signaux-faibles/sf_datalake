@@ -297,12 +297,12 @@ fetch_run_outputs_from_HDFS:
     - job: "wait_for_task_finishing"
   script:
     - export ID_LIVY=$(cat ${REGISTRY}/idLivy)
-    - echo "Parsing ${REGISTRY}/spark_config.json looking for '--output_directory' argument."
+    - echo "Parsing ${REGISTRY}/spark_config.json looking for '--prediction_path' argument."
     - cat ${REGISTRY}/spark_config.json
-    - > # select 'sparkTask.args', build json objects like { "--param": "value"}, add these objects in an array, then select value for "--output_directory" key
+    - > # select 'sparkTask.args', build json objects like { "--param": "value"}, add these objects in an array, then select value for "--prediction_path" key
       OUTPUT_DIR=$(jq --raw-output '[.sparkTask.args as $m | range(0; $m | length; 2) | {($m[.]): $m[(. + 1)]} ] | add | .["--prediction_path"]' ${REGISTRY}/spark_config.json)
     - echo "Found argument '--prediction_path'=${OUTPUT_DIR}"
-    - bash fetchFolder.sh ${OUTPUT_DIR} ${REGISTRY}/results ${REGISTRY}/ci_job.par
+    - bash fetchFolder.sh ${LAKE_HOME}/${OUTPUT_DIR} ${REGISTRY}/results ${REGISTRY}/ci_job.par
     - echo "Gathering fetched outputs into ${REGISTRY}/results.zip"
     - zip -j ${REGISTRY}/results.zip ${REGISTRY}/results/*
     - rm -r ${REGISTRY}/results/
