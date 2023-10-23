@@ -1,4 +1,3 @@
-# pylint: disable=missing-function-docstring, missing-module-docstring, redefined-outer-name
 import datetime as dt
 
 import pytest
