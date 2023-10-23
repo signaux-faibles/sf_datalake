@@ -307,7 +307,7 @@ fetch_run_outputs_from_HDFS:
     - zip -j ${REGISTRY}/results.zip ${REGISTRY}/results/*
     - rm -r ${REGISTRY}/results/
     - echo "Removing remote results in ${OUTPUT_DIR}"
-    - bash rmRecursiveHdfs.sh ${OUTPUT_DIR} ${REGISTRY}/ci_job.par
+    - bash rmRecursiveHdfs.sh ${LAKE_HOME}/${OUTPUT_DIR} ${REGISTRY}/ci_job.par
   rules:
     - if: $DEPLOYMENT_TYPE != "null"
       when: always
