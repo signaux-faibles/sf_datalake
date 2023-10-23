@@ -128,21 +128,24 @@ def explanation_scores(
     Args:
         shap_df: The shap values associated with the features used for machine learning.
         topic_groups: A grouping of features, by major topic.
-        n_concerning: Number of most influential features.
+        n_concerning: Number of most significant features.
 
     Returns:
         A 2-uple containing:
         - A "macro scores" df, which contains aggregated features contrbutions across a
-          feature group.
+          topic group.
         - A "concerning scores" df, which contains the most significant individual
           features contributions.
 
     """
-    # Sum "micro" variables that are associated to the same "group" then drop them.
     feature_groups: Dict[str, str] = {}
     macro_features = set(
         feature for flist in topic_groups.values() for feature in flist
     )
+    feature_lvl_df = pd.DataFrame(index=shap_df.index)
+    macro_scores = pd.DataFrame(index=shap_df.index)
+
+    # Get feature-level shap values
     for feature in shap_df.columns:
         source_variable_found = False
         for mfeature in macro_features:
@@ -152,24 +155,25 @@ def explanation_scores(
                 break
         if not source_variable_found:
             raise ValueError(f"Could not find source variable for feature {feature}.")
-
     for group, features in feature_groups.items():
-        shap_df[group] = shap_df[features].sum(axis=1)
+        feature_lvl_df[group] = shap_df[features].sum(axis=1)
 
-    # 'Macro' scores per group
-    macro_scores = pd.DataFrame([], index=shap_df.index)
+    # Compute 'macro' scores per topic group
     for group, features in topic_groups.items():
-        macro_scores.loc[:, f"{group}_macro_score"] = shap_df[features].sum(axis=1)
+        macro_scores.loc[:, f"{group}_macro_score"] = feature_lvl_df[features].sum(
+            axis=1
+        )
 
-    # Concerning (highest scoring) features
-    sorter = np.argsort(-shap_df.values, axis=1)[:, :n_concerning]
-    concerning_feat = pd.DataFrame(shap_df.columns[sorter], index=shap_df.index)
-    concerning_values = pd.DataFrame(
-        shap_df.values[np.arange(len(shap_df))[:, np.newaxis], sorter],
-        index=shap_df.index,
+    # Concerning features (with the most significant feature-level shap values)
+    sorter = np.argsort(-feature_lvl_df.values, axis=1)[:, :n_concerning]
+    concerning_feat = pd.DataFrame(
+        feature_lvl_df.columns[sorter], index=feature_lvl_df.index
     )
-
+    concerning_values = pd.DataFrame(
+        feature_lvl_df.values[np.arange(len(feature_lvl_df))[:, np.newaxis], sorter],
+        index=feature_lvl_df.index,
+    )
     concerning_feat.columns = [f"concerning_feat_{n}" for n in range(n_concerning)]
     concerning_values.columns = [f"concerning_val_{n}" for n in range(n_concerning)]
-    concerning_scores = concerning_feat.join(concerning_values)
-    return macro_scores, concerning_scores
+
+    return macro_scores, concerning_feat.join(concerning_values)
