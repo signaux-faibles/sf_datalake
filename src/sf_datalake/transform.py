@@ -2,8 +2,8 @@
 
 import datetime as dt
 import itertools
-import re
-from typing import List, Union
+import logging
+from typing import List, Tuple, Union
 
 import numpy as np
 import pyspark.ml
@@ -12,7 +12,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.ml.feature import Imputer, OneHotEncoder, StandardScaler, VectorAssembler
+from pyspark.ml.feature import Imputer
 from pyspark.ml.param.shared import (
     HasInputCol,
     HasInputCols,
@@ -21,68 +21,6 @@ from pyspark.ml.param.shared import (
     Params,
 )
 from pyspark.sql import Window
-
-
-def get_transformer(name: str) -> Transformer:
-    """Gets a pre-configured Transformer object by specifying its name.
-
-    Args:
-        name: Transformer object's name
-
-    Returns:
-        The selected Transformer with prepared parameters.
-
-    """
-    factory = {
-        "StandardScaler": StandardScaler(
-            withMean=True,
-            withStd=True,
-            inputCol="to_StandardScaler",
-            outputCol="from_StandardScaler",
-        ),
-        "OneHotEncoder": OneHotEncoder(dropLast=False),
-    }
-    return factory[name]
-
-
-def generate_transforming_stages(config: dict) -> List[Transformer]:
-    """Generates all stages related to feature transformation.
-
-    The stages are ready to be included in a pyspark.ml.Pipeline.
-
-    Args:
-        config: model configuration, as loaded by io.load_parameters().
-
-    Returns:
-        List of prepared Transformers.
-
-    """
-    stages: List[Transformer] = []
-    concat_input_cols: List[str] = []
-
-    for transformer_name, features in config["TRANSFORMER_FEATURES"].items():
-        # OneHotEncoder takes an un-assembled numeric column as input.
-        if transformer_name == "OneHotEncoder":
-            for feature in features:
-                ohe = get_transformer(transformer_name)
-                ohe.setInputCol(feature)
-                ohe.setOutputCol(f"ohe_{feature}")
-                concat_input_cols.append(f"ohe_{feature}")
-                stages.append(ohe)
-        else:
-            stages.extend(
-                [
-                    VectorAssembler(
-                        inputCols=features, outputCol=f"to_{transformer_name}"
-                    ),
-                    get_transformer(transformer_name),
-                ]
-            )
-            concat_input_cols.append(f"from_{transformer_name}")
-
-    # We add a final concatenation stage of all columns that should be fed to the model.
-    stages.append(VectorAssembler(inputCols=concat_input_cols, outputCol="features"))
-    return stages
 
 
 def vector_disassembler(
@@ -179,121 +117,32 @@ class DateParser(
         )
 
 
-class DeltaDebtPerWorkforceColumnAdder(
-    Transformer
-):  # pylint: disable=too-few-public-methods
-    """A transformer to compute the change in social debt / nb of employees.
-
-    The diff over `n_months` is divided by the chosen duration (in months).
-
-    Args:
-        n_months: Number of months over which the diff is computed. Defaults to 3.
-
-    """
-
-    n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "n_months",
-        "Number of months for moving average computation.",
-    )
-
-    @keyword_only
-    def __init__(self, **kwargs):
-        super().__init__()
-        self._setDefault(n_months=3)
-        self.setParams(**kwargs)
-
-    @keyword_only
-    def setParams(self, **kwargs):
-        """Set parameters for this DeltaDebtPerWorkforceColumnAdder transformer.
-
-        Args:
-            n_months (int): Number of months that will be considered for diff.
-
-        """
-        return self._set(**kwargs)
-
-    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Computes the average change in social debt / nb of employees.
-
-        Args:
-            dataset: DataFrame to transform. It should contain debt and workforce data.
-
-        Returns:
-            Transformed DataFrame with an extra debt/workforce column.
-
-        """
-        assert {
-            "montant_part_ouvriere",
-            "montant_part_patronale",
-            "effectif",
-        } <= set(dataset.columns)
-
-        n_months = self.getOrDefault("n_months")
-        dataset = dataset.withColumn(
-            "dette_par_effectif",
-            (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
-            / dataset["effectif"],
-        )
-        return DiffOperator(
-            inputCol="dette_par_effectif",
-            n_months=n_months,
-            slope=True,
-        ).transform(dataset)
-
-
-class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to compute the social debt/contribution ratio."""
-
-    def _transform(  # pylint: disable=no-self-use
-        self, dataset: pyspark.sql.DataFrame
-    ) -> pyspark.sql.DataFrame:
-        """Computes the social debt/contribution ratio.
-
-        Args:
-            dataset: DataFrame to transform.
-
-        Returns:
-            Transformed DataFrame with an extra `ratio_dette` column.
-
-        """
-        assert {
-            "montant_part_ouvriere",
-            "montant_part_patronale",
-            "cotisation_mean12m",
-        } <= set(dataset.columns)
-
-        return dataset.withColumn(
-            "ratio_dette",
-            (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
-            / dataset["cotisation_mean12m"],
-        )
-
-
-class PaydexOneHotEncoder(
+class BinsOrdinalEncoder(
     Transformer, HasInputCol, HasOutputCol
 ):  # pylint: disable=too-few-public-methods
-    """A transformer to compute one-hot encoded features associated with Paydex data.
+    """A transformer that bins continuous features into ordered buckets.
+
+    The transformed feature will be encoded as a float ordinal feature (0.0, 1.0, ...)
+    and can be further one-hot encoded if needed using another Transformer.
 
     Args:
-        inputCol (str): The variable to be one-hot encoded.
+        inputCol (str): The variable to be encoded.
         bins (list): A list of bins, with adjacent and increasing number of days values,
           e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will be cast to
           floats.
-        outputCol (str): The one-hot encoded column name.
+        outputCol (str): The ordinal encoded column name.
 
     """
 
     bins = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "bins",
-        "Bins for paydex number of days one hot encoding.",
+        "Bins edges to be used to bucketize variable.",
     )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol="paydex", outputCol="paydex_bin", bins=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -301,33 +150,31 @@ class PaydexOneHotEncoder(
         """Set parameters for this transformer.
 
         Args:
-            inputCol (str): The variable to be one-hot encoded.
-            bins (list): A list of bins, with adjacent and increasing number of days
-              values, e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will
-              be cast to floats.
-            outputCol (str): The one-hot encoded column name.
+            inputCol (str): The variable to be encoded.
+            bins (list): A list of bins, with adjacent and increasing values, e.g.:
+              `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will be cast to
+              floats.
+            outputCol (str): The ordinal encoded column name.
 
         """
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Computes the quantile bins of payment delay (in days).
+        """Ordinal encode the variable using input bins.
 
         Args:
             dataset: DataFrame to transform.
 
         Returns:
-             Transformed DataFrame with extra `paydex_bins` columns.
+             Transformed DataFrame with extra `{var}_bins` columns.
 
         """
 
         ## Binned paydex
-        days_bins = self.getOrDefault("bins")
-        days_splits = np.unique(
-            np.array([float(v) for v in itertools.chain(*days_bins)])
-        )
+        bins = self.getOrDefault("bins")
+        splits = np.unique(np.array([float(v) for v in itertools.chain(*bins)]))
         bucketizer = pyspark.ml.feature.Bucketizer(
-            splits=days_splits,
+            splits=splits,
             handleInvalid="error",
             inputCol=self.getOrDefault("inputCol"),
             outputCol=self.getOrDefault("outputCol"),
@@ -385,14 +232,18 @@ class MissingValuesHandler(
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Fills entries containing missing values.
+        """Fill entries containing missing values inplace.
 
         Args:
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-
             DataFrame where previously missing values are either filled.
+
+        Raises:
+            ValueError if:
+            - both `value` and `stat_strategy` or neither are set.
+            - statistical imputation is required on non-numerical columns.
 
         """
         stat_strategy: str = self.getOrDefault("stat_strategy")
@@ -404,11 +255,6 @@ class MissingValuesHandler(
                 "`value` and `stat_strategy` are mutually exclusive. Use either one."
             )
         if value is not None:
-            for col in input_cols:
-                for var, val in value.items():
-                    if re.match(rf"{var}_(diff|slope|mean|lag)\d+m$", col):
-                        value[col] = val
-                        break
             dataset = dataset.fillna(
                 {var: val for var, val in value.items() if var in input_cols}
             )
@@ -426,6 +272,80 @@ class MissingValuesHandler(
         else:
             raise ValueError("Either `value` or `stat_strategy` must be set.")
         return dataset
+
+
+class MissingValuesDropper(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
+    """Drops missing values.
+
+    This Transformer is only a way to simply drop null values inside a Pipeline.
+    pyspark.sql.DataFrame.dropna() is called using `how=any`, meaning that any row
+    containing at least one missing value found among `inputCols` will be dropped.
+
+    Args:
+        inputCols: The input dataset columns to consider for dropping.
+        ignore_type: Ignore any inputCol if its type is found inside ignore_type.
+
+    """
+
+    ignore_type = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ignore_type",
+        "Columns of these types will be ignored.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(
+            ignore_type=(
+                T.ArrayType,
+                T.MapType,
+                T.StructType,
+                T.StructField,
+                T.UserDefinedType,
+            )
+        )
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            inputCols (list[str]): The input dataset columns to consider for dropping.
+            ignore_type (tuple[str]): Ignore any inputCol if its type is found inside
+              ignore_type.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Applies dropna to a dataset.
+
+        Args:
+            dataset: DataFrame containing missing values.
+
+        Returns:
+            DataFrame where rows with missing values are dropped.
+
+        """
+        input_cols: List[str] = self.getOrDefault("inputCols")
+        ignore_type: Tuple[str] = self.getOrDefault("ignore_type")
+        dropna_dataset = dataset.dropna(
+            subset=[
+                feature
+                for feature in input_cols
+                if not isinstance(dataset.schema[feature].dataType, ignore_type)
+            ]
+        )
+
+        if dropna_dataset.count() != dataset.count():
+            logging.info(
+                "Some rows containing null values in subset %s were dropped", input_cols
+            )
+        return dropna_dataset
 
 
 class IdentifierNormalizer(
@@ -550,12 +470,48 @@ class SiretToSiren(
 class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
     """A transformer to aggregate data at a SIREN level."""
 
-    def __init__(self, config):
+    grouping_cols = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "grouping_cols",
+        "Column to group by begore aggregation",
+    )
+    aggregation_map = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "aggregation_map",
+        "Mapping between feature names and an aggregation operation.",
+    )
+    no_aggregation = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "no_aggregation",
+        "Column that should be kept as-is.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(
+            grouping_cols=["siren", "periode"],
+            aggregation_map=None,
+            no_aggregation=None,
+        )
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this SiretToSiren.
+
+        Args:
+            grouping_cols (list[str]): A list of columns to groupby before aggregation.
+            aggregation_map (dict[str, str]): A mapping between variables names and
+              aggregation operation.
+            no_aggregation (list[str]): A list of columns that should not be aggregated
+              but should be preserved in the output.
+
+        """
+        return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Aggregate data at a SIREN level by sum or average.
+        """Aggregate data at a SIREN level by sum, average, etc.
 
         Args:
             dataset: DataFrame to transform containing data at a SIRET level.
@@ -564,21 +520,20 @@ class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
             Transformed DataFrame at a SIREN level.
 
         """
-        assert {"IDENTIFIERS", "SIREN_AGGREGATION", "NO_AGGREGATION"} <= set(
-            self.config
-        )
 
-        aggregated = dataset.groupBy(self.config["IDENTIFIERS"]).agg(
-            self.config["SIREN_AGGREGATION"]
-        )
-        for colname, func in self.config["SIREN_AGGREGATION"].items():
+        grouping_cols = self.getOrDefault("grouping_cols")
+        no_aggregation = self.getOrDefault("no_aggregation")
+        agg_map = self.getOrDefault("aggregation_map")
+        if no_aggregation is None:
+            no_aggregation = []
+
+        aggregated = dataset.groupBy(grouping_cols).agg(agg_map)
+        for colname, func in agg_map.items():
             aggregated = aggregated.withColumnRenamed(f"{func}({colname})", colname)
-        siren_level = dataset.select(
-            self.config["NO_AGGREGATION"] + self.config["IDENTIFIERS"]
-        ).distinct()
+            siren_level = dataset.select(grouping_cols + no_aggregation).distinct()
         return aggregated.join(
             siren_level,
-            on=["siren", "periode"],
+            on=self.getOrDefault("grouping_cols"),
             how="left",
         )
 
@@ -1053,41 +1008,6 @@ class TargetVariable(
                 T.IntegerType()
             ),  # Pyspark models except integer or floating labels.
         ).fillna(value={self.getOrDefault("outputCol"): 0})
-
-
-class ColumnSelector(
-    Transformer, HasInputCols
-):  # pylint: disable=too-few-public-methods
-    """A transformer to select the columns of the dataset used in the model."""
-
-    @keyword_only
-    def __init__(self, **kwargs):
-        super().__init__()
-        self._setDefault(inputCols=None)
-        self.setParams(**kwargs)
-
-    @keyword_only
-    def setParams(self, inputCols: List[str]):
-        """Set parameters for this ColumnSelector transformer.
-
-        Args:
-            inputCols (list): The columns that will be used in the ML process.
-
-        """
-        return self._set(inputCols=inputCols)
-
-    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Select the columns of the dataset used in ML process.
-
-        Args:
-            dataset: DataFrame to select columns from.
-
-        Returns:
-            Transformed DataFrame.
-
-        """
-        dataset = dataset.select(self.getOrDefault("inputCols"))
-        return dataset
 
 
 class PrivateCompanyFilter(Transformer):  # pylint: disable=too-few-public-methods

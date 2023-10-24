@@ -41,33 +41,22 @@ def numerical_columns(df: pyspark.sql.DataFrame) -> List[str]:
     ]
 
 
-def feature_index(config: dict) -> List[str]:
-    """Generates an index associated with the features matrix columns.
+def extract_column_names(df: pyspark.sql.DataFrame, assembled_column: str) -> List[str]:
+    """Get inner column names from an assembled column.
 
-    This index is used to keep track of the position of each features, which comes in
-    handy in the explanation stage.
+    Here, "assembled" means : that has been transformed using a VectorAssembler.
 
     Args:
-        config: model configuration, as loaded by io.load_parameters().
+        df: A DataFrame
+        assembled_column: The "assembled" column name.
 
     Returns:
-        A list of features ordered as they are inside the features matrix.
+        A list of column names.
 
     """
-    indexer: List[str] = []
-    for transformer, features in config["TRANSFORMER_FEATURES"].items():
-        if transformer == "StandardScaler":
-            indexer.extend(features)
-        elif transformer == "OneHotEncoder":
-            for feature in features:
-                indexer.extend(
-                    [
-                        f"{feature}_ohcat{i}"
-                        for i, _ in enumerate(config["ONE_HOT_CATEGORIES"][feature])
-                    ]
-                )
-        else:
-            raise NotImplementedError(
-                f"Indexing for transformer {transformer} is not implemented yet."
-            )
-    return indexer
+    column_metadata = df.schema[assembled_column].metadata["ml_attr"]
+    columns = [None] * column_metadata["num_attrs"]
+    for _, variables in column_metadata["attrs"].items():
+        for variable_dict in variables:
+            columns[variable_dict["idx"]] = variable_dict["name"]
+    return columns

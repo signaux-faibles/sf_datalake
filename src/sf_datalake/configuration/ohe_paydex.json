@@ -1,0 +1,163 @@
+{
+    "fill_default_values": {
+        "paydex": 0,
+        "cotisation": 0.0,
+        "montant_part_ouvriere": 0.0,
+        "montant_part_patronale": 0.0,
+        "dette_sur_cotisation_liss\u00e9e": 0.0,
+        "apart_heures_consommees": 0.0,
+        "dette_par_effectif": 0.0,
+        "effectif": 0,
+        "mnt_af_bfonc_bfr": 0.0,
+        "mnt_af_bfonc_tresorerie": 0.0,
+        "mnt_af_bfonc_frng": 0.0,
+        "mnt_af_ca": 0.0,
+        "mnt_af_sig_ebe_ret": 0.0,
+        "rto_af_ratio_rent_mbe": 0.0,
+        "rto_af_rent_eco": 0.0,
+        "rto_af_solidite_financiere": 0.0,
+        "rto_invest_ca": 0.0
+    },
+    "fill_imputation_strategy": {},
+    "features_transformers": {
+        "mnt_af_bfonc_bfr": [
+            "StandardScaler"
+        ],
+        "mnt_af_bfonc_tresorerie": [
+            "StandardScaler"
+        ],
+        "rto_af_ratio_rent_mbe": [
+            "StandardScaler"
+        ],
+        "mnt_af_bfonc_frng": [
+            "StandardScaler"
+        ],
+        "mnt_af_ca": [
+            "StandardScaler"
+        ],
+        "mnt_af_sig_ebe_ret": [
+            "StandardScaler"
+        ],
+        "rto_af_rent_eco": [
+            "StandardScaler"
+        ],
+        "rto_af_solidite_financiere": [
+            "StandardScaler"
+        ],
+        "rto_invest_ca": [
+            "StandardScaler"
+        ],
+        "cotisation": [
+            "StandardScaler"
+        ],
+        "montant_part_ouvriere": [
+            "StandardScaler"
+        ],
+        "montant_part_patronale": [
+            "StandardScaler"
+        ],
+        "effectif": [
+            "StandardScaler"
+        ],
+        "apart_heures_consommees": [
+            "StandardScaler"
+        ],
+        "dette_sur_cotisation_liss\u00e9e": [
+            "StandardScaler"
+        ],
+        "dette_par_effectif": [
+            "StandardScaler"
+        ],
+        "paydex": [
+            "BinsOrdinalEncoder",
+            "OneHotEncoder"
+        ]
+    },
+    "ordinal_encoding_bins": {
+        "paydex": [
+            [
+                "-inf",
+                "0"
+            ],
+            [
+                "0",
+                "15"
+            ],
+            [
+                "15",
+                "30"
+            ],
+            [
+                "30",
+                "60"
+            ],
+            [
+                "60",
+                "90"
+            ],
+            [
+                "90",
+                "inf"
+            ]
+        ]
+    },
+    "topic_groups": {
+        "sante_financiere": [
+            "mnt_af_bfonc_bfr",
+            "mnt_af_bfonc_frng",
+            "mnt_af_bfonc_tresorerie",
+            "mnt_af_ca",
+            "mnt_af_sig_ebe_ret",
+            "rto_af_ratio_rent_mbe",
+            "rto_af_rent_eco",
+            "rto_af_solidite_financiere",
+            "rto_invest_ca"
+        ],
+        "activite_partielle": [
+            "apart_heures_consommees"
+        ],
+        "dette_urssaf": [
+            "cotisation",
+            "montant_part_ouvriere",
+            "montant_part_patronale",
+            "dette"
+        ],
+        "retards_paiement": [
+            "paydex"
+        ],
+        "misc": [
+            "effectif"
+        ]
+    },
+    "time_aggregation": {
+        "diff": {
+            "paydex": [
+                12
+            ],
+            "dette_par_effectif": [
+                3
+            ]
+        },
+        "mean": {
+            "cotisation": [
+                12
+            ]
+        },
+        "lag": {
+            "montant_part_ouvriere": [
+                1,
+                2,
+                3,
+                6,
+                12
+            ],
+            "montant_part_patronale": [
+                1,
+                2,
+                3,
+                6,
+                12
+            ]
+        }
+    }
+}

@@ -37,26 +37,14 @@ parser = sf_datalake.io.data_path_parser()
 parser.description = "Build a dataset with aggregated SIREN-level data and new time \
 averaged/lagged variables."
 
-parser.add_argument(
-    "-t",
-    "--time_computations",
-    help="Configuration file containing required time-computations.",
-    default="time_series.json",
-)
-parser.add_argument(
-    "-a",
-    "--aggregation",
-    help="Configuration file with aggregation info.",
-    default="aggregation.json",
-)
+parser.add_argument("-c", "--configuration", help="Configuration file.", required=True)
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
 
 
 args = parser.parse_args()
-time_comp_config = sf_datalake.io.load_variables(args.time_computations)
-agg_config = sf_datalake.io.load_variables(args.aggregation)
+configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
 input_ds = sf_datalake.io.load_data(
     {"input": args.input}, file_format="csv", sep=",", infer_schema=False
 )["input"]
@@ -75,10 +63,14 @@ siret_level_ds = siret_level_ds.withColumn(
 
 # Filter out public institutions and companies and aggregate at SIREN level
 siren_converter = sf_datalake.transform.SiretToSiren()
-aggregator = sf_datalake.transform.SirenAggregator(agg_config)
+aggregator = sf_datalake.transform.SirenAggregator(
+    grouping_cols=configuration.preprocessing.identifiers,
+    aggregation_map=configuration.preprocessing.siren_aggregation,
+    no_aggregation=[],
+)
 siren_level_ds = (
-    PipelineModel([siren_converter, aggregator])
-    .transform(siret_level_ds)
+    PipelineModel(stages=[siren_converter, aggregator])
+    .fit(siret_level_ds)
     .select(
         [
             "periode",
@@ -96,39 +88,53 @@ siren_level_ds = (
 # Time Computations #
 #####################
 
-time_computations: List[Transformer] = []
-for feature, n_months in time_comp_config["LAG"].items():
-    if feature in siren_level_ds.columns:
-        time_computations.append(
-            sf_datalake.transform.LagOperator(
-                inputCol=feature, n_months=n_months, bfill=True
-            )
-        )
-for feature, n_months in time_comp_config["DIFF"].items():
-    if feature in siren_level_ds.columns:
-        time_computations.append(
-            sf_datalake.transform.DiffOperator(
-                inputCol=feature, n_months=n_months, bfill=True
-            )
-        )
-for feature, n_months in time_comp_config["MOVING_AVERAGE"].items():
-    if feature in siren_level_ds.columns:
-        time_computations.append(
-            sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
-        )
+# pylint: disable=unsubscriptable-object
 
+time_computations: List[Transformer] = []
+for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
+    time_computations.append(
+        sf_datalake.transform.LagOperator(
+            inputCol=feature, n_months=n_months, bfill=True
+        )
+    )
+for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
+    time_computations.append(
+        sf_datalake.transform.DiffOperator(
+            inputCol=feature, n_months=n_months, bfill=True
+        )
+    )
+for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
+    time_computations.append(
+        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
+    )
+
+time_agg_ds = PipelineModel(stages=time_computations).transform(siren_level_ds)
 
 #######################
 # Feature engineering #
 #######################
 
-feature_engineering = [
-    sf_datalake.transform.DebtRatioColumnAdder(),
-    sf_datalake.transform.MovingAverage(inputCol="ratio_dette", n_months=12),
-    sf_datalake.transform.DeltaDebtPerWorkforceColumnAdder(),
-]
-
-output_ds = PipelineModel(time_computations + feature_engineering).transform(
-    siren_level_ds
+# Add "debt / contribution"
+feat_eng_ds = time_agg_ds.withColumn(
+    "dette_sur_cotisation_lissée",
+    (time_agg_ds["montant_part_ouvriere"] + time_agg_ds["montant_part_patronale"])
+    / time_agg_ds["cotisation_mean12m"],
 )
+# Moving average
+feat_eng_ds = sf_datalake.transform.MovingAverage(
+    inputCol="dette_sur_cotisation_lissée", n_months=12
+).transform(feat_eng_ds)
+# Average debt / workforce
+feat_eng_ds = feat_eng_ds.withColumn(
+    "dette_par_effectif",
+    (feat_eng_ds["montant_part_ouvriere"] + feat_eng_ds["montant_part_patronale"])
+    / feat_eng_ds["effectif"],
+)
+output_ds = sf_datalake.transform.DiffOperator(
+    inputCol="dette_par_effectif",
+    n_months=3,
+    slope=True,
+).transform(feat_eng_ds)
+
+
 sf_datalake.io.write_data(output_ds, args.output, args.output_format)
