@@ -86,7 +86,7 @@ parser.add_argument(
 parser.add_argument(
     "--sample_ratio",
     type=float,
-    help="The loaded data sample size as a fraction of its complete size.",
+    help="Loaded data sample size as a fraction of its full size.",
 )
 parser.add_argument(
     "--drop_missing_values",

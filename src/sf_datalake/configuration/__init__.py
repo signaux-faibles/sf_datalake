@@ -44,14 +44,25 @@ class LearningConfiguration:
     """Machine learning configuration.
 
     Attributes:
-        target:
-        train_dates:
-        test_dates:
-        prediction_date:
-        train_test_split_ratio:
-        model_name:
-        model_params:
-        features_column:
+        target: A mapping containing the following :
+          - "class_col": Name of the column defining the sample's class.
+          - "n_months": Lengths of the window, in months, that is used to define the
+            target.
+          - "judgment_date_col": Name of a column containing judgment date.
+          - "oversampling_ratio": Required oversampling ratio for the positive samples
+            during training.
+        train_dates: Date interval (inclusive) that will be used to extract samples from
+          the dataset for training.
+        test_dates: Date interval (inclusive) that will be used to extract samples from
+          the dataset for testing.
+        prediction_date: Single month) that will be used to extract samples from the
+          dataset for testing.
+        train_test_split_ratio: Train / test sets sizes ratio.
+        model_name: Name of the required model.
+        model_params: Mapping from model names to mappings of these models' objects
+          kwargs.
+        features_column: Name of the column that will hold all features fed to the
+          model.
 
     """
 
@@ -68,7 +79,7 @@ class LearningConfiguration:
     prediction_date: str = "2020-02-01"
     train_test_split_ratio: float = 0.8
     model_name: str = "LogisticRegression"
-    model_params: Dict[str, Any] = dataclasses.field(
+    model_params: Dict[str, Dict[str, Any]] = dataclasses.field(
         default_factory=lambda: {
             "LogisticRegression": {
                 "regParam": 0.12,
@@ -101,17 +112,23 @@ class PreprocessingConfiguration:
     """Pre-processing configuration.
 
     Attributes:
-        identifiers:
-        default_factory:
-        siren_aggregation:
-        time_aggregation:
-        drop_missing_values:
-        fill_default_values:
-        fill_imputation_strategy:
-        features_transformers:
-        encoders_params:
-        ordinal_encoding_bins:
-        scalers_params:
+        identifiers: Iterable of variable names that identify a given sample.
+        siren_aggregation: Mapping from a variable name to an aggregation function (to
+          be used when grouping by SIREN and time).
+        time_aggregation: Mapping from functions to mapping from features to be
+          aggregated to number of months.
+        drop_missing_values: If true, drop any missing values from datasets before
+          proceeding to training.
+        fill_default_values: Mapping from feature name to associated default value.
+        fill_imputation_strategy: Mapping from feature name to stat function for
+          missing value imputation.
+        features_transformers: Mapping from features name to iterable of transformers
+          names.
+        encoders_params: Encoders kwargs used for instanciation of these objects.
+        ordinal_encoding_bins: Mapping from feature name to iterable of 2-uples
+          representing continuous values bins for ordinal encoding such as one-hot
+          encoding.
+        scalers_params: Scalers kwargs used for instanciation of these objects.
 
     """
 
@@ -174,9 +191,12 @@ class ExplanationConfiguration:
     """Explanation configuration.
 
     Attributes:
-        n_train_sample:
-        n_concerning_micro:
-        topic_groups:
+        n_train_sample: Number of training samples used for explanation case a linear
+          model is used.
+        n_concerning_micro: Number of most significant features (towards a positive
+          prediction) to extract during explanation
+        topic_groups: Mapping from a topic to a list of features associated with this
+          topic.
 
     """
 
@@ -192,11 +212,13 @@ class IOConfiguration:
     Parameters for reading / writing paths, as well as sampling.
 
     Attributes:
-        root_directory:
-        dataset_path:
-        prediction_path:
-        sample_ratio:
-        random_seed:
+        root_directory: Data root directory.
+        dataset_path: Path (relative to root_directory) to a dataset that will be used
+          for training, test or prediction.
+        prediction_path: Path (relative to root_directory) where predictions and
+          runtime parameters will be saved.
+        sample_ratio: Loaded data sample size as a fraction of its full size.
+        random_seed: An integer random seed (used during sampling operations).
 
     """
 
