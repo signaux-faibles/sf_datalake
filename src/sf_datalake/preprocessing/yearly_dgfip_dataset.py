@@ -32,13 +32,22 @@ parser = sf_datalake.io.data_path_parser()
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
+parser.add_argument(
+    "-c",
+    "--configuration",
+    help="""
+    Configuration file. This will be used to fetch required features.
+    """,
+    required=True,
+)
 parser.description = "Build a dataset of yearly DGFiP data."
 args = parser.parse_args()
 
+configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
 data_paths = {
     "indmap": path.join(args.input, "etl_decla", "declarations_indmap.csv"),
     "af": path.join(args.input, "etl_decla", "declarations_af.csv"),
-    "rar_tva": path.join(args.input, "cfvr", "rar_tva_exercice.csv"),
+    # "rar_tva": path.join(args.input, "cfvr", "rar_tva_exercice.csv"),
 }
 datasets = sf_datalake.io.load_data(data_paths, file_format="csv", sep="|")
 
@@ -62,9 +71,24 @@ declarations = datasets["indmap"].join(
     how="inner",
 )
 
-# Join TVA annual debt data
-df = declarations.join(
-    datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
-)
+# # Join TVA annual debt data
+# df = declarations.join(
+#     datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
+# )
 
-sf_datalake.io.write_data(df, args.output, args.output_format)
+feature_cols = configuration.explanation.topic_groups.get("sante_financiere")
+time_normalizer = [
+    sf_datalake.transform.TimeNormalizer(
+        inputCols=feature_cols,
+        start="date_deb_exercice",
+        end="date_fin_exercice",
+    ),
+    # sf_datalake.transform.TimeNormalizer(
+    #     inputCols=[""], start="date_deb_tva", end="date_fin_tva"
+    # ),
+]
+
+
+sf_datalake.io.write_data(
+    declarations.select(feature_cols), args.output, args.output_format
+)

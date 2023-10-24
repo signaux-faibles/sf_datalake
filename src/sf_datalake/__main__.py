@@ -161,19 +161,6 @@ filter_steps = []
 if with_paydex:
     filter_steps.append(sf_datalake.transform.HasPaydexFilter())
 
-# TODO: this only concerns data from a particular source and should be
-# handled before the main script.
-normalizing_steps = [
-    sf_datalake.transform.TimeNormalizer(
-        inputCols=configuration.explanation.topic_groups["sante_financiere"],
-        start="date_deb_exercice",
-        end="date_fin_exercice",
-    ),
-    # sf_datalake.transform.TimeNormalizer(
-    #     inputCols=[""], start="date_deb_tva", end="date_fin_tva"
-    # ),
-]
-
 building_steps = [
     sf_datalake.transform.TargetVariable(
         inputCol=configuration.learning.target["judgment_date_col"],
@@ -214,7 +201,6 @@ if configuration.preprocessing.fill_imputation_strategy:
 
 preprocessing_pipeline = Pipeline(
     stages=filter_steps
-    + normalizing_steps
     + building_steps
     + missing_values_handling_steps
     + configuration.encoding_scaling_stages()
