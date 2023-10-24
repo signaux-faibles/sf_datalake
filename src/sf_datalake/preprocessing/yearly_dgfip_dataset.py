@@ -21,7 +21,8 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
-# pylint: disable=C0413
+# pylint:disable=wrong-import-position
+import sf_datalake.configuration
 import sf_datalake.io
 
 ####################
