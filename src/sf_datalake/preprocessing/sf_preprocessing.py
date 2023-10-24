@@ -92,24 +92,21 @@ siren_level_ds = (
 
 time_computations: List[Transformer] = []
 for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
-    if feature in siren_level_ds.columns:
-        time_computations.append(
-            sf_datalake.transform.LagOperator(
-                inputCol=feature, n_months=n_months, bfill=True
-            )
+    time_computations.append(
+        sf_datalake.transform.LagOperator(
+            inputCol=feature, n_months=n_months, bfill=True
         )
+    )
 for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
-    if feature in siren_level_ds.columns:
-        time_computations.append(
-            sf_datalake.transform.DiffOperator(
-                inputCol=feature, n_months=n_months, bfill=True
-            )
+    time_computations.append(
+        sf_datalake.transform.DiffOperator(
+            inputCol=feature, n_months=n_months, bfill=True
         )
+    )
 for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
-    if feature in siren_level_ds.columns:
-        time_computations.append(
-            sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
-        )
+    time_computations.append(
+        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
+    )
 
 time_agg_ds = PipelineModel(stages=time_computations).transform(siren_level_ds)
 
