@@ -62,13 +62,8 @@ path_group.add_argument(
     help="Do not format as JSON. Only export raw data frame.",
 )
 path_group.add_argument(
-    "--variables",
-    help="Path to the variables configuration file.",
-    required=True,
-)
-path_group.add_argument(
-    "--parameters",
-    help="Path to the parameters configuration file.",
+    "--configuration",
+    help="Path to the configuration file.",
     required=True,
 )
 path_group.add_argument(
@@ -173,12 +168,11 @@ def identity(sig):
 # Parse CLI arguments, load predictions configuration and supplementary data
 
 args = parser.parse_args()
-pred_vars = sf_datalake.io.load_variables(args.variables)
-parameters = sf_datalake.io.load_parameters(args.parameters)
+configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
 
 micro_macro = {
     micro: macro
-    for macro, micros in pred_vars["FEATURE_GROUPS"].items()
+    for macro, micros in configuration.explanation.topic_groups.items()
     for micro in micros
 }
 
@@ -186,7 +180,7 @@ algo_name = args.algo_name
 if algo_name is None:
     algo_name = (
         "avec_paydex"
-        if "retards_paiement" in pred_vars["FEATURE_GROUPS"]
+        if "retards_paiement" in configuration.explanation.topic_groups.keys()
         else "sans_paydex"
     )
 
@@ -296,7 +290,7 @@ tailoring_signals = {
         identity,
         {
             "sig": urssaf_df[one_year_schedule_mask]
-            .groupby("siren")["ratio_dette"]
+            .groupby("siren")["dette_sur_cotisation_lissée"]
             .max()
             * 1
             / 12
@@ -307,8 +301,12 @@ tailoring_signals = {
         identity,
         {
             "sig": (
-                urssaf_df[urssaf_df["periode"] == recent_period_end]["ratio_dette"]
-                - urssaf_df[urssaf_df["periode"] == recent_period_start]["ratio_dette"]
+                urssaf_df[urssaf_df["periode"] == recent_period_end][
+                    "dette_sur_cotisation_lissée"
+                ]
+                - urssaf_df[urssaf_df["periode"] == recent_period_start][
+                    "dette_sur_cotisation_lissée"
+                ]
             )
             * 1
             / 12
@@ -362,7 +360,7 @@ prediction_set["alert"] = pd.Categorical.from_codes(
 )
 
 ## Score explanation per categories
-n_concerning_micro = parameters["N_CONCERNING_MICRO"]
+n_concerning_micro = configuration.explanation.n_concerning_micro
 concerning_micro_threshold = args.concerning_threshold
 concerning_values_columns = [f"concerning_val_{n}" for n in range(n_concerning_micro)]
 concerning_feats_columns = [f"concerning_feat_{n}" for n in range(n_concerning_micro)]

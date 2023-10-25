@@ -1,12 +1,10 @@
 """Utility functions for data handling."""
 
 import argparse
-import json
 import logging
 from os import path
-from typing import Dict, Iterable, Optional
+from typing import Dict
 
-import pkg_resources
 import pyspark.sql
 
 import sf_datalake.utils
@@ -166,72 +164,3 @@ def write_explanations(
     macro_scores_df.repartition(n_rep).write.csv(
         path.join(explanation_output_path), header=True
     )
-
-
-def load_parameters(fname: str) -> dict:
-    """Loads a model run parameters from a preset config json file.
-
-    Args:
-        fname: Basename of a config file (including .json extension).
-
-    Returns:
-        The model parameters to use during the learning procedure and prediction.
-
-    """
-    with pkg_resources.resource_stream(
-        "sf_datalake", f"config/parameters/{fname}"
-    ) as f:
-        config = json.load(f)
-    return config
-
-
-def load_variables(fname: str) -> dict:
-    """Loads a list of variables / features from a preset config json file.
-
-    Args:
-        fname: Basename of a config file (including .json extension).
-
-    Returns:
-        The variables, features and corresponding default values to use during the
-          learning procedure and prediction.
-
-    """
-    with pkg_resources.resource_stream("sf_datalake", f"config/variables/{fname}") as f:
-        config = json.load(f)
-    return config
-
-
-def dump_configuration(
-    output_dir: str, config: dict, dump_keys: Optional[Iterable] = None
-):
-    """Dumps a subset of the configuration used during a prediction run.
-
-    Args:
-        output_dir: The path where configuration should be dumped.
-        config: Model configuration, as loaded by io.load_parameters().
-        dump_keys: An Iterable of configuration parameters that should be dumped.
-          All elements of `dump_keys` must be part of `config`'s keys.
-
-    """
-    spark = sf_datalake.utils.get_spark_session()
-
-    config["VERSION"] = pkg_resources.get_distribution("sf_datalake").version
-    if dump_keys is None:
-        dump_keys = {
-            "SEED",
-            "SAMPLE_RATIO",
-            "VERSION",
-            "FILL_MISSING_VALUES",
-            "TRAIN_TEST_SPLIT_RATIO",
-            "TARGET_OVERSAMPLING_RATIO",
-            "N_CONCERNING_MICRO",
-            "TRAIN_DATES",
-            "TEST_DATES",
-            "PREDICTION_DATE",
-            "MODEL",
-            "FEATURES",
-        }
-    sub_config = {k: v for k, v in config.items() if k in dump_keys}
-
-    config_df = spark.createDataFrame(pyspark.sql.Row(sub_config))
-    config_df.repartition(1).write.json(path.join(output_dir, "run_configuration.json"))

@@ -35,17 +35,16 @@ spark = sf_datalake.utils.get_spark_session()
 parser = sf_datalake.io.data_path_parser()
 parser.description = "Extract and pre-process Altares data."
 parser.add_argument(
-    "-t",
-    "--time_computations",
+    "--configuration",
     help="Configuration file containing required time-computations.",
-    default="time_series.json",
+    required=True,
 )
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
 args = parser.parse_args()
 
-time_agg_config = sf_datalake.io.load_variables(args.time_computations)
+configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
 df = spark.read.csv(
     args.input,
     sep=";",
@@ -72,21 +71,22 @@ df = df.withColumnRenamed("SIREN", "siren")
 ## Pre-processing
 time_computations: List[Transformer] = []
 
-for feature, n_months in time_agg_config["LAG"].items():
+# pylint:disable=unsubscriptable-object
+for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
     if feature in df.columns:
         time_computations.append(
             sf_datalake.transform.LagOperator(
                 inputCol=feature, n_months=n_months, bfill=True
             )
         )
-for feature, n_months in time_agg_config["DIFF"].items():
+for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
     if feature in df.columns:
         time_computations.append(
             sf_datalake.transform.DiffOperator(
                 inputCol=feature, n_months=n_months, bfill=True
             )
         )
-for feature, n_months in time_agg_config["MOVING_AVERAGE"].items():
+for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
     if feature in df.columns:
         time_computations.append(
             sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
