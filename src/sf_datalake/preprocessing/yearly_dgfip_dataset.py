@@ -15,6 +15,7 @@ USAGE
 import os
 import sys
 from os import path
+from typing import List
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -77,7 +78,7 @@ declarations = datasets["indmap"].join(
 #     datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
 # )
 
-feature_cols = configuration.explanation.topic_groups.get("sante_financiere")
+feature_cols: List[str] = configuration.explanation.topic_groups.get("sante_financiere")
 time_normalizer = [
     sf_datalake.transform.TimeNormalizer(
         inputCols=feature_cols,
@@ -91,5 +92,7 @@ time_normalizer = [
 
 
 sf_datalake.io.write_data(
-    declarations.select(feature_cols), args.output, args.output_format
+    declarations.select(feature_cols + list(join_columns)),
+    args.output,
+    args.output_format,
 )
