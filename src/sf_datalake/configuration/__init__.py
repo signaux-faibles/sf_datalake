@@ -95,8 +95,12 @@ class LearningConfiguration:
     features_column: str = "features"
 
     def __post_init__(self):
-        self.train_dates = tuple(dt.date(*d.split("-")) for d in self.train_dates)
-        self.prediction_date = dt.date(*self.prediction_date.split("-"))
+        self.train_dates = tuple(
+            dt.date(*(int(s) for s in d.split("-"))) for d in self.train_dates
+        )
+        self.prediction_date = dt.date(
+            *(int(s) for s in self.prediction_date.split("-"))
+        )
 
     def get_model(self) -> Estimator:
         # pylint: disable=missing-function-docstring, not-a-mapping
