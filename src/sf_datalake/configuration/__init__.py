@@ -49,8 +49,11 @@ class LearningConfiguration:
           - "n_months": Lengths of the window, in months, that is used to define the
             target.
           - "judgment_date_col": Name of a column containing judgment date.
-          - "oversampling_ratio": Required oversampling ratio for the positive samples
-            during training.
+          - "target_resampling_ratio": Required (target_cls / total) # of samples ratio
+            used to resample the training dataset. We assume that the minority class is
+            the target class inside the dataset.
+          - "resampling_method": Choose between "oversampling" or "undersampling" for
+            training dataset resampling.
         train_dates: Date interval (inclusive) that will be used to extract samples from
           the dataset for training.
         test_dates: Date interval (inclusive) that will be used to extract samples from
@@ -71,7 +74,8 @@ class LearningConfiguration:
             "class_col": "failure",
             "n_months": 18,
             "judgment_date_col": "date_jugement",
-            "oversampling_ratio": 0.2,
+            "target_resampling_ratio": 0.35,
+            "resampling_method": "oversampling",
         }
     )
     train_dates: Tuple[str] = ("2016-01-01", "2019-05-31")

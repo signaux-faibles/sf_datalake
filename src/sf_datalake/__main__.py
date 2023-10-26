@@ -223,18 +223,19 @@ prediction_data = pre_dataset.filter(
     pre_dataset["periode"] == configuration.learning.prediction_date
 )
 
-# Oversample target in train dataset
-oversampler = sf_datalake.transform.OversamplingOperator(
-    targetCol=configuration.learning.target["class_col"],
-    oversampling_ratio=configuration.learning.target["oversampling_ratio"],
+# Resample train dataset following requested classes balance
+resampler = sf_datalake.transform.RandomResampler(
+    class_col=configuration.learning.target["class_col"],
+    method=configuration.learning.target["resampling_method"],
+    min_class_ratio=configuration.learning.target["target_resampling_ratio"],
     seed=configuration.io.random_seed,
 )
-train_data = oversampler.transform(train_data)
+resampled_train_data = resampler.transform(train_data)
 
 # Fit ML model and make predictions
 classifier = configuration.learning.get_model()
-classifier_model = classifier.fit(train_data)
-train_transformed = classifier_model.transform(train_data)
+classifier_model = classifier.fit(resampled_train_data)
+train_transformed = classifier_model.transform(resampled_train_data)
 test_transformed = classifier_model.transform(test_data)
 prediction_transformed = classifier_model.transform(prediction_data)
 

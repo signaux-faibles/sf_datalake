@@ -44,7 +44,7 @@ def numerical_columns(df: pyspark.sql.DataFrame) -> List[str]:
 def extract_column_names(df: pyspark.sql.DataFrame, assembled_column: str) -> List[str]:
     """Get inner column names from an assembled column.
 
-    Here, "assembled" means : that has been transformed using a VectorAssembler.
+    Here, "assembled" means: that has been transformed using a VectorAssembler.
 
     Args:
         df: A DataFrame
