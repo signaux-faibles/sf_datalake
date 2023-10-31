@@ -13,6 +13,7 @@ from typing import Dict, List
 
 import numpy as np
 import pyspark
+import pyspark.sql.functions as F
 from pyspark.ml import Pipeline
 
 # isort: off
@@ -23,8 +24,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 import sf_datalake.configuration
 import sf_datalake.explain
 import sf_datalake.io
-import sf_datalake.model
-import sf_datalake.sampler
+import sf_datalake.model_selection
 import sf_datalake.transform
 import sf_datalake.utils
 
@@ -71,12 +71,6 @@ parser.add_argument(
     type=str,
     nargs=2,
     help="The training set start and end dates (YYYY-MM-DD format).",
-)
-parser.add_argument(
-    "--test_dates",
-    type=str,
-    nargs=2,
-    help="The test set start and end dates (YYYY-MM-DD format).",
 )
 parser.add_argument(
     "--prediction_date",
@@ -209,26 +203,40 @@ preprocessing_pipeline = Pipeline(
 preprocessing_pipeline_model = preprocessing_pipeline.fit(raw_dataset)
 pre_dataset = preprocessing_pipeline_model.transform(raw_dataset).cache()
 
-# Split the dataset into train, test, predict subsets.
-(
-    train_data,
-    test_data,
-    prediction_data,
-) = sf_datalake.sampler.train_test_predict_split(
-    pre_dataset,
-    configuration.learning.target["class_col"],
-    configuration.learning.target["oversampling_ratio"],
-    configuration.learning.train_test_split_ratio,
-    configuration.learning.train_dates,
-    configuration.learning.test_dates,
-    configuration.learning.prediction_date,
+# Split the dataset into train, test for evaluation.
+train_data, test_data = sf_datalake.model_selection.train_test_split(
+    pre_dataset.filter(
+        (
+            sf_datalake.utils.to_date(configuration.learning.train_dates[0])
+            <= F.col("periode")
+        )
+        & (
+            F.col("periode")
+            < sf_datalake.utils.to_date(configuration.learning.train_dates[1])
+        )
+    ),
     configuration.io.random_seed,
+    train_size=configuration.learning.train_size,
+    group_col="siren",
 )
+prediction_data = pre_dataset.filter(
+    F.col("periode")
+    == sf_datalake.utils.to_date(configuration.learning.prediction_date)
+)
+
+# Resample train dataset following requested classes balance
+resampler = sf_datalake.transform.RandomResampler(
+    class_col=configuration.learning.target["class_col"],
+    method=configuration.learning.target["resampling_method"],
+    min_class_ratio=configuration.learning.target["target_resampling_ratio"],
+    seed=configuration.io.random_seed,
+)
+resampled_train_data = resampler.transform(train_data)
 
 # Fit ML model and make predictions
 classifier = configuration.learning.get_model()
-classifier_model = classifier.fit(train_data)
-train_transformed = classifier_model.transform(train_data)
+classifier_model = classifier.fit(resampled_train_data)
+train_transformed = classifier_model.transform(resampled_train_data)
 test_transformed = classifier_model.transform(test_data)
 prediction_transformed = classifier_model.transform(prediction_data)
 

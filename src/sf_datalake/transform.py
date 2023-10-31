@@ -604,7 +604,9 @@ class TimeNormalizer(
         return dataset
 
 
-class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
+class MovingAverage(
+    Transformer, HasInputCol
+):  # pylint: disable=too-few-public-methods,protected-access
     """A transformer that computes moving averages of time-series variables.
 
     Args:
@@ -614,12 +616,12 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
     """
 
     n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "n_months",
         "Number of months for moving average computation.",
     )
     ref_date = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "ref_date",
         "A reference date, used to compute number of months between rows.",
     )
@@ -690,7 +692,9 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
         return dataset.drop("ref_date", "months_from_ref")
 
 
-class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
+class LagOperator(
+    Transformer, HasInputCol
+):  # pylint: disable=too-few-public-methods,protected-access
     """A transformer that computes lagged values of a given time-indexed variable.
 
     A forward or backward fill can optionally be performed when lag data is unavailable.
@@ -705,26 +709,26 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
     """
 
     n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "n_months",
         "Number of months for lag computation.",
     )
 
     ref_date = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "ref_date",
         "A reference date, used to compute number of months between rows.",
     )
 
     bfill = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "bfill",
         "A boolean, used to specify if a backward completion is applied to missing lag \
         data.",
     )
 
     ffill = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "ffill",
         "A boolean, used to specify if a forward completion is applied to missing lag \
         data.",
@@ -841,7 +845,9 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
         return dataset.drop("ref_date", "months_from_ref")
 
 
-class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
+class DiffOperator(
+    Transformer, HasInputCol
+):  # pylint: disable=too-few-public-methods,protected-access
     """A transformer that computes the time evolution of a given time-indexed variable.
 
     This transformer creates a LagOperator under the hood if the required lagged
@@ -859,24 +865,24 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
     """
 
     slope = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "slope",
         "Divide difference by the duration.",
     )
     n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "n_months",
         "Number of months for diff computation.",
     )
     bfill = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "bfill",
         "A boolean, used to specify if a backward completion is applied to missing lag \
         data.",
     )
 
     ffill = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "ffill",
         "A boolean, used to specify if a forward completion is applied to missing lag \
         data.",
@@ -960,11 +966,11 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
 
 class TargetVariable(
     Transformer, HasInputCol, HasOutputCol
-):  # pylint: disable=too-few-public-methods
+):  # pylint: disable=too-few-public-methods, protected-access
     """A transformer to compute the company failure target variable."""
 
     n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "n_months",
         "Number of months for failure forecast.",
     )
@@ -1076,7 +1082,7 @@ class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
 
 class LinearInterpolationOperator(
     Transformer, HasInputCols
-):  # pylint: disable=too-few-public-methods
+):  # pylint: disable=too-few-public-methods,protected-access
     """A transformer that fills missing values using linear interpolation.
 
     Data is grouped using the `id_cols` columns and ordered using the `time_col`, any
@@ -1090,12 +1096,12 @@ class LinearInterpolationOperator(
     """
 
     id_cols = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "id_cols",
         "Id columns to group for interpolation.",
     )
     time_col = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "time_col",
         "Columns to follow for interpolation.",
     )
@@ -1197,3 +1203,118 @@ class LinearInterpolationOperator(
             "interval_length_rn",
             "curr_rn",
         )
+
+
+class RandomResampler(
+    Transformer
+):  # pylint: disable=too-few-public-methods,protected-access
+    """Resample dataset to attain some specific (binary) classes ratio.
+
+    The dataset is resampled according to the min_class_ratio parameter so as to obtain
+    the requested balance between the two classes. If `method` is "undersampling", the
+    majority class samples are subsampled, if `method` is "oversampling", the minority
+    class samples are oversampled using random sampling with replacement.
+
+    Args:
+        seed: Sampling random seed.
+        method: "undersampling" will delete majority class samples, while "oversampling"
+          will sample with replacement from minority class.
+        class_col: Class label column.
+        min_class_ratio: Requested (minority class / dataset size) ratio.
+
+    """
+
+    seed = Param(
+        Params._dummy(),
+        "seed",
+        "Sampling random seed.",
+    )
+    method = Param(
+        Params._dummy(),
+        "method",
+        "Resampling method.",
+    )
+    min_class_ratio = Param(
+        Params._dummy(),
+        "min_class_ratio",
+        "Requested (minority class / total n samples) output ratio.",
+    )
+    class_col = Param(
+        Params._dummy(),
+        "class_col",
+        "Class label column.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(
+            class_col="failure",
+        )
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer.
+
+        Args:
+            seed (int): Sampling random seed.
+            method (str): "undersampling" will delete majority class samples, while
+              "oversampling" will sample with replacement from minority class.
+            class_col (str): Class label column.
+            min_class_ratio (float): Requested (minority class / dataset size) ratio.
+
+        """
+        return self._set(**kwargs)
+
+    def _transform(  # pylint:disable=too-many-locals
+        self, dataset: pyspark.sql.DataFrame
+    ) -> pyspark.sql.DataFrame:
+        """Resamples the dataset.
+
+        Returns:
+            DataFrame, resampled according to requested ratio.
+
+        """
+        seed: int = self.getOrDefault("seed")
+        class_col: str = self.getOrDefault("class_col")
+        method: str = self.getOrDefault("method")
+        min_class_ratio: float = self.getOrDefault("min_class_ratio")
+        maj_class_ratio: float = 1.0 - min_class_ratio
+
+        if method not in {"undersampling", "oversampling"}:
+            raise ValueError(f"Unknown resampling method {method}.")
+
+        # Get class counts and filter subsets
+        class_counts = dataset.groupBy(class_col).count().rdd.collectAsMap()
+        majority_class_label = max(class_counts, key=class_counts.get)
+        minority_class_label = min(class_counts, key=class_counts.get)
+        majority_class_count: int = class_counts[majority_class_label]
+        minority_class_count: int = class_counts[minority_class_label]
+        majority_class_df = dataset.filter(F.col(class_col) == majority_class_label)
+        minority_class_df = dataset.filter(F.col(class_col) == minority_class_label)
+
+        if method == "undersampling":
+            # We compute total number of samples in resampled dataset given fixed
+            # minority class samples, then we undersample the majority class subset.
+            subset_size = int(minority_class_count / min_class_ratio)
+            n_post_sampling_maj_class = int(maj_class_ratio * subset_size)
+            downsampled_df = majority_class_df.sample(
+                withReplacement=False,
+                fraction=n_post_sampling_maj_class / majority_class_count,
+                seed=seed,
+            )
+            resampled_df = downsampled_df.union(minority_class_df)
+        elif method == "oversampling":
+            # We compute total number of samples in resampled dataset given fixed
+            # majority class samples, then we oversample the minority class subset.
+            subset_size = int(majority_class_count / maj_class_ratio)
+            n_post_sampling_min_class = int(min_class_ratio * subset_size)
+            upsampled_df = minority_class_df.sample(
+                withReplacement=True,
+                fraction=n_post_sampling_min_class / minority_class_count,
+                seed=seed,
+            )
+            resampled_df = upsampled_df.union(majority_class_df)
+
+        return resampled_df

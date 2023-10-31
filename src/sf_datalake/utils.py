@@ -1,5 +1,6 @@
 """Utility functions."""
 
+import datetime as dt
 from typing import List
 
 import pyspark.sql
@@ -44,7 +45,7 @@ def numerical_columns(df: pyspark.sql.DataFrame) -> List[str]:
 def extract_column_names(df: pyspark.sql.DataFrame, assembled_column: str) -> List[str]:
     """Get inner column names from an assembled column.
 
-    Here, "assembled" means : that has been transformed using a VectorAssembler.
+    Here, "assembled" means: that has been transformed using a VectorAssembler.
 
     Args:
         df: A DataFrame
@@ -60,3 +61,8 @@ def extract_column_names(df: pyspark.sql.DataFrame, assembled_column: str) -> Li
         for variable_dict in variables:
             columns[variable_dict["idx"]] = variable_dict["name"]
     return columns
+
+
+def to_date(str_date: str, date_format="%Y-%m-%d") -> dt.date:
+    """Convert string date to datetime.date object"""
+    return dt.datetime.strptime(str_date, date_format).date()

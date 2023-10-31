@@ -7,7 +7,6 @@ import pandas as pd
 import pyspark.ml.classification
 import shap
 
-import sf_datalake.model
 import sf_datalake.transform
 import sf_datalake.utils
 
