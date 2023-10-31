@@ -1289,7 +1289,7 @@ class RandomResampler(
         class_counts = dataset.groupBy(class_col).count().rdd.collectAsMap()
         majority_class_label = max(class_counts, key=class_counts.get)
         minority_class_label = min(class_counts, key=class_counts.get)
-        majority_class_count: int = class_counts[minority_class_label]
+        majority_class_count: int = class_counts[majority_class_label]
         minority_class_count: int = class_counts[minority_class_label]
         majority_class_df = dataset.filter(F.col(class_col) == majority_class_label)
         minority_class_df = dataset.filter(F.col(class_col) == minority_class_label)
