@@ -72,12 +72,6 @@ parser.add_argument(
     help="The training set start and end dates (YYYY-MM-DD format).",
 )
 parser.add_argument(
-    "--test_dates",
-    type=str,
-    nargs=2,
-    help="The test set start and end dates (YYYY-MM-DD format).",
-)
-parser.add_argument(
     "--prediction_date",
     type=str,
     help="The date over which prediction should be made (YYYY-MM-DD format).",
