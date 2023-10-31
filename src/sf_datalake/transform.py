@@ -1277,7 +1277,7 @@ class RandomResampler(
 
         """
         seed: int = self.getOrDefault("seed")
-        class_col: List[str] = self.getOrDefault("class_col")
+        class_col: str = self.getOrDefault("class_col")
         method: str = self.getOrDefault("method")
         min_class_ratio: float = self.getOrDefault("min_class_ratio")
         maj_class_ratio: float = 1.0 - min_class_ratio
@@ -1291,8 +1291,8 @@ class RandomResampler(
         minority_class_label = min(class_counts, key=class_counts.get)
         majority_class_count: int = class_counts[minority_class_label]
         minority_class_count: int = class_counts[minority_class_label]
-        majority_class_df = dataset.filter(class_col == majority_class_label)
-        minority_class_df = dataset.filter(class_col == minority_class_label)
+        majority_class_df = dataset.filter(F.col(class_col) == majority_class_label)
+        minority_class_df = dataset.filter(F.col(class_col) == minority_class_label)
 
         if method == "undersampling":
             # We compute total number of samples in resampled dataset given fixed
