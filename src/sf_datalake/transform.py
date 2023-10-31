@@ -1287,21 +1287,17 @@ class RandomResampler(
 
         # Get class counts and filter subsets
         class_counts = dataset.groupBy(class_col).count().rdd.collectAsMap()
-        majority_label = None
-        majority_class_count: int = 0
-        for label, n_samples in class_counts.items():
-            if n_samples > majority_class_count:
-                majority_class_count = n_samples
-                majority_label = label
-        minority_label = class_counts - {majority_label}
-        minority_class_count: int = class_counts[minority_label]
-        minority_class_df = dataset.filter(class_col == minority_label)
-        majority_class_df = dataset.filter(class_col == majority_label)
+        majority_class_label = max(class_counts, key=class_counts.get)
+        minority_class_label = min(class_counts, key=class_counts.get)
+        majority_class_count: int = class_counts[minority_class_label]
+        minority_class_count: int = class_counts[minority_class_label]
+        majority_class_df = dataset.filter(class_col == majority_class_label)
+        minority_class_df = dataset.filter(class_col == minority_class_label)
 
         if method == "undersampling":
             # We compute total number of samples in resampled dataset given fixed
             # minority class samples, then we undersample the majority class subset.
-            subset_size = int(class_counts[minority_label] / min_class_ratio)
+            subset_size = int(minority_class_count / min_class_ratio)
             n_post_sampling_maj_class = int(maj_class_ratio * subset_size)
             downsampled_df = majority_class_df.sample(
                 withReplacement=False,
@@ -1312,7 +1308,7 @@ class RandomResampler(
         elif method == "oversampling":
             # We compute total number of samples in resampled dataset given fixed
             # majority class samples, then we oversample the minority class subset.
-            subset_size = int(class_counts[majority_label] / maj_class_ratio)
+            subset_size = int(majority_class_count / maj_class_ratio)
             n_post_sampling_min_class = int(min_class_ratio * subset_size)
             upsampled_df = minority_class_df.sample(
                 withReplacement=True,
