@@ -205,16 +205,17 @@ pre_dataset = preprocessing_pipeline_model.transform(raw_dataset).cache()
 # Split the dataset into train, test for evaluation.
 train_data, test_data = sf_datalake.model_selection.train_test_split(
     pre_dataset.filter(
-        configuration.learning.train_dates[0]
+        sf_datalake.utils.to_date(configuration.learning.train_dates[0])
         <= pre_dataset["periode"]
-        < configuration.learning.train_dates[1]
+        < sf_datalake.utils.to_date(configuration.learning.train_dates[1])
     ),
     configuration.io.random_seed,
     train_size=configuration.learning.train_size,
     group_col="siren",
 )
 prediction_data = pre_dataset.filter(
-    pre_dataset["periode"] == configuration.learning.prediction_date
+    pre_dataset["periode"]
+    == sf_datalake.utils.to_date(configuration.learning.prediction_date)
 )
 
 # Resample train dataset following requested classes balance
