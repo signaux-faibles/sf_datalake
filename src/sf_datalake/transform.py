@@ -1249,7 +1249,6 @@ class RandomResampler(
     def __init__(self, **kwargs):
         super().__init__()
         self._setDefault(
-            oversampling_ratio=0.2,
             class_col="failure",
         )
         self.setParams(**kwargs)
