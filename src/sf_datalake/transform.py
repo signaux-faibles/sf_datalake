@@ -851,24 +851,16 @@ class DiffOperator(
     """A transformer that computes the time evolution of a given time-indexed variable.
 
     This transformer creates a LagOperator under the hood if the required lagged
-    variable is not found in the dataset. The output(s) can either be a difference,
-    or a slope, computed as the ratio of the slope over the duration, i.e. the
-    `n_months` parameter.
+    variable is not found in the dataset.
 
     Args:
         inputCol: The column that will be used to derive the diff.
         n_months: Number of months that will be considered for the difference.
-        slope: If True, divide the computed difference by its duration in months.
         bfill: If set, performs a backward completion on missing lag data.
         ffill: If set, performs a forward completion on missing lag data.
 
     """
 
-    slope = Param(
-        Params._dummy(),
-        "slope",
-        "Divide difference by the duration.",
-    )
     n_months = Param(
         Params._dummy(),
         "n_months",
@@ -894,7 +886,6 @@ class DiffOperator(
         self._setDefault(
             inputCol=None,
             n_months=None,
-            slope=False,
             bfill=False,
             ffill=False,
         )
@@ -907,7 +898,6 @@ class DiffOperator(
         Args:
             inputCol (str): The column that will be used to derive lagged variables.
             n_months (int or list): Number of months that will be considered for lags.
-            slope: If True, divide the computed difference by its duration in months.
 
         """
         return self._set(**kwargs)
@@ -933,15 +923,12 @@ class DiffOperator(
         n_months = self.getOrDefault("n_months")
         bfill = self.getOrDefault("bfill")
         ffill = self.getOrDefault("ffill")
-        compute_slope = self.getOrDefault("slope")
         if isinstance(n_months, int):
             n_months = [n_months]
         elif isinstance(n_months, list):
             pass
         else:
             raise ValueError("`n_months` should either be an int or a list of ints.")
-        var_coeff = [1 / n if compute_slope else 1 for n in n_months]
-        var_name = "slope" if compute_slope else "diff"
 
         # Compute lagged variables if needed
         missing_lags = [
@@ -955,10 +942,10 @@ class DiffOperator(
         ).transform(dataset)
 
         # Compute diffs
-        for i, n in enumerate(n_months):
+        for n in n_months:
             dataset = dataset.withColumn(
-                f"{input_col}_{var_name}{n}m",
-                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")) * var_coeff[i],
+                f"{input_col}_diff{n}m",
+                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")),
             )
 
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])

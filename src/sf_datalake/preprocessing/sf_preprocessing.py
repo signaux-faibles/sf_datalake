@@ -133,7 +133,6 @@ feat_eng_ds = feat_eng_ds.withColumn(
 output_ds = sf_datalake.transform.DiffOperator(
     inputCol="dette_par_effectif",
     n_months=3,
-    slope=True,
 ).transform(feat_eng_ds)
 
 
