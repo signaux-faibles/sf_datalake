@@ -10,17 +10,14 @@ will output a dataset containing the following information:
 
 """
 
+import datetime
 import os
 import sys
 from os import path
-from typing import List
-from datetime import datetime, timedelta
 
 import pyspark.sql.functions as F
-from pyspark.ml import PipelineModel, Transformer
-from pyspark.sql.types import LongType, StringType, StructField, StructType, BooleanType, ArrayType, IntegerType, TimestampType, DoubleType, DateType
+import pyspark.sql.types as T
 from pyspark.sql.window import Window
-from pyspark.ml import PipelineModel
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -28,6 +25,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint: disable=C0413
+import sf_datalake.configuration
 import sf_datalake.io
 import sf_datalake.transform
 import sf_datalake.utils
@@ -36,6 +34,16 @@ spark = sf_datalake.utils.get_spark_session()
 
 parser = sf_datalake.io.data_path_parser()
 parser.description = "Extract and pre-process DGEFP data."
+
+parser.add_argument(
+    "--configuration",
+    help="""
+    Configuration file name (including '.json' extension). If not provided,
+    'standard.json' will be used.
+    """,
+    default="standard.json",
+)
+
 parser.add_argument(
     "--demande",
     dest="demande_data",
@@ -53,72 +61,86 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-# Load Data 
-consommation_schema = siren_schema = StructType(
-    [
-        StructField("id_da", StringType(), False),
-        StructField("ETAB_SIRET", StringType(), False),
-        StructField("heures", DoubleType(), True),
-        StructField("montants", DoubleType(), True),
-        StructField("effectifs", DoubleType(), True),
-        StructField("mois", TimestampType(), True),
+# Parse configuration files and possibly override parameters.
 
+config_file: str = args.pop("configuration")
+
+configuration = sf_datalake.configuration.ConfigurationHelper(
+    config_file=config_file, cli_args=args
+)
+
+# Load Data
+consommation_schema = siren_schema = T.StructType(
+    [
+        T.StructField("id_da", T.StringType(), False),
+        T.StructField("ETAB_SIRET", T.StringType(), False),
+        T.StructField("heures", T.DoubleType(), True),
+        T.StructField("montants", T.DoubleType(), True),
+        T.StructField("effectifs", T.DoubleType(), True),
+        T.StructField("mois", T.TimestampType(), True),
     ]
 )
-demande_schema = siren_schema = StructType(
+demande_schema = siren_schema = T.StructType(
     [
-        StructField("ID_DA", StringType(), False),
-        StructField("ETAB_SIRET", StringType(), False),
-        StructField("EFF_ENT", DoubleType(), True),
-        StructField("EFF_ETAB", DoubleType(), True),
-        StructField("DATE_STATUT", TimestampType(), True),
-        StructField("DATE_DEB", TimestampType(), True),
-        StructField("DATE_FIN", TimestampType(), True),
-        StructField("HTA", DoubleType(), True),
-        StructField("MTA", DoubleType(), True),
-        StructField("EFF_AUTO", DoubleType(), True),
-        StructField("MOTIF_RECOURS_SE", IntegerType(), True),
-        StructField("PERIMETRE_AP", IntegerType(), True),
-        StructField("S_HEURE_CONSOM_TOT", DoubleType(), True),
-        StructField("S_EFF_CONSOM_TOT", DoubleType(), True),
-        StructField("S_MONTANT_CONSOM_TOT", DoubleType(), True),
-        StructField("RECOURS_ANTERIEUR", IntegerType(), True),
-     
-
-
-        
+        T.StructField("ID_DA", T.StringType(), False),
+        T.StructField("ETAB_SIRET", T.StringType(), False),
+        T.StructField("EFF_ENT", T.DoubleType(), True),
+        T.StructField("EFF_ETAB", T.DoubleType(), True),
+        T.StructField("DATE_STATUT", T.TimestampType(), True),
+        T.StructField("DATE_DEB", T.TimestampType(), True),
+        T.StructField("DATE_FIN", T.TimestampType(), True),
+        T.StructField("HTA", T.DoubleType(), True),
+        T.StructField("MTA", T.DoubleType(), True),
+        T.StructField("EFF_AUTO", T.DoubleType(), True),
+        T.StructField("MOTIF_RECOURS_SE", T.IntegerType(), True),
+        T.StructField("PERIMETRE_AP", T.IntegerType(), True),
+        T.StructField("S_HEURE_CONSOM_TOT", T.DoubleType(), True),
+        T.StructField("S_EFF_CONSOM_TOT", T.DoubleType(), True),
+        T.StructField("S_MONTANT_CONSOM_TOT", T.DoubleType(), True),
+        T.StructField("RECOURS_ANTERIEUR", T.IntegerType(), True),
     ]
 )
 demande = spark.read.csv(args.demande_data, header=True, schema=demande_schema)
-consommation = spark.read.csv(args.demande_data, header=True, schema=consommation_schema)
-
-# Select ap mount columns 
-
-demande = demande.select(['ETAB_SIRET', 'DATE_STATUT', 'DATE_DEB', 'DATE_FIN', 'HTA'])
-consommation = consommation.select(['ETAB_SIRET', 'mois', 'heures'])
-
-# SiretToSiren
-
-SiretSirenPipeline = PipelineModel(
-    [
-        sf_datalake.transform.SiretToSiren(inputCol='ETAB_SIRET'),        
-        
-    ]
+consommation = spark.read.csv(
+    args.demande_data, header=True, schema=consommation_schema
 )
-demande = SiretSirenPipeline.transform(demande)
-consommation = SiretSirenPipeline.transform(consommation)
 
-# Preprocess 'demande' dataset by aggreging data 'HTA' according to siren and timeframes (DATE_DEB / DATE_FIN)
+# Select ap spent and demand hours columns
+
+demande = demande.select(["ETAB_SIRET", "DATE_STATUT", "DATE_DEB", "DATE_FIN", "HTA"])
+consommation = consommation.select(["ETAB_SIRET", "mois", "heures"])
+
+# Extract Siren from Siret
+SiretSirenTransformer = sf_datalake.transform.SiretToSiren(inputCol="ETAB_SIRET")
+demande = SiretSirenTransformer.transform(demande)
+consommation = SiretSirenTransformer.transform(consommation)
+
+# Preprocess 'demande' dataset by aggreging data 'HTA'
+# according to siren and timeframes (DATE_DEB / DATE_FIN)
 
 # Create a UDF to generate a list of dates within a date range
 def generate_date_range(start, end):
-    days = [(start + timedelta(days=i)) for i in range((end - start).days + 1)]
+    """
+    Generates a list of dates within a given date range.
+
+    Parameters:
+    - start (datetime.date): The start date of the range.
+    - end (datetime.date): The end date of the range.
+
+    Returns:
+    list of datetime.date: A list containing all dates within the specified range,
+                           including both the start and end dates.
+    """
+    days = [(start + datetime.timedelta(days=i)) for i in range((end - start).days + 1)]
     return days
 
-generate_date_range_udf = F.udf(generate_date_range, ArrayType(DateType()))
+
+generate_date_range_udf = F.udf(generate_date_range, T.ArrayType(T.DateType()))
 
 # Add a new column with the list of dates in the range
-demande = demande.withColumn("DateRange", generate_date_range_udf(demande["DATE_DEB"], demande["DATE_FIN"]))
+demande = demande.withColumn(
+    "DateRange", generate_date_range_udf(demande["DATE_DEB"], demande["DATE_FIN"])
+)
 
 # Explode the DateRange column to create one row per date
 demande = demande.select("siren", "HTA", F.explode("DateRange").alias("Date"))
@@ -134,33 +156,36 @@ window_spec = Window.partitionBy("siren").orderBy("Date")
 demande = demande.withColumn("Previous_HTA", F.lag("Total_HTA").over(window_spec))
 
 # Find the rows where the value changes
-demande = demande.withColumn("HTA_Change", F.when(F.col("Total_HTA") != F.col("Previous_HTA"), 1).otherwise(0))
+demande = demande.withColumn(
+    "HTA_Change", F.when(F.col("Total_HTA") != F.col("Previous_HTA"), 1).otherwise(0)
+)
 
 # Create a cumulative sum of the Value_Change column
-demande = demande.withColumn("HTA_Change_Cumulative", F.sum("HTA_Change").over(window_spec))
+demande = demande.withColumn(
+    "HTA_Change_Cumulative", F.sum("HTA_Change").over(window_spec)
+)
 
-# Group by Id and the cumulative sum of Value_Change, and find the minimum and maximum date in each group
+# Group by Id and the cumulative sum of Value_Change,
+# and find the minimum and maximum date in each group
 demande = demande.groupBy("siren", "HTA_Change_Cumulative").agg(
     F.min("Date").alias("DATE_DEB_MR"),
     F.max("Date").alias("DATE_FIN_MR"),
-    F.first("Total_HTA").alias("HTA")
+    F.first("Total_HTA").alias("HTA"),
 )
 
 # Preprocess 'consommation' dataset by aggreging data 'heures'
 
-SirenAggPipeline = PipelineModel(
-    [
-        sf_datalake.transform.SirenAggregator(
-            grouping_cols=['siren', 'mois'],
-            aggregation_map= {'heures':"sum"},
-            no_aggregation=[],
-        )        
-    ]
+SirenAggTransformer = sf_datalake.transform.SirenAggregator(
+    grouping_cols=["siren", "mois"],
+    aggregation_map={"heures": "sum"},
+    no_aggregation=[],
 )
-consommation_preprocess = SirenAggPipeline.transform(consommation).drop('ETAB_SIRET')
+
+consommation_preprocess = SirenAggTransformer.transform(consommation).drop("ETAB_SIRET")
 
 # Join 'demande' & 'consommation' dataset
-output_ds = (    demande.join(
+output_ds = (
+    demande.join(
         consommation,
         on=(
             (consommation.siren == demande.siren)
@@ -168,11 +193,27 @@ output_ds = (    demande.join(
             & (consommation.mois < demande.DATE_FIN_MR)
         ),
         how="inner",
-    ).drop(demande.siren).drop(demande.ETAB_SIRET)
+    )
+    .drop(demande.siren)
+    .drop(demande.ETAB_SIRET)
 )
+
+
+output_ds = output_ds.select(
+    F.col("siren"),
+    F.col("mois").alias("periode"),
+    F.col("heures").alias("apart_heures_consommees"),
+    F.col("HTA").alias("apart_heures_autorisees"),
+)
+
+MissingValueHanderTransformer = sf_datalake.transform.MissingValuesHandler(
+    inputCols=["apart_heures_consommees", "apart_heures_autorisees"],
+    value=configuration.preprocessing.fill_default_values,
+)
+
+output_ds = MissingValueHanderTransformer.transform(output_ds)
 
 # Export output data
 
-output_ds = output_ds.select(F.col("siren"), F.col("mois").alias("periode"), F.col("heures").alias("apart_heures_consommees"), F.col("HTA").alias("apart_heures_autorisees"))
 
 sf_datalake.io.write_data(output_ds, args.output, args.output_format)
