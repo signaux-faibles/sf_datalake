@@ -12,13 +12,13 @@ will output a dataset containing the following information:
 
 import datetime
 import os
+import random
 import sys
+import time
 from os import path
-from typing import List
 
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
-from pyspark.ml import PipelineModel, Transformer
 from pyspark.sql.window import Window
 
 # isort: off
@@ -33,7 +33,19 @@ import sf_datalake.transform
 import sf_datalake.utils
 
 
-# Create a UDF to generate a list of dates within a date range
+def generate_unique_index():
+    """
+    Generates a index combines by timestamp and random numbers
+
+    Returns :
+    A string : A unique index for indexing dataframe
+    """
+    timestamp = int(time.time() * 1000)
+    random_number = random.randint(0, 100000000)
+    unique_index = f"{timestamp:013d}{random_number:03d}"
+    return unique_index
+
+
 def generate_date_range(start, end):
     """
     Generates a list of dates within a given date range.
@@ -94,10 +106,10 @@ consommation_schema = T.StructType(
     [
         T.StructField("id_da", T.StringType(), False),
         T.StructField("ETAB_SIRET", T.StringType(), False),
-        T.StructField("heures", T.DoubleType(), True),
+        T.StructField("ap_consommation", T.DoubleType(), True),
         T.StructField("montants", T.DoubleType(), True),
         T.StructField("effectifs", T.DoubleType(), True),
-        T.StructField("mois", T.TimestampType(), True),
+        T.StructField("periode", T.TimestampType(), True),
     ]
 )
 demande_schema = T.StructType(
@@ -109,7 +121,7 @@ demande_schema = T.StructType(
         T.StructField("DATE_STATUT", T.TimestampType(), True),
         T.StructField("DATE_DEB", T.TimestampType(), True),
         T.StructField("DATE_FIN", T.TimestampType(), True),
-        T.StructField("HTA", T.DoubleType(), True),
+        T.StructField("ap_demande", T.DoubleType(), True),
         T.StructField("MTA", T.DoubleType(), True),
         T.StructField("EFF_AUTO", T.DoubleType(), True),
         T.StructField("MOTIF_RECOURS_SE", T.IntegerType(), True),
@@ -127,16 +139,23 @@ consommation = spark.read.csv(
 
 # Select ap spent and demand hours columns
 
-demande = demande.select(["ETAB_SIRET", "DATE_STATUT", "DATE_DEB", "DATE_FIN", "HTA"])
-consommation = consommation.select(["ETAB_SIRET", "mois", "heures"])
+demande = demande.select(
+    ["ETAB_SIRET", "DATE_STATUT", "DATE_DEB", "DATE_FIN", "ap_demande"]
+)
+consommation = consommation.select(["ETAB_SIRET", "periode", "ap_consommation"])
 
 # Extract Siren from Siret
 siretsiren_transformer = sf_datalake.transform.SiretToSiren(inputCol="ETAB_SIRET")
 demande = siretsiren_transformer.transform(demande)
 consommation = siretsiren_transformer.transform(consommation)
 
-# Preprocess 'demande' dataset by aggreging data 'HTA'
+# Preprocess 'demande' dataset by aggreging data 'ap_demande'
 # according to siren and timeframes (DATE_DEB / DATE_FIN)
+
+# Indexing "demande dataframe"
+generate_unique_index_udf = F.udf(generate_unique_index, T.StringType())
+
+demande = demande.withColumn("UniqueIndex", generate_unique_index_udf())
 
 generate_date_range_udf = F.udf(generate_date_range, T.ArrayType(T.DateType()))
 
@@ -146,41 +165,56 @@ demande = demande.withColumn(
 )
 
 # Explode the DateRange column to create one row per date
-demande = demande.select("siren", "HTA", F.explode("DateRange").alias("Date"))
+demande = demande.select(
+    "siren", "ap_demande", F.explode("DateRange").alias("Date"), "UniqueIndex"
+)
 
 # Group by Id and Date, and sum the values
-demande = demande.groupBy("siren", "Date").agg(F.sum("HTA").alias("Total_HTA"))
+demande = demande.groupBy("siren", "Date").agg(
+    F.sum("ap_demande").alias("Total_ap_demande"),
+    F.sum("UniqueIndex").alias("Total_UniqueIndex"),
+)
 
 # Sort the DataFrame by Id and Date
 demande = demande.orderBy("siren", "Date")
 
 # Create a lag column to compare values with the previous row
 window_spec = Window.partitionBy("siren").orderBy("Date")
-demande = demande.withColumn("Previous_HTA", F.lag("Total_HTA").over(window_spec))
+demande = demande.withColumn(
+    "Previous_UniqueIndex", F.lag("Total_UniqueIndex").over(window_spec)
+)
 
 # Find the rows where the value changes
 demande = demande.withColumn(
-    "HTA_Change", F.when(F.col("Total_HTA") != F.col("Previous_HTA"), 1).otherwise(0)
+    "UniqueIndex_Change",
+    F.when(F.col("Total_UniqueIndex") != F.col("Previous_UniqueIndex"), 1).otherwise(0),
 )
 
 # Create a cumulative sum of the Value_Change column
-demande = demande.withColumn(
-    "HTA_Change_Cumulative", F.sum("HTA_Change").over(window_spec)
-)
+demande = demande.withColumn("group", F.sum("UniqueIndex_Change").over(window_spec))
 
 # Group by Id and the cumulative sum of Value_Change,
 # and find the minimum and maximum date in each group
-demande = demande.groupBy("siren", "HTA_Change_Cumulative").agg(
+demande = demande.groupBy("siren", "group").agg(
     F.min("Date").alias("DATE_DEB_MR"),
     F.max("Date").alias("DATE_FIN_MR"),
-    F.first("Total_HTA").alias("HTA"),
+    F.first("Total_ap_demande").alias("ap_demande"),
 )
 
-# Preprocess 'consommation' dataset by aggreging data 'heures'
+# Normalize the "Value" column (/days)
+
+demande = demande.withColumn(
+    "time_frame_size", F.expr("DATEDIFF(DATE_FIN_MR, DATE_DEB_MR) + 1")
+)
+demande = demande.withColumn(
+    "ap_demande", F.col("ap_demande") / F.col("time_frame_size")
+)
+
+# Preprocess 'consommation' dataset by aggreging data 'ap_consommation'
 
 sirenagg_transformer = sf_datalake.transform.SirenAggregator(
-    grouping_cols=["siren", "mois"],
-    aggregation_map={"heures": "sum"},
+    grouping_cols=["siren", "periode"],
+    aggregation_map={"ap_consommation": "sum"},
     no_aggregation=[],
 )
 
@@ -194,8 +228,8 @@ ap_ds = (
         consommation,
         on=(
             (consommation.siren == demande.siren)
-            & (consommation.mois >= demande.DATE_DEB_MR)
-            & (consommation.mois < demande.DATE_FIN_MR)
+            & (consommation.periode >= demande.DATE_DEB_MR)
+            & (consommation.periode < demande.DATE_FIN_MR)
         ),
         how="inner",
     )
@@ -206,38 +240,18 @@ ap_ds = (
 
 ap_ds = ap_ds.select(
     F.col("siren"),
-    F.col("mois").alias("periode"),
-    F.col("heures").alias("apart_heures_consommees"),
-    F.col("HTA").alias("apart_heures_autorisees"),
+    F.col("periode").alias("periode"),
+    F.col("ap_consommation"),
+    F.col("ap_demande"),
 )
 
 missingvalueHander_transformer = sf_datalake.transform.MissingValuesHandler(
-    inputCols=["apart_heures_consommees", "apart_heures_autorisees"],
+    inputCols=["ap_consommation", "apart_heures_autorisees"],
     value=configuration.preprocessing.fill_default_values,
 )
 
-complete_ad_ds = missingvalueHander_transformer.transform(ap_ds)
-
-# calculate aggregates (MovingAverage & Diff)
-
-n_months = 12
-features = ["apart_heures_consommees", "apart_heures_autorisees"]
-time_computations: List[Transformer] = []
-for feature in features:
-    time_computations.append(
-        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
-    )
-
-time_computations.append(
-    sf_datalake.transform.DiffOperator(
-        inputCol="apart_heures_consommees", n_months=n_months, bfill=True
-    )
-)
-
-output_ds = PipelineModel(stages=time_computations).transform(complete_ad_ds)
-
+output_ds = missingvalueHander_transformer.transform(ap_ds)
 
 # Export output data
-
 
 sf_datalake.io.write_data(output_ds, args.output, args.output_format)
