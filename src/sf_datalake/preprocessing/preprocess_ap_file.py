@@ -14,9 +14,11 @@ import datetime
 import os
 import sys
 from os import path
+from typing import List
 
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
+from pyspark.ml import PipelineModel, Transformer
 from pyspark.sql.window import Window
 
 # isort: off
@@ -29,6 +31,24 @@ import sf_datalake.configuration
 import sf_datalake.io
 import sf_datalake.transform
 import sf_datalake.utils
+
+
+# Create a UDF to generate a list of dates within a date range
+def generate_date_range(start, end):
+    """
+    Generates a list of dates within a given date range.
+
+    Args :
+    - start (datetime.date): The start date of the range.
+    - end (datetime.date): The end date of the range.
+
+    Returns:
+    list of datetime.date: A list containing all dates within the specified range,
+                           including both the start and end dates.
+    """
+    days = [(start + datetime.timedelta(days=i)) for i in range((end - start).days + 1)]
+    return days
+
 
 spark = sf_datalake.utils.get_spark_session()
 
@@ -70,7 +90,7 @@ configuration = sf_datalake.configuration.ConfigurationHelper(
 )
 
 # Load Data
-consommation_schema = siren_schema = T.StructType(
+consommation_schema = T.StructType(
     [
         T.StructField("id_da", T.StringType(), False),
         T.StructField("ETAB_SIRET", T.StringType(), False),
@@ -80,7 +100,7 @@ consommation_schema = siren_schema = T.StructType(
         T.StructField("mois", T.TimestampType(), True),
     ]
 )
-demande_schema = siren_schema = T.StructType(
+demande_schema = T.StructType(
     [
         T.StructField("ID_DA", T.StringType(), False),
         T.StructField("ETAB_SIRET", T.StringType(), False),
@@ -111,29 +131,12 @@ demande = demande.select(["ETAB_SIRET", "DATE_STATUT", "DATE_DEB", "DATE_FIN", "
 consommation = consommation.select(["ETAB_SIRET", "mois", "heures"])
 
 # Extract Siren from Siret
-SiretSirenTransformer = sf_datalake.transform.SiretToSiren(inputCol="ETAB_SIRET")
-demande = SiretSirenTransformer.transform(demande)
-consommation = SiretSirenTransformer.transform(consommation)
+siretsiren_transformer = sf_datalake.transform.SiretToSiren(inputCol="ETAB_SIRET")
+demande = siretsiren_transformer.transform(demande)
+consommation = siretsiren_transformer.transform(consommation)
 
 # Preprocess 'demande' dataset by aggreging data 'HTA'
 # according to siren and timeframes (DATE_DEB / DATE_FIN)
-
-# Create a UDF to generate a list of dates within a date range
-def generate_date_range(start, end):
-    """
-    Generates a list of dates within a given date range.
-
-    Parameters:
-    - start (datetime.date): The start date of the range.
-    - end (datetime.date): The end date of the range.
-
-    Returns:
-    list of datetime.date: A list containing all dates within the specified range,
-                           including both the start and end dates.
-    """
-    days = [(start + datetime.timedelta(days=i)) for i in range((end - start).days + 1)]
-    return days
-
 
 generate_date_range_udf = F.udf(generate_date_range, T.ArrayType(T.DateType()))
 
@@ -175,16 +178,18 @@ demande = demande.groupBy("siren", "HTA_Change_Cumulative").agg(
 
 # Preprocess 'consommation' dataset by aggreging data 'heures'
 
-SirenAggTransformer = sf_datalake.transform.SirenAggregator(
+sirenagg_transformer = sf_datalake.transform.SirenAggregator(
     grouping_cols=["siren", "mois"],
     aggregation_map={"heures": "sum"},
     no_aggregation=[],
 )
 
-consommation_preprocess = SirenAggTransformer.transform(consommation).drop("ETAB_SIRET")
+consommation_preprocess = sirenagg_transformer.transform(consommation).drop(
+    "ETAB_SIRET"
+)
 
 # Join 'demande' & 'consommation' dataset
-output_ds = (
+ap_ds = (
     demande.join(
         consommation,
         on=(
@@ -199,19 +204,38 @@ output_ds = (
 )
 
 
-output_ds = output_ds.select(
+ap_ds = ap_ds.select(
     F.col("siren"),
     F.col("mois").alias("periode"),
     F.col("heures").alias("apart_heures_consommees"),
     F.col("HTA").alias("apart_heures_autorisees"),
 )
 
-MissingValueHanderTransformer = sf_datalake.transform.MissingValuesHandler(
+missingvalueHander_transformer = sf_datalake.transform.MissingValuesHandler(
     inputCols=["apart_heures_consommees", "apart_heures_autorisees"],
     value=configuration.preprocessing.fill_default_values,
 )
 
-output_ds = MissingValueHanderTransformer.transform(output_ds)
+complete_ad_ds = missingvalueHander_transformer.transform(ap_ds)
+
+# calculate aggregates (MovingAverage & Diff)
+
+n_months = 12
+features = ["apart_heures_consommees", "apart_heures_autorisees"]
+time_computations: List[Transformer] = []
+for feature in features:
+    time_computations.append(
+        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
+    )
+
+time_computations.append(
+    sf_datalake.transform.DiffOperator(
+        inputCol="apart_heures_consommees", n_months=n_months, bfill=True
+    )
+)
+
+output_ds = PipelineModel(stages=time_computations).transform(complete_ad_ds)
+
 
 # Export output data
 
