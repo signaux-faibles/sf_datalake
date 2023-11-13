@@ -94,9 +94,9 @@ def merge_asof(
 
     Note:
         This function performs an asof merge on two DataFrames based on a specified column 'on'.
-        It supports grouping by additional columns specified in 'by'. The 'tolerance' parameter
-        allows for merging within a specified difference range. The 'direction' parameter determines
-        the direction of the asof merge.
+        It supports grouping by additional columns specified in 'by'. 
+        The 'tolerance' parameter allows for merging within a specified difference range. 
+        The 'direction' parameter determines the direction of the asof merge.
 
     Example:
         >>> merged_df = merge_asof(df_left,
