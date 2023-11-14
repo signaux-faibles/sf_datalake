@@ -4,8 +4,8 @@ This script parses and extracts data from raw historicized files supplied by DGE
 will output a dataset containing the following information:
 - siren
 - periode (date, first day of each month where data is available)
-- apart_heures_consommees
-- apart_heures_autorisees
+- ap_consommation
+- ap_demande
 
 
 """
