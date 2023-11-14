@@ -70,6 +70,7 @@ def to_date(str_date: str, date_format="%Y-%m-%d") -> dt.date:
     return dt.datetime.strptime(str_date, date_format).date()
 
 
+# pylint: disable=R0913 R0914
 def merge_asof(
     df_left: DataFrame,
     df_right: DataFrame,
@@ -86,16 +87,20 @@ def merge_asof(
         df_right (DataFrame): The right DataFrame to be merged.
         on (str): The column on which to merge the DataFrames.
         by (str or list of str, optional): The column(s) to group by before merging.
-        tolerance (int or None, optional): The maximum difference allowed for asof merging in days.
-        direction (str, optional): The direction of asof merging ('backward', 'forward', or 'nearest').
+        tolerance (int or None, optional): The maximum difference allowed
+        for asof merging in days.
+        direction (str, optional): The direction of asof merging
+        ('backward', 'forward', or 'nearest').
 
     Returns:
         DataFrame: A DataFrame resulting from the asof merge.
 
     Note:
-        This function performs an asof merge on two DataFrames based on a specified column 'on'.
-        It supports grouping by additional columns specified in 'by'. 
-        The 'tolerance' parameter allows for merging within a specified difference range. 
+        This function performs an asof merge on two DataFrames
+        based on a specified column 'on'.
+        It supports grouping by additional columns specified in 'by'.
+        The 'tolerance' parameter allows for merging
+        within a specified difference range.
         The 'direction' parameter determines the direction of the asof merge.
 
     Example:
@@ -117,6 +122,7 @@ def merge_asof(
             F.first(stru1, True).over(w0.rowsBetween(0, W.unboundedFollowing))
         )
 
+    # pylint: disable=W0612
     def nearest():
         # Implementation of nearest merge logic
         return F.sort_array(F.array(backward(), forward())).getItem(0)
@@ -157,6 +163,7 @@ def merge_asof(
     # Iterate over columns in df_right for merging
     for c in set(df_right.columns) - set(join_on):
         stru1 = F.when(~F.isnull(c), F.struct(on, c))
+        # pylint: disable=eval-used
         stru2 = eval(f"{direction}()")
 
         # Apply tolerance if specified
