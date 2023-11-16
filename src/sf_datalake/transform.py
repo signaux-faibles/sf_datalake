@@ -831,14 +831,17 @@ class LagOperator(
                     F.when(
                         # If not all computed lagged values are null, use them for
                         # filling.
-                        F.count(F.when(F.isnull(output_col), output_col)).over(
-                            fill_window
+                        (
+                            F.count(F.when(F.isnull(output_col), output_col)).over(
+                                fill_window
+                            )
+                            > 1
                         )
-                        != F.count(F.col(output_col)).over(fill_window),
-                        lookup_function(output_col, ignorenulls=True).over(fill_window),
+                        & (F.count(F.col(output_col)).over(fill_window) == 0),
+                        lookup_function(input_col, ignorenulls=True).over(fill_window),
                     ).otherwise(
                         # Otherwise, use the non-lagged input column values.
-                        lookup_function(input_col, ignorenulls=True).over(fill_window)
+                        lookup_function(output_col, ignorenulls=True).over(fill_window)
                     ),
                 )
 
