@@ -96,7 +96,7 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
         on : The column on which to merge the DataFrames.
         by (optional): The column(s) to group by before merging.
         tolerance (optional): The maximum difference allowed for asof merging, in
-          months.
+          days.
         direction : The direction of asof merging ('backward', 'forward', or 'nearest').
 
     Returns:
@@ -119,7 +119,7 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
     def add_diff(struct_col, value_col):
         """# TODO: This is the one that really needs some docstring."""
         return F.struct(
-            F.abs(F.col(on) - struct_col[on]).alias("diff"),
+            F.abs(F.date_diff(F.col(on), struct_col[on])).alias("diff"),
             struct_col[on].alias(on),
             struct_col[value_col].alias(value_col),
         )
