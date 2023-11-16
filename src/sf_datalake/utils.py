@@ -70,84 +70,59 @@ def to_date(str_date: str, date_format="%Y-%m-%d") -> dt.date:
     return dt.datetime.strptime(str_date, date_format).date()
 
 
-# pylint: disable=R0913 R0914
-def merge_asof(
+def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
     df_left: pyspark.sql.DataFrame,
     df_right: pyspark.sql.DataFrame,
     on: str,
     by: str = None,
-    tolerance: float = None,
+    tolerance: int = None,
     direction: str = "backward",
 ) -> pyspark.sql.DataFrame:
-    """
-    Perform a merge by key distance.
-    This is similar to a left-join except that we match
-    on nearest key rather than equal keys.
-    Both DataFrames must be sorted by the key.
+    """Perform a merge by key distance.
 
-    Note:
-        This function performs an asof merge
-        on two DataFrames based on a specified column 'on'.
-        It supports grouping by additional columns specified in 'by'.
-        The 'tolerance' parameter allows for merging
-        within a specified difference range.
-        The 'direction' parameter determines the direction of the asof merge.
+    This is similar to a left-join except that we match on nearest key
+    rather than equal keys. Both DataFrames must be sorted by the
+    key. This key should be of date type.
+
+    This function performs an asof merge on two DataFrames based on a
+    specified column 'on'. It supports grouping by additional columns
+    specified in 'by'. The 'tolerance' parameter allows for merging
+    within a specified difference range. The 'direction' parameter
+    determines the direction of the asof merge.
 
     Args:
         df_left : The left DataFrame to be merged.
         df_right : The right DataFrame to be merged.
         on : The column on which to merge the DataFrames.
         by (optional): The column(s) to group by before merging.
-        tolerance (optional): The maximum difference allowed for asof merging in days.
+        tolerance (optional): The maximum difference allowed for asof merging, in
+          months.
         direction : The direction of asof merging ('backward', 'forward', or 'nearest').
 
     Returns:
-        DataFrame: A DataFrame resulting from the asof merge.
-
-    Example:
-        >>> merged_df = merge_asof(
-                                df_left,
-                                df_right,
-                                on='period',
-                                by='siren',
-                                tolerance=100,
-                                direction='backward'
-                                )
+        DataFrame resulting from the asof merge.
     """
 
-    def backward(w0, stru1):
-        # Implementation of backward merge logic
-        return add_diff(F.last(stru1, True).over(w0))
+    def backward(w, stru, vc):
+        return add_diff(F.last(stru, True).over(w), vc)
 
-    def forward(w0, stru1):
-        # Implementation of forward merge logic
+    def forward(w, stru, vc):
         return add_diff(
-            F.first(stru1, True).over(w0.rowsBetween(0, W.unboundedFollowing))
+            F.first(stru, True).over(w.rowsBetween(0, W.unboundedFollowing)), vc
         )
 
-    def nearest(w0, stru1):
-        # Implementation of nearest merge logic
-        return F.sort_array(F.array(backward(w0, stru1), forward(w0, stru1))).getItem(0)
+    def nearest(w, stru, vc):
+        return F.sort_array(
+            F.array(backward(w, stru, vc), forward(w, stru, vc))
+        ).getItem(0)
 
-    def add_diff(col):
-        # Add a 'diff' column to the DataFrame
+    def add_diff(struct_col, value_col):
+        """# TODO: This is the one that really needs some docstring."""
         return F.struct(
-            F.abs(F.col(on) - col[on]).alias("diff"), col[on].alias(on), col[c].alias(c)
+            F.abs(F.col(on) - struct_col[on]).alias("diff"),
+            struct_col[on].alias(on),
+            struct_col[value_col].alias(value_col),
         )
-
-    # Convert to unix timestamp
-    df_left = df_left.withColumn(
-        "period", F.unix_timestamp("period", format="yyyy-mm-dd")
-    )
-    df_right = df_right.withColumn(
-        "period", F.unix_timestamp("period", format="yyyy-mm-dd")
-    )
-    if tolerance:
-        if tolerance == 365:
-            # 365 is a year for people but the exact number according to unix is 365,24
-            tolerance_unix = 31556926
-        else:
-            tolerance_unix = tolerance * 24 * 60 * 60
 
     # Handle cases where 'by' is not specified
     df_r = df_right if by else df_right.withColumn("_by", F.lit(1))
@@ -155,6 +130,7 @@ def merge_asof(
     df_l = df_l.withColumn("_df_l", F.lit(True))
     if by is None:
         by = ["_by"]
+    # In other cases, use specified group key(s)
     elif isinstance(by, str):
         by = [by]
     else:
@@ -162,37 +138,22 @@ def merge_asof(
             "All elements of `by` should by strings"
         )
 
-    # Perform a full outer join on specified columns
     join_on = [on] + by
     df = df_l.join(df_r, join_on, "full")
-
-    # Set up the window specification for partitioning and ordering
     w0 = W.partitionBy(*by).orderBy(on)
 
-    # Iterate over columns in df_right for merging
+    # TODO: this is where we explain what happens in this loop
     for c in set(df_right.columns) - set(join_on):
         stru1 = F.when(~F.isnull(c), F.struct(on, c))
-        window_functions: dict = {
-            "backward": backward(w0, stru1),
-            "forward": forward(w0, stru1),
-            "nearest": nearest(w0, stru1),
+        window_function = {
+            "backward": backward,
+            "forward": forward,
+            "nearest": nearest,
         }
-        stru2 = window_functions[direction]
-
-        # Apply tolerance if specified
+        stru2 = window_function[direction](w0, stru1, c)
         if tolerance:
-            diff_col = F.abs(F.col(on) - stru2[on]).alias("diff")
-            c_col = F.when(diff_col <= tolerance_unix, stru2[c]).otherwise(F.col(c))
-            df = df.withColumn(c, c_col)
-        else:
-            # If no tolerance specified, directly use the result of stru2
-            df = df.withColumn(c, stru2[c])
+            stru2 = stru2.withField(c, F.when(stru2["diff"] <= tolerance, stru2[c]))
+        df = df.withColumn(c, stru2[c])
 
-    # Filter to make the merge and drop temporary columns from the result
-    df = df.filter("_df_l").drop("_df_l", "_by")
-
-    # Convert unix timestamp to str
-    df = df.withColumn(on, F.from_unixtime(df.period, "yyyy-MM-dd HH:mm:ss"))
-    df = df.withColumn(on, F.to_date(F.col(on)))
-
-    return df
+    # Filter as if we'd done a left join, drop temporary columns.
+    return df.filter("_df_l").drop("_df_l", "_by")
