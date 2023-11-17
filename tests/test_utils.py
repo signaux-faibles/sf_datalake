@@ -103,7 +103,7 @@ def merge_asof_df(spark):
     return df1, df2, df3
 
 
-def test_merge_asof(merge_asof_df):
+def test_merge_asof_backward(merge_asof_df):
     df1, df2, df_merge = merge_asof_df
     df = merge_asof(
         df1, df2, on="periode", by="siren", tolerance=365, direction="backward"
@@ -111,5 +111,29 @@ def test_merge_asof(merge_asof_df):
     df.show()
     assert all(
         r["ebe"] == r_merge["ebe_backward"]
+        for r, r_merge in zip(df.collect(), df_merge.collect())
+    )
+
+
+def test_merge_asof_forward(merge_asof_df):
+    df1, df2, df_merge = merge_asof_df
+    df = merge_asof(
+        df1, df2, on="periode", by="siren", tolerance=365, direction="forward"
+    )
+    df.show()
+    assert all(
+        r["ebe"] == r_merge["ebe_forward"]
+        for r, r_merge in zip(df.collect(), df_merge.collect())
+    )
+
+
+def test_merge_asof_nearest(merge_asof_df):
+    df1, df2, df_merge = merge_asof_df
+    df = merge_asof(
+        df1, df2, on="periode", by="siren", tolerance=365, direction="nearest"
+    )
+    df.show()
+    assert all(
+        r["ebe"] == r_merge["ebe_nearest"]
         for r, r_merge in zip(df.collect(), df_merge.collect())
     )
