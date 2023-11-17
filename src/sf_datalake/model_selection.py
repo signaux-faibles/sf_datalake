@@ -48,6 +48,9 @@ def train_test_split(
         else:
             test_size = 1 - train_size
 
+    if df.select(group_col).distinct().count() < 2:
+        raise ValueError("`df` should contain at leats 2 independant entities.")
+
     # Split according to train/test split ratio and group column, if set.
     if group_col is not None:
         group_train, group_test = (

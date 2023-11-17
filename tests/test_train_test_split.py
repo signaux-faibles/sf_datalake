@@ -47,3 +47,11 @@ def test_split_dataset(split_dataset):
     ids_test_data = set(test_data.select("siren").rdd.flatMap(lambda x: x).collect())
     intersection = ids_train_data.intersection(ids_test_data)
     assert not intersection, f"Intersection found: {intersection}"
+
+
+def test_split_dataset_size(split_dataset):
+    df = split_dataset
+    train_data, test_data = train_test_split(
+        df=df, random_seed=42, train_size=0.8, test_size=0.2, group_col="siren"
+    )
+    assert (test_data.count() > 0) & (train_data.count() > 0)
