@@ -130,7 +130,11 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
          A struct column with three fields: 'diff', 'on', and 'value_col'.
         """
         return F.struct(
-            F.abs(F.datediff(F.col(on), struct_col[on])).alias("diff"),
+            F.abs(
+                F.when(
+                    ~F.isnull(struct_col[on]), F.datediff(F.col(on), struct_col[on])
+                ).otherwise(float("inf"))
+            ).alias("diff"),
             struct_col[on].alias(on),
             struct_col[value_col].alias(value_col),
         )
@@ -164,11 +168,12 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
         stru2 = window_function[direction](w0, stru1, c)
         if tolerance:
             diff_col = F.abs(F.datediff(F.col(on), stru2[on])).alias("diff")
+            df.withColumn("diff", diff_col).show()
             c_col = F.when(diff_col <= tolerance, stru2[c]).otherwise(F.col(c))
             df = df.withColumn(c, c_col)
         else:
             # If no tolerance specified, directly use the result of stru2
             df = df.withColumn(c, stru2[c])
-
+    df.show()
     # Filter as if we'd done a left join, drop temporary columns.
     return df.filter("_df_l").drop("_df_l", "_by")
