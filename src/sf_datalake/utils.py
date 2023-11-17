@@ -117,9 +117,20 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
         ).getItem(0)
 
     def add_diff(struct_col, value_col):
-        """# TODO: This is the one that really needs some docstring."""
+        """
+        Adds a 'diff' column to the input struct 'struct_col' representing the absolute
+        difference in days between the 'on' column and each element in 'struct_col[on]'.
+
+        Parameters:
+        - struct_col : The input struct column containing
+                        the 'on' and 'value_col' fields.
+        - value_col : The name of the column representing values in the input struct.
+
+        Returns:
+         A struct column with three fields: 'diff', 'on', and 'value_col'.
+        """
         return F.struct(
-            F.abs(F.date_diff(F.col(on), struct_col[on])).alias("diff"),
+            F.abs(F.datediff(F.col(on), struct_col[on])).alias("diff"),
             struct_col[on].alias(on),
             struct_col[value_col].alias(value_col),
         )
@@ -152,8 +163,12 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
         }
         stru2 = window_function[direction](w0, stru1, c)
         if tolerance:
-            stru2 = stru2.withField(c, F.when(stru2["diff"] <= tolerance, stru2[c]))
-        df = df.withColumn(c, stru2[c])
+            diff_col = F.abs(F.datediff(F.col(on), stru2[on])).alias("diff")
+            c_col = F.when(diff_col <= tolerance, stru2[c]).otherwise(F.col(c))
+            df = df.withColumn(c, c_col)
+        else:
+            # If no tolerance specified, directly use the result of stru2
+            df = df.withColumn(c, stru2[c])
 
     # Filter as if we'd done a left join, drop temporary columns.
     return df.filter("_df_l").drop("_df_l", "_by")
