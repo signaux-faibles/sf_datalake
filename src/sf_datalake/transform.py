@@ -283,6 +283,11 @@ class MissingValuesDropper(
     pyspark.sql.DataFrame.dropna() is called using `how=any`, meaning that any row
     containing at least one missing value found among `inputCols` will be dropped.
 
+    Note : median strategy on odd number of line will not return
+    the 'conventional' median as compute in pandas for example.
+    Here is an example :
+    [1,2,3,4] the median will be normally 2.5, here the function returns 2
+
     Args:
         inputCols: The input dataset columns to consider for dropping.
         ignore_type: Ignore any inputCol if its type is found inside ignore_type.
