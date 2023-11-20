@@ -104,34 +104,35 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
     """
 
     def backward(
-        w: pyspark.sql.Window, stru: pyspark.sql.functions.struct, vc: str
-    ) -> pyspark.sql.functions.struct:
+        w: pyspark.sql.WindowSpec, stru: pyspark.sql.column.Column, vc: str
+    ) -> pyspark.sql.column.Column:
         return add_diff(F.last(stru, True).over(w), vc)
 
     def forward(
-        w: pyspark.sql.Window, stru: pyspark.sql.functions.struct, vc: str
-    ) -> pyspark.sql.functions.struct:
+        w: pyspark.sql.WindowSpec, stru: pyspark.sql.column.Column, vc: str
+    ) -> pyspark.sql.column.Column:
         return add_diff(
             F.first(stru, True).over(w.rowsBetween(0, W.unboundedFollowing)), vc
         )
 
     def nearest(
-        w: pyspark.sql.Window, stru: pyspark.sql.functions.struct, vc: str
-    ) -> pyspark.sql.functions.struct:
+        w: pyspark.sql.WindowSpec, stru: pyspark.sql.column.Column, vc: str
+    ) -> pyspark.sql.column.Column:
         return F.sort_array(
             F.array(backward(w, stru, vc), forward(w, stru, vc))
         ).getItem(0)
 
     def add_diff(
-        struct_col: pyspark.sql.functions.struct, value_col: str
-    ) -> pyspark.sql.functions.struct:
-        """
-        Adds a 'diff' column to the input struct 'struct_col' representing the absolute
-        difference in days between the 'on' column and each element in 'struct_col[on]'.
+        struct_col: pyspark.sql.column.Column, value_col: str
+    ) -> pyspark.sql.column.Column:
+        """Computes a date difference between input DataFrames data.
+
+        Adds a 'diff' column to the input struct `struct_col` representing the absolute
+        difference in days between the left and right df 'on' values.
 
         Args:
-            struct_col : The input struct column containing
-                        the 'on' and 'value_col' fields.
+            struct_col: The input struct column containing the 'on' and 'value_col'
+              fields.
             value_col : The name of the column representing values in the input struct.
 
         Returns:
@@ -162,26 +163,21 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
         )
 
     join_on = [on] + by
-    df = df_l.join(df_r, join_on, "full")
+    df = df_l.join(df_r, on=join_on, how="full")
     w0 = W.partitionBy(*by).orderBy(on)
     window_function = {
         "backward": backward,
         "forward": forward,
         "nearest": nearest,
     }
-    # Assign new value to right dataframe according to tolerance and direction
+    # Pre-assign value to right dataframe depending on tolerance and direction. If the
+    # date difference between joined rows is greater than tolerance, then a null value
+    # is assigned to the right df columns.
     for c in set(df_right.columns) - set(join_on):
-        # Create a column holding 'on' and 'c' values
         stru1 = F.when(~F.isnull(c), F.struct(on, c))
-        # Apply 'direction' function to this struct
         stru2 = window_function[direction](w0, stru1, c)
         if tolerance:
-            # compute diff col to apply tolerance parameter
-            diff_col = F.abs(F.datediff(F.col(on), stru2[on])).alias("diff")
-            c_col = F.when(diff_col <= tolerance, stru2[c]).otherwise(F.col(c))
-            df = df.withColumn(c, c_col)
-        else:
-            # If no tolerance specified, directly use the result of stru2
-            df = df.withColumn(c, stru2[c])
+            stru2 = stru2.withField(c, F.when(F.col("diff") <= tolerance, stru2[c]))
+        df = df.withColumn(c, stru2[c])
     # Filter as if we'd done a left join, drop temporary columns.
     return df.filter("_df_l").drop("_df_l", "_by")
