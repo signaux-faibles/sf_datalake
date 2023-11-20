@@ -7,62 +7,9 @@ from sf_datalake.utils import merge_asof
 
 
 @pytest.fixture
-def merge_asof_df(spark):
-    schema1 = T.StructType(
-        [
-            T.StructField("siren", T.StringType(), True),
-            T.StructField("periode", T.DateType(), True),
-            T.StructField("ca", T.IntegerType(), True),
-            T.StructField("category", T.StringType(), True),
-        ]
-    )
+def merged_asof_df(spark):
     # fmt: off
-    df1 = spark.createDataFrame(
-        [
-            ("043339338", dt.date(2018, 1, 1), 7, "760"),
-            ("043339338", dt.date(2018, 2, 1), 9, "971"),
-            ("043339338", dt.date(2018, 3, 1), 83,  "880"),
-            ("043339338", dt.date(2018, 4, 1), 76,"307"),
-            ("043339338", dt.date(2018, 5, 1), 90,  "121"),
-            ("043339338", dt.date(2018, 6, 1), 64,  "540"),
-            ("043339338", dt.date(2018, 7, 1), 83,  "527"),
-            ("043339338", dt.date(2018, 8, 1), 87,  "806"),
-            ("043339338", dt.date(2018, 9, 1), 68,  "979"),
-            ("043339338", dt.date(2018, 10, 1), 21,  "387"),
-            ("293736607", dt.date(2020, 1, 1), 97,  "107"),
-            ("293736607", dt.date(2020, 2, 1), 96,  "538"),
-            ("293736607", dt.date(2020, 3, 1), 33,  "068"),
-            ("293736607", dt.date(2020, 4, 1), None,  "315"),
-            ("293736607", dt.date(2020, 5, 1), 99,  "670"),
-            ("293736607", dt.date(2020, 6, 1), 71,  "246"),
-            ("293736607", dt.date(2020, 7, 1), 19, "919"),
-            ("293736607", dt.date(2020, 8, 1), 95,  "806"),
-            ("293736607", dt.date(2020, 9, 1), None,  "070"),
-            ("293736607", dt.date(2020, 10, 1), 38, "782"),
-        ],
-        schema1,
-    )
-
-    schema2 = T.StructType(
-        [
-            T.StructField("siren", T.StringType(), True),
-            T.StructField("periode", T.DateType(), True),
-            T.StructField("ebe", T.IntegerType(), True),
-
-        ]
-    )
-    # fmt: off
-    df2 = spark.createDataFrame(
-        [
-            ("043339338", dt.date(2018, 1, 1), 200),
-            ("043339338", dt.date(2018, 6, 1), 40),
-            ("293736607", dt.date(2019, 1, 1), 50),
-            ("293736607", dt.date(2020, 2, 1), 70),
-            ("293736607", dt.date(2020, 8, 1), 30),
-        ],
-        schema2,
-    )
-    schema3 = T.StructType(
+    schema = T.StructType(
         [
             T.StructField("siren", T.StringType(), True),
             T.StructField("periode", T.DateType(), True),
@@ -73,8 +20,7 @@ def merge_asof_df(spark):
             T.StructField("ebe_nearest", T.IntegerType(), True)
         ]
     )
-    # fmt: off
-    df3 = spark.createDataFrame(
+    df = spark.createDataFrame(
         [
             ("043339338", dt.date(2018, 1, 1), 7, "760", 200, 200, 200),
             ("043339338", dt.date(2018, 2, 1), 9, "971", 200, 40,200),
@@ -97,42 +43,104 @@ def merge_asof_df(spark):
             ("293736607", dt.date(2020, 9, 1), None,  "070", 30, None,30),
             ("293736607", dt.date(2020, 10, 1), 38, "782", 30, None,30),
         ],
-        schema3,
+        schema,
     )
     # fmt: on
-    return df1, df2, df3
+    return df
 
 
-def test_merge_asof_backward(merge_asof_df):
-    df1, df2, df_merge = merge_asof_df
-    df = merge_asof(
-        df1, df2, on="periode", by="siren", tolerance=365, direction="backward"
+@pytest.fixture
+def df_left(spark):
+    schema_left = T.StructType(
+        [
+            T.StructField("siren", T.StringType(), True),
+            T.StructField("periode", T.DateType(), True),
+            T.StructField("ca", T.IntegerType(), True),
+            T.StructField("category", T.StringType(), True),
+        ]
     )
-    df.show()
+    # fmt: off
+    df_left = spark.createDataFrame(
+        [
+            ("043339338", dt.date(2018, 1, 1), 7, "760"),
+            ("043339338", dt.date(2018, 2, 1), 9, "971"),
+            ("043339338", dt.date(2018, 3, 1), 83,  "880"),
+            ("043339338", dt.date(2018, 4, 1), 76,"307"),
+            ("043339338", dt.date(2018, 5, 1), 90,  "121"),
+            ("043339338", dt.date(2018, 6, 1), 64,  "540"),
+            ("043339338", dt.date(2018, 7, 1), 83,  "527"),
+            ("043339338", dt.date(2018, 8, 1), 87,  "806"),
+            ("043339338", dt.date(2018, 9, 1), 68,  "979"),
+            ("043339338", dt.date(2018, 10, 1), 21,  "387"),
+            ("293736607", dt.date(2020, 1, 1), 97,  "107"),
+            ("293736607", dt.date(2020, 2, 1), 96,  "538"),
+            ("293736607", dt.date(2020, 3, 1), 33,  "068"),
+            ("293736607", dt.date(2020, 4, 1), None,  "315"),
+            ("293736607", dt.date(2020, 5, 1), 99,  "670"),
+            ("293736607", dt.date(2020, 6, 1), 71,  "246"),
+            ("293736607", dt.date(2020, 7, 1), 19, "919"),
+            ("293736607", dt.date(2020, 8, 1), 95,  "806"),
+            ("293736607", dt.date(2020, 9, 1), None,  "070"),
+            ("293736607", dt.date(2020, 10, 1), 38, "782"),
+        ],
+        schema_left,
+    )
+    # fmt: on
+    return df_left
+
+
+@pytest.fixture
+def df_right(spark):
+    # fmt: off
+    schema_right = T.StructType(
+        [
+            T.StructField("siren", T.StringType(), True),
+            T.StructField("periode", T.DateType(), True),
+            T.StructField("ebe", T.IntegerType(), True),
+
+        ]
+    )
+    df_right = spark.createDataFrame(
+        [
+            ("043339338", dt.date(2018, 1, 1), 200),
+            ("043339338", dt.date(2018, 6, 1), 40),
+            ("293736607", dt.date(2019, 1, 1), 50),
+            ("293736607", dt.date(2020, 2, 1), 70),
+            ("293736607", dt.date(2020, 8, 1), 30),
+        ],
+        schema_right,
+    )
+    # fmt: on
+    return df_right
+
+
+def test_merge_asof_backward(df_left, df_right, merged_asof_df):
+    df_left, df_right, df_merge = df_left, df_right, merged_asof_df
+    df = merge_asof(
+        df_left, df_right, on="periode", by="siren", tolerance=365, direction="backward"
+    )
     assert all(
         r["ebe"] == r_merge["ebe_backward"]
         for r, r_merge in zip(df.collect(), df_merge.collect())
     )
 
 
-def test_merge_asof_forward(merge_asof_df):
-    df1, df2, df_merge = merge_asof_df
+def test_merge_asof_forward(df_left, df_right, merged_asof_df):
+    df_left, df_right, df_merge = df_left, df_right, merged_asof_df
     df = merge_asof(
-        df1, df2, on="periode", by="siren", tolerance=365, direction="forward"
+        df_left, df_right, on="periode", by="siren", tolerance=365, direction="forward"
     )
-    df.show()
     assert all(
         r["ebe"] == r_merge["ebe_forward"]
         for r, r_merge in zip(df.collect(), df_merge.collect())
     )
 
 
-def test_merge_asof_nearest(merge_asof_df):
-    df1, df2, df_merge = merge_asof_df
+def test_merge_asof_nearest(df_left, df_right, merged_asof_df):
+    df_left, df_right, df_merge = df_left, df_right, merged_asof_df
     df = merge_asof(
-        df1, df2, on="periode", by="siren", tolerance=365, direction="nearest"
+        df_left, df_right, on="periode", by="siren", tolerance=365, direction="nearest"
     )
-    df.show()
     assert all(
         r["ebe"] == r_merge["ebe_nearest"]
         for r, r_merge in zip(df.collect(), df_merge.collect())
