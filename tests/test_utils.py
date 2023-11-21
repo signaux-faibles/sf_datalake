@@ -115,7 +115,7 @@ def df_right(spark):
 
 
 def test_merge_asof_backward(df_left, df_right, merged_asof_df):
-    df_left, df_right, df_merge = df_left, df_right, merged_asof_df
+    df_merge = merged_asof_df
     df = merge_asof(
         df_left, df_right, on="periode", by="siren", tolerance=365, direction="backward"
     )
@@ -126,7 +126,7 @@ def test_merge_asof_backward(df_left, df_right, merged_asof_df):
 
 
 def test_merge_asof_forward(df_left, df_right, merged_asof_df):
-    df_left, df_right, df_merge = df_left, df_right, merged_asof_df
+    df_merge = merged_asof_df
     df = merge_asof(
         df_left, df_right, on="periode", by="siren", tolerance=365, direction="forward"
     )
@@ -137,7 +137,7 @@ def test_merge_asof_forward(df_left, df_right, merged_asof_df):
 
 
 def test_merge_asof_nearest(df_left, df_right, merged_asof_df):
-    df_left, df_right, df_merge = df_left, df_right, merged_asof_df
+    df_merge = merged_asof_df
     df = merge_asof(
         df_left, df_right, on="periode", by="siren", tolerance=365, direction="nearest"
     )

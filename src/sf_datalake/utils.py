@@ -177,7 +177,12 @@ def merge_asof(  # pylint: disable=too-many-locals, too-many-arguments
         stru1 = F.when(~F.isnull(c), F.struct(on, c))
         stru2 = window_function[direction](w0, stru1, c)
         if tolerance:
-            stru2 = stru2.withField(c, F.when(F.col("diff") <= tolerance, stru2[c]))
-        df = df.withColumn(c, stru2[c])
+            # compute diff col to apply tolerance parameter
+            diff_col = F.abs(F.datediff(F.col(on), stru2[on])).alias("diff")
+            c_col = F.when(diff_col <= tolerance, stru2[c]).otherwise(F.col(c))
+            df = df.withColumn(c, c_col)
+        else:
+            # If no tolerance specified, directly use the result of stru2
+            df = df.withColumn(c, stru2[c])
     # Filter as if we'd done a left join, drop temporary columns.
     return df.filter("_df_l").drop("_df_l", "_by")
