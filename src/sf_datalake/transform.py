@@ -265,6 +265,28 @@ class MissingValuesHandler(
                     "Statistical imputation of a non-numerical variable is not "
                     "supported."
                 )
+
+            nullColumns = [
+                c
+                for c, const in dataset.select(
+                    [
+                        (
+                            (F.min(c).isNull() & F.max(c).isNull())
+                            | (F.min(c) == F.max(c))
+                        ).alias(c)
+                        for c in input_cols
+                    ]
+                )
+                .first()
+                .asDict()
+                .items()
+                if const
+            ]
+            if len(nullColumns) > 0:
+                raise ValueError(
+                    "Statistical imputation of a completely null columns is not "
+                    "supported."
+                )
             imputer = Imputer(strategy=stat_strategy)
             imputer.setInputCols(input_cols)
             imputer.setOutputCols(input_cols)
