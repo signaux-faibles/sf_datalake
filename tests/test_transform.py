@@ -1,6 +1,7 @@
 import datetime as dt
 
 import pytest
+from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
 from sf_datalake.transform import DateParser, IdentifierNormalizer, MissingValuesHandler
@@ -88,10 +89,18 @@ def test_date_parser(parsed_date_df):
     assert all(r["ref_date"] == r["parsed_date"] for r in df.collect())
 
 
-def test_missing_value_handler(missing_value_handler_df):
-    values = {"ca": 0}
+def test_missing_value_handler_median(missing_value_handler_df):
     df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median")._transform(
         missing_value_handler_df
     )
-    df.show()
     assert all(r["ca"] == r["ca_filled_median"] for r in df.collect())
+
+
+def test_missing_value_handler_filling(missing_value_handler_df):
+    df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median")._transform(
+        missing_value_handler_df
+    )
+    missdf = df.select(
+        [F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns]
+    ).select("ca")
+    assert all(r["ca"] == 0 for r in missdf.collect())
