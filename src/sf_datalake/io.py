@@ -63,7 +63,7 @@ def load_data(
     sep: str = ",",
     infer_schema: bool = True,
 ) -> Dict[str, pyspark.sql.DataFrame]:
-    """Loads one or more orc-stored datasets and returns them in a dict.
+    """Loads one or more datasets and returns them through a dict.
 
     Args:
         data_paths: A dict[str, str] structured as follows: {dataframe_name: file_path}
