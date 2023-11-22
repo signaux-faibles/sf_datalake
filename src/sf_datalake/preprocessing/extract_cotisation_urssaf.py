@@ -24,6 +24,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # pylint: disable=C0413
 import pandas as pd
 
+import sf_datalake.configuration
 import sf_datalake.io
 import sf_datalake.transform
 import sf_datalake.utils
@@ -39,7 +40,18 @@ parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
 parser.add_argument("--min_date", default="2014-01-01")
+parser.add_argument(
+    "--configuration",
+    help="""
+    Configuration file name (including '.json' extension). If not provided,
+    'standard.json' will be used.
+    """,
+    default="standard.json",
+)
 args = parser.parse_args()
+configuration = sf_datalake.configuration.ConfigurationHelper(
+    config_file=args.configuration
+)
 
 cotisation_schema = T.StructType(
     [
@@ -86,7 +98,17 @@ cotisation = cotisation.join(
     ),
     how="inner",
 )
-output_ds = cotisation.groupBy(["siren", "période"]).agg(
-    F.sum("cotisation_appelée_par_mois").alias("cotisation")
+
+# Handle missing values and export
+mvh = sf_datalake.transform.MissingValuesHandler(
+    inputCols=["cotisation"],
+    value=configuration.preprocessing.fill_default_values,
 )
+
+output_ds = mvh.transform(
+    cotisation.groupBy(["siren", "période"]).agg(
+        F.sum("cotisation_appelée_par_mois").alias("cotisation")
+    )
+)
+
 sf_datalake.io.write_data(output_ds, args.output, args.output_format)

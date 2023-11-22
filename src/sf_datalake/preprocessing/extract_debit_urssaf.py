@@ -40,7 +40,18 @@ parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
 parser.add_argument("--min_date", default="2014-01-01")
+parser.add_argument(
+    "--configuration",
+    help="""
+    Configuration file name (including '.json' extension). If not provided,
+    'standard.json' will be used.
+    """,
+    default="standard.json",
+)
 args = parser.parse_args()
+configuration = sf_datalake.configuration.ConfigurationHelper(
+    config_file=args.configuration
+)
 
 debit_schema = T.StructType(
     [
@@ -108,8 +119,15 @@ debit_par_compte = debit.select(
     F.col("numéro_historique_écart_négatif") == F.col("indicateur_dernier_traitement")
 )
 
-output_ds = debit_par_compte.groupby(["siren", "période"]).agg(
+# Handle missing values and export
+mvh = sf_datalake.transform.MissingValuesHandler(
+    inputCols=["dette_sociale_ouvrière", "dette_sociale_patronale"],
+    value=configuration.preprocessing.fill_default_values,
+)
+
+summed_ds = debit_par_compte.groupby(["siren", "période"]).agg(
     F.sum("dette_sociale_ouvrière").alias("dette_sociale_ouvrière"),
     F.sum("dette_sociale_patronale").alias("dette_sociale_patronale"),
 )
-sf_datalake.io.write_data(output_ds, args.output, args.output_format)
+
+sf_datalake.io.write_data(mvh.transform(summed_ds), args.output, args.output_format)
