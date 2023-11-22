@@ -1,7 +1,10 @@
 """Carry out some pre-processing over URSSAF "cotisation" data.
 
-USAGE
-    python preprocess_urssaf.py <input_directory> <output_directory>
+Run `python extract_cotisation_urssaf.py --help` to get usage insights.
+
+The data is documented here:
+https://github.com/signaux-faibles/documentation/blob/master/description-donnees.md\
+#donn%C3%A9es-sur-les-cotisations-sociales-et-les-d%C3%A9bits
 
 """
 # pylint: disable=duplicate-code

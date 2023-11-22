@@ -1,7 +1,10 @@
 """Carry out some pre-processing over URSSAF "cotisation" data.
 
-USAGE
-    python preprocess_urssaf.py <input_directory> <output_directory>
+Run `python extract_cotisation_urssaf.py --help` to get usage insights.
+
+The data is documented here:
+https://github.com/signaux-faibles/documentation/blob/master/description-donnees.md\
+#donn%C3%A9es-sur-les-cotisations-sociales-et-les-d%C3%A9bits
 
 """
 # pylint: disable=duplicate-code
@@ -57,6 +60,9 @@ date_range = spark.createDataFrame(
 
 ## "Cotisation" data
 cotisation = spark.read.csv(args.input, header=True, schema=cotisation_schema)
+
+# Preprocess "fenêtre", which comes as two adjacent dates in the following format:
+# "YYYY-MM-DDThh:mm:ss-YYYY-MM-DDThh:mm:ss"
 cotisation = cotisation.dropna(subset="fenêtre")
 cotisation = cotisation.withColumn(
     "date_début", F.to_date(F.substring(F.col("fenêtre"), 1, 10))
@@ -65,6 +71,8 @@ cotisation = cotisation.withColumn(
     "date_fin", F.to_date(F.substring(F.col("fenêtre"), 21, 10))
 )
 cotisation = cotisation.filter(F.col("date_fin") > args.min_date)
+
+# Spread over the time periods
 cotisation = siret_to_siren.transform(cotisation)
 cotisation = cotisation.withColumn(
     "cotisation_appelée_par_mois",
