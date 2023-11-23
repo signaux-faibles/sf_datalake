@@ -1,4 +1,5 @@
 import datetime as dt
+import random
 
 import pytest
 from pyspark.sql import types as T
@@ -43,6 +44,7 @@ def parsed_date_df(spark):
     return df
 
 
+@pytest.fixture(scope="class")
 def random_resampler_df(spark):
     schema = T.StructType(
         [
@@ -74,10 +76,10 @@ def random_resampler_df(spark):
         ('186331439', dt.date(2019, 8, 1), 18, 0.05994703380143718, '711', 0),
         ('186331439', dt.date(2022, 2, 1), 86, 0.7503833614639871, '708', 0),
         ('186331439', dt.date(2019, 10, 1), 26, 0.7224095021086719, '615', 0),
-        ('186331439', dt.date(2023, 6, 1), 15, 0.8051712533202542, '408', 0),
-        ('186331439', dt.date(2017, 7, 1), 84, 0.3989912559412453, '195', 0),
-        ('980933722', dt.date(2018, 8, 1), 9, 0.01798403220657474, '103', 0),
-        ('980933722', dt.date(2023, 10, 1), 6, 0.6063299987951098, '995', 0),
+        ('186331439', dt.date(2023, 6, 1), 15, 0.8051712533202542, '408', 1),
+        ('186331439', dt.date(2017, 7, 1), 84, 0.3989912559412453, '195', 1),
+        ('980933722', dt.date(2018, 8, 1), 9, 0.01798403220657474, '103', 1),
+        ('980933722', dt.date(2023, 10, 1), 6, 0.6063299987951098, '995', 1),
         ('980933722', dt.date(2018, 7, 1), 91, 0.3801052159050209, '778', 0),
         ('980933722', dt.date(2018, 11, 1), 42, 0.8761944708456222, '331', 0),
         ('980933722', dt.date(2017, 3, 1), 21, 0.3973330408443837, '488', 0)
@@ -100,17 +102,44 @@ def test_date_parser(parsed_date_df):
     assert all(r["ref_date"] == r["parsed_date"] for r in df.collect())
 
 
-def test_random_resampler(random_resampler_df):
-    tol = 0.01
-    df_resample = RandomResampler(
-        class_col="label", seed=42, min_class_ratio=0.4, method="undersampling"
-    ).transform(random_resampler_df)
-    class_counts = df_resample.groupBy("label").count().rdd.collectAsMap()
-    minority_class_label = min(class_counts, key=class_counts.get)
-    majority_class_label = max(class_counts, key=class_counts.get)
-    majority_class_count: int = class_counts[majority_class_label]
-    minority_class_count: int = class_counts[minority_class_label]
-    counts = minority_class_count + majority_class_count
-    assert (minority_class_count / counts < 0.4 + tol) and (
-        minority_class_count / counts > 0.4 - tol
-    )
+@pytest.mark.usefixtures("random_resampler_df")
+class TestRandomResampler:
+    def test_class_balance_oversampling(self, random_resampler_df):
+        tol = 0.1
+        min_class_ratio = 0.4
+        seed = random.randint(1, 1000)
+        df_resample = RandomResampler(
+            class_col="label",
+            seed=seed,
+            min_class_ratio=min_class_ratio,
+            method="oversampling",
+        ).transform(random_resampler_df)
+        class_counts = df_resample.groupBy("label").count().rdd.collectAsMap()
+        minority_class_label = min(class_counts, key=class_counts.get)
+        majority_class_label = max(class_counts, key=class_counts.get)
+        majority_class_count: int = class_counts[majority_class_label]
+        minority_class_count: int = class_counts[minority_class_label]
+        counts = minority_class_count + majority_class_count
+        assert (minority_class_count / counts < min_class_ratio + tol) and (
+            minority_class_count / counts > min_class_ratio - tol
+        )
+
+    def test_class_balance_undersampling(self, random_resampler_df):
+        tol = 0.01
+        min_class_ratio = 0.5
+        seed = random.randint(1, 1000)
+        df_resample = RandomResampler(
+            class_col="label",
+            seed=seed,
+            min_class_ratio=min_class_ratio,
+            method="undersampling",
+        ).transform(random_resampler_df)
+        class_counts = df_resample.groupBy("label").count().rdd.collectAsMap()
+        minority_class_label = min(class_counts, key=class_counts.get)
+        majority_class_label = max(class_counts, key=class_counts.get)
+        majority_class_count: int = class_counts[majority_class_label]
+        minority_class_count: int = class_counts[minority_class_label]
+        counts = minority_class_count + majority_class_count
+        assert (minority_class_count / counts < min_class_ratio + tol) and (
+            minority_class_count / counts > min_class_ratio - tol
+        )
