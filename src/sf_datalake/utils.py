@@ -1,11 +1,15 @@
 """Utility functions."""
 
 import datetime as dt
-from typing import List
+import functools
+import operator
+from typing import List, Union
 
 import pyspark.sql
 import pyspark.sql.types as T
 from pyspark.sql import SparkSession
+from pyspark.sql import Window as W
+from pyspark.sql import functions as F
 
 
 def get_spark_session():
@@ -66,3 +70,146 @@ def extract_column_names(df: pyspark.sql.DataFrame, assembled_column: str) -> Li
 def to_date(str_date: str, date_format="%Y-%m-%d") -> dt.date:
     """Convert string date to datetime.date object"""
     return dt.datetime.strptime(str_date, date_format).date()
+
+
+def merge_asof(  # pylint: disable=too-many-arguments, too-many-locals
+    df_left: pyspark.sql.DataFrame,
+    df_right: pyspark.sql.DataFrame,
+    on: str = "période",
+    by: Union[str, List] = "siren",
+    tolerance: int = None,
+    direction: str = "backward",
+) -> pyspark.sql.DataFrame:
+    """Perform a merge by key distance.
+
+    This is similar to a left-join except that we match on nearest key rather than equal
+    keys. The associated column should be of date type.
+
+    This function performs an asof merge on two DataFrames based on a specified column
+    'on'. It supports grouping by additional columns specified in 'by'. The 'tolerance'
+    parameter allows for merging within a specified difference range. The 'direction'
+    parameter determines the direction of the asof merge.
+
+    Args:
+        df_left : The left DataFrame to be merged.
+        df_right : The right DataFrame to be merged.
+        on : The date column on which to merge the DataFrames.
+        by (optional): The column(s) to group by before merging.
+        tolerance (optional): The maximum difference allowed for asof merging, in
+          days.
+        direction : The direction of asof merging ('backward', 'forward', or 'nearest').
+
+    Returns:
+        DataFrame resulting from the asof merge.
+
+    """
+
+    def backward(
+        w: pyspark.sql.WindowSpec, col: Union[pyspark.sql.column.Column, str]
+    ) -> pyspark.sql.column.Column:
+        return F.last(col, ignorenulls=True).over(
+            w.rowsBetween(W.unboundedPreceding, W.currentRow)
+        )
+
+    def forward(
+        w: pyspark.sql.WindowSpec,
+        col: Union[pyspark.sql.column.Column, str],
+    ) -> pyspark.sql.column.Column:
+        return F.first(col, ignorenulls=True).over(
+            w.rowsBetween(W.currentRow, W.unboundedFollowing)
+        )
+
+    # Handle cases where 'by' is not specified
+    df_r = df_right if by else df_right.withColumn("_by", F.lit(True))
+    df_l = df_left if by else df_left.withColumn("_by", F.lit(True))
+    if by is None:
+        by = ["_by"]
+    # In other cases, use specified group key(s)
+    elif isinstance(by, str):
+        by = [by]
+    elif isinstance(by, list):
+        assert all(isinstance(s, str) for s in by), TypeError(
+            "All elements of `by` should by strings"
+        )
+    else:
+        raise ValueError("`by` should either be None, str or list.")
+
+    df_l = df_l.withColumn("from_df_l", F.lit(True))
+    join_keys = by + [on]
+
+    # Join using only specified `by` and `on` from right df, then create `coalesced_key`
+    # columns in case there are any missing `on` values subsequent to the merge.
+    df = df_l.alias("left").join(
+        df_r.select(join_keys).alias("right_join_keys"),
+        on=functools.reduce(
+            operator.and_,
+            (
+                F.col(f"left.{key}") == F.col(f"right_join_keys.{key}")
+                for key in join_keys
+            ),
+        ),
+        how="outer",
+    )
+    for key in join_keys:
+        df = df.withColumn(
+            f"coalesced_{key}",
+            F.coalesce(F.col(f"left.{key}"), F.col(f"right_join_keys.{key}")),
+        )
+
+    # Compute a target join date for each row, among available dates in df_right, using
+    # a forward / backward time window.
+    window_spec = W.partitionBy(*[f"coalesced_{key}" for key in by]).orderBy(
+        F.col(f"coalesced_{on}")
+    )
+    window_function = {
+        "backward": backward,
+        "forward": forward,
+    }
+    df = df.withColumn(
+        "target_join_date",
+        window_function[direction](window_spec, f"right_join_keys.{on}"),
+    )
+
+    # Drop duplicate columns and replace with the coalesced ones now that we're done
+    # with target date computing.
+    df = df.select(
+        *(f"left.{col}" for col in set(df_l.columns) - set(join_keys)),
+        *(f"coalesced_{key}" for key in join_keys),
+        "target_join_date",
+    )
+    for key in join_keys:
+        df = df.withColumnRenamed(f"coalesced_{key}", key)
+
+    # If the date difference between left and right dates is greater than tolerance, a
+    # flag that will prevent the join is added.
+    if tolerance:
+        sign = 1 if direction == "forward" else -1
+        df = df.withColumn(
+            "_do_not_join",
+            F.when(
+                (sign * F.datediff(F.col("target_join_date"), F.col(f"{on}")))
+                <= tolerance,
+                False,
+            ).otherwise(True),
+        )
+        by.append("_do_not_join")
+
+    # Actually join right df data over `by` and pre-computed target date. Filter as if
+    # we'd done a left join during the outer join, drop temporary columns.
+    df = (
+        df.filter("from_df_l")
+        .alias("pre_join")
+        .join(
+            df_r.withColumn("_do_not_join", F.lit(False)).alias("right"),
+            on=functools.reduce(
+                operator.and_,
+                (F.col(f"pre_join.{key}") == F.col(f"right.{key}") for key in by),
+            )
+            & (F.col("pre_join.target_join_date") == F.col(f"right.{on}")),
+            how="left",
+        )
+    ).drop("from_df_l", "_by", "_do_not_join", "target_join_date")
+
+    return df.select(
+        "pre_join.*", *(f"right.{col}" for col in set(df_r.columns) - set(join_keys))
+    )
