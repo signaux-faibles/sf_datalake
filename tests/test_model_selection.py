@@ -6,7 +6,7 @@ from pyspark.sql import types as T
 from sf_datalake.model_selection import train_test_split
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def split_dataset(spark):
     schema = T.StructType(
         [
@@ -38,20 +38,31 @@ def split_dataset(spark):
     return df
 
 
-def test_split_dataset(split_dataset):
-    df = split_dataset
-    train_data, test_data = train_test_split(
-        df=df, random_seed=42, train_size=0.8, test_size=0.2, group_col="siren"
-    )
-    ids_train_data = set(train_data.select("siren").rdd.flatMap(lambda x: x).collect())
-    ids_test_data = set(test_data.select("siren").rdd.flatMap(lambda x: x).collect())
-    intersection = ids_train_data.intersection(ids_test_data)
-    assert not intersection, f"Intersection found: {intersection}"
+@pytest.mark.usefixtures("split_dataset")
+class TestTrainTestSplit:
+    def test_split_dataset_group_independance(self, split_dataset):
+        train_data, test_data = train_test_split(
+            df=split_dataset,
+            random_seed=42,
+            train_size=0.8,
+            test_size=0.2,
+            group_col="siren",
+        )
+        siren_intersection = train_data[["siren"]].intersect(test_data[["siren"]])
+        assert (
+            siren_intersection.count() == 0
+        ), f"Intersection found: {siren_intersection.show()}"
 
-
-def test_split_dataset_size(split_dataset):
-    df = split_dataset
-    train_data, test_data = train_test_split(
-        df=df, random_seed=42, train_size=0.8, test_size=0.2, group_col="siren"
-    )
-    assert (test_data.count() > 0) & (train_data.count() > 0)
+    def test_split_dataset_train_test_size(self, split_dataset):
+        tolerance = 0.03
+        train_data, test_data = train_test_split(
+            df=split_dataset,
+            random_seed=42,
+            train_size=0.8,
+            test_size=0.2,
+            group_col="siren",
+        )
+        n_samples = split_dataset.count()
+        assert (test_data.count() / n_samples > 0.2 - tolerance) & (
+            test_data.count() / n_samples < 0.2 + tolerance
+        )
