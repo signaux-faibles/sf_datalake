@@ -4,6 +4,7 @@ import pytest
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
+from sf_datalake.exploration import count_missing_values
 from sf_datalake.transform import DateParser, IdentifierNormalizer, MissingValuesHandler
 
 
@@ -44,7 +45,7 @@ def parsed_date_df(spark):
     return df
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def missing_value_handler_df(spark):
     schema = T.StructType(
         [
@@ -89,18 +90,24 @@ def test_date_parser(parsed_date_df):
     assert all(r["ref_date"] == r["parsed_date"] for r in df.collect())
 
 
-def test_missing_value_handler_median(missing_value_handler_df):
-    df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median")._transform(
-        missing_value_handler_df
-    )
-    assert all(r["ca"] == r["ca_filled_median"] for r in df.collect())
+@pytest.mark.usefixtures("missing_value_handler_df")
+class TestMissingValueHandler:
+    def test_filling_with_median(self, missing_value_handler_df):
+        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median")._transform(
+            missing_value_handler_df
+        )
+        assert all(r["ca"] == r["ca_filled_median"] for r in df.collect())
 
+    def test_filling_with_value(self, missing_value_handler_df):
+        value = {"ca": 0.0}
+        df = MissingValuesHandler(inputCols=["ca"], value=value)._transform(
+            missing_value_handler_df
+        )
+        assert all(r["ca"] == r["ca_filled_value"] for r in df.collect())
 
-def test_missing_value_handler_filling(missing_value_handler_df):
-    df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median")._transform(
-        missing_value_handler_df
-    )
-    missdf = df.select(
-        [F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns]
-    ).select("ca")
-    assert all(r["ca"] == 0 for r in missdf.collect())
+    def test_filling_as_full_completion(self, missing_value_handler_df):
+        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median")._transform(
+            missing_value_handler_df
+        )
+        missdf = count_missing_values(df).select("ca")
+        assert all(r["ca"] == 0 for r in missdf.collect())

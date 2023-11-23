@@ -191,6 +191,9 @@ class MissingValuesHandler(
     values. Both strategies are mutually exclusive, so use either `value` or
     `stat_strategy`.
 
+    Note on median convention: the computed median
+    for an even number of samples is the `n/2`th sample
+
     Args:
       inputCols: The input dataset columns to consider for filling.
       value: Value to replace null values with. It must be a mapping from column name
@@ -304,11 +307,6 @@ class MissingValuesDropper(
     This Transformer is only a way to simply drop null values inside a Pipeline.
     pyspark.sql.DataFrame.dropna() is called using `how=any`, meaning that any row
     containing at least one missing value found among `inputCols` will be dropped.
-
-    Note : median strategy on odd number of line will not return
-    the 'conventional' median as compute in pandas for example.
-    Here is an example :
-    [1,2,3,4] the median will be normally 2.5, here the function returns 2
 
     Args:
         inputCols: The input dataset columns to consider for dropping.
