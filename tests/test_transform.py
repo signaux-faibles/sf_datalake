@@ -48,7 +48,7 @@ def parsed_date_df(spark):
     return df
 
 
-@pytest.fixture
+@pytest.fixture(scope="class")
 def lag_operator_df(spark):
     schema = T.StructType(
         [
@@ -105,22 +105,22 @@ def test_date_parser(parsed_date_df):
     assert all(r["ref_date"] == r["parsed_date"] for r in df.collect())
 
 
-def test_lag_operator_wo(lag_operator_df):
-    df_wo = LagOperator(inputCol="ca", n_months=1, bfill=False, ffill=False).transform(
-        lag_operator_df
-    )
-    assert all(r["ca_lag1m_wo"] == r["ca_lag1m"] for r in df_wo.collect())
+@pytest.mark.usefixtures("lag_operator_df")
+class TestLagOperator:
+    def test_without_filling(self, lag_operator_df):
+        df_wo = LagOperator(
+            inputCol="ca", n_months=1, bfill=False, ffill=False
+        ).transform(lag_operator_df)
+        assert all(r["ca_lag1m_wo"] == r["ca_lag1m"] for r in df_wo.collect())
 
+    def test_with_bfill(self, lag_operator_df):
+        df_bfill = LagOperator(
+            inputCol="ca", n_months=1, bfill=True, ffill=False
+        ).transform(lag_operator_df)
+        assert all(r["ca_lag1m_bfill"] == r["ca_lag1m"] for r in df_bfill.collect())
 
-def test_lag_operator_bfill(lag_operator_df):
-    df_bfill = LagOperator(
-        inputCol="ca", n_months=1, bfill=True, ffill=False
-    ).transform(lag_operator_df)
-    assert all(r["ca_lag1m_bfill"] == r["ca_lag1m"] for r in df_bfill.collect())
-
-
-def test_lag_operator_ffill(lag_operator_df):
-    df_ffill = LagOperator(
-        inputCol="ca", n_months=1, bfill=False, ffill=True
-    ).transform(lag_operator_df)
-    assert all(r["ca_lag1m_ffill"] == r["ca_lag1m"] for r in df_ffill.collect())
+    def test_with_ffill(self, lag_operator_df):
+        df_ffill = LagOperator(
+            inputCol="ca", n_months=1, bfill=False, ffill=True
+        ).transform(lag_operator_df)
+        assert all(r["ca_lag1m_ffill"] == r["ca_lag1m"] for r in df_ffill.collect())
