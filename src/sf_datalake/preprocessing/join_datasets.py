@@ -4,13 +4,16 @@ The join is made along temporal and SIREN variables. Source files are
 expected to be ORC.
 
 Expected inputs :
-- "sf" dataset. An ill-named dataset that already aggregates different sources such as:
-  - URSSAF data
-  - DGEFP data
-  - 'sirene' database data
-  - altares 'paydex' + 'FPI' data
+- URSSAF debit data
+- URSSAF cotisation data
+- DGEFP data
+- 'sirene' database data
+- altares 'paydex' + 'FPI' data
 - DGFiP financial ratios dataset
 - DGFiP judgment data
+
+TimeIndex names need to be "période"
+and format as follow : "yyyy-MM-dd"
 
 Type python join_datasets.py --help for detailed usage.
 
@@ -30,15 +33,31 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 import sf_datalake.transform
+import sf_datalake.utils
 from sf_datalake.io import load_data, write_data
 
 parser = argparse.ArgumentParser(
     description="Merge DGFiP and Signaux Faibles datasets into a single one."
 )
 parser.add_argument(
-    "--sf",
-    dest="sf_data",
-    help="Path to the Signaux Faibles dataset.",
+    "--urssaf_debit",
+    dest="urssaf_debit",
+    help="Path to the preprocessed 'URSSAF debit' dataset.",
+)
+parser.add_argument(
+    "--urssaf_cotisation",
+    dest="urssaf_cotisation",
+    help="Path to the preprocessed 'URSSAF cotisation' dataset.",
+)
+parser.add_argument(
+    "--ap",
+    dest="ap",
+    help="Path to the preprocessed DARES dataset.",
+)
+parser.add_argument(
+    "--sirene",
+    dest="sirene",
+    help="Path to the preprocessed Sirene dataset.",
 )
 parser.add_argument(
     "--judgments",
@@ -65,7 +84,10 @@ args = parser.parse_args()
 # Load datasets
 datasets = load_data(
     {
-        "sf": args.sf_data,
+        "urssaf_debit": args.urssaf_debit,
+        "urssaf_cotisation": args.urssaf_cotisation,
+        "ap": args.ap,
+        "sirene": args.sirene,
         "dgfip_yearly": args.dgfip_yearly,
         "judgments": args.judgments,
         "altares": args.altares,
@@ -79,7 +101,10 @@ siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
 df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
 df_judgments = siren_normalizer.transform(datasets["judgments"])
 df_altares = siren_normalizer.transform(datasets["altares"])
-df_sf = siren_normalizer.transform(datasets["sf"])
+df_urssaf_debit = siren_normalizer.transform(datasets["urssaf_debit"])
+df_urssaf_cotisation = siren_normalizer.transform(datasets["urssaf_cotisation"])
+df_sirene = siren_normalizer.transform(datasets["sirene"])
+df_ap = siren_normalizer.transform(datasets["ap"])
 
 # Join datasets and drop (time, SIREN) duplicates with the highest
 # null values ratio from the DGFiP ratios dataset
@@ -91,23 +116,26 @@ df_dgfip_yearly = df_dgfip_yearly.withColumn(
 )
 w = Window().partitionBy(["siren", "periode"]).orderBy(F.col("null_ratio").asc())
 
-# Join all datasets
-joined_df = (
-    df_sf.join(
-        df_dgfip_yearly,
-        on=(
-            (df_sf.siren == df_dgfip_yearly.siren)
-            & (df_sf.periode >= df_dgfip_yearly.date_deb_exercice)
-            & (df_sf.periode < df_dgfip_yearly.date_fin_exercice)
-        ),
-        how="inner",
-    )
-    .drop(df_dgfip_yearly.siren)
-    .withColumn("n_row", F.row_number().over(w))
-    .filter(F.col("n_row") == 1)
-    .drop("n_row")
+# Join "monthly" datasets
+joined_df_monthly = (
+    df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "periode"], how="inner")
+    .drop(df_urssaf_cotisation.siren)
+    .join(df_ap, on=["siren", "periode"], how="inner")
+    .join(df_sirene, on="siren", how="inner")
     .join(df_judgments, on="siren", how="left")
     .join(df_altares, on=["siren", "periode"], how="left")
+)
+# Rename "target" time index for merge asof
+df_dgfip_yearly = df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "periode")
+
+# Join monthly dataset with yearly dataset
+joined_df = sf_datalake.utils.merge_asof(
+    joined_df_monthly,
+    df_dgfip_yearly,
+    on="periode",
+    by="siren",
+    tolerance=365,
+    direction="backward",
 )
 
 write_data(joined_df, args.output_path, args.output_format)
