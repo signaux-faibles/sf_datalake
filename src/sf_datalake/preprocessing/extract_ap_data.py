@@ -198,19 +198,15 @@ sirenagg_transformer = sf_datalake.transform.SirenAggregator(
 consommation_preprocess = sirenagg_transformer.transform(consommation).drop("siret")
 
 # Join 'demande' & 'consommation' dataset
-ap_ds = (
-    demande.join(
-        consommation,
-        on=(
-            (consommation.siren == demande.siren)
-            & (consommation.periode >= demande.date_début_mr)
-            & (consommation.periode < demande.date_fin_mr)
-        ),
-        how="inner",
-    )
-    .drop(demande.siren)
-    .drop(demande.siret)
-)
+ap_ds = demande.join(
+    consommation,
+    on=(
+        (consommation.siren == demande.siren)
+        & (consommation.periode >= demande.date_début_mr)
+        & (consommation.periode < demande.date_fin_mr)
+    ),
+    how="inner",
+).drop(demande.siren)
 
 
 ap_ds = ap_ds.select(
@@ -222,7 +218,7 @@ ap_ds = ap_ds.select(
 
 # Manage missing values
 missingvalueHander_transformer = sf_datalake.transform.MissingValuesHandler(
-    inputCols=["ap_consommation", "apart_heures_autorisees"],
+    inputCols=["ap_consommation", "ap_demande"],
     value=configuration.preprocessing.fill_default_values,
 )
 
