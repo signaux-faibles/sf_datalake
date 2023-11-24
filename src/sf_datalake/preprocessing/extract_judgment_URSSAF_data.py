@@ -1,8 +1,7 @@
-"""Extract judgment data for machine learning classification target definition.
+"""Extract URSSAF judgment data for machine learning classification target definition.
 
-The script expects the "siren", "djug", "najug" columns inside the input table. The
-latter correspond to the date and type of judgment (represented using a one character
-encoding)
+The script expects the "siret", "date_effet", "action_procol" columns
+inside the input table. The latter correspond to the date.
 
 USAGE python extract_judgment_data.py <input_file> <output_file>
     [--start_date START_DATE] [--end_date END_DATE]
@@ -49,6 +48,7 @@ df = spark.read.csv(
 df = df.filter(
     (F.col("date_effet") >= args.start_date) & (F.col("date_effet") <= args.end_date)
 )
+# Get siren from siret
 SiretSiren_pipeline = sf_datalake.transform.SiretToSiren(inputCol="siret")
 df = SiretSiren_pipeline.transform(df)
 
