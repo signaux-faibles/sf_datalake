@@ -6,53 +6,7 @@ import pytest
 from pyspark.sql import types as T
 
 from sf_datalake.transform import DateParser, IdentifierNormalizer, RandomResampler
-
-
-# Function to generate example
-def generate_siren():
-    return "".join(str(random.randint(0, 9)) for _ in range(9))
-
-
-def generate_period():
-    l = [30 * i for i in range(2)]
-    n_days = l[random.randint(0, len(l) - 1)]
-    return dt.date(random.randint(2014, 2023), random.randint(1, 12), 1)
-
-
-def generate_value_integer():
-    return random.randint(0, 100)
-
-
-def generate_category():
-    return "".join(str(random.randint(0, 9)) for _ in range(3))
-
-
-def generate_value_double():
-    return random.random()
-
-
-def generate_label(proba=0.5):
-    return int(np.random.choice([0, 1], p=[1 - proba, proba]))
-
-
-def generate_data(n_siren, n_lines_by_siren, add_noise=False):
-    res = []
-    for _ in range(n_siren):
-        if add_noise:
-            n_lines_by_siren += random.randint(-1, 1)
-        s = generate_siren()
-        for _ in range(n_lines_by_siren):
-            res.append(
-                (
-                    s,
-                    generate_period(),
-                    generate_value_integer(),
-                    generate_value_double(),
-                    generate_category(),
-                    generate_label(proba=0.05),
-                )
-            )
-    return res
+from tests.conftest import MockDataFrameGenerator
 
 
 @pytest.fixture
@@ -94,24 +48,9 @@ def parsed_date_df(spark):
 
 @pytest.fixture(scope="class")
 def random_resampler_df(spark):
-    schema = T.StructType(
-        [
-            T.StructField("siren", T.StringType(), True),
-            T.StructField("periode", T.DateType(), True),
-            T.StructField("ca", T.IntegerType(), True),
-            T.StructField("ebe", T.DoubleType(), True),
-            T.StructField("category", T.StringType(), True),
-            T.StructField("label", T.IntegerType(), True),
-        ]
-    )
-    # fmt: off
-    df = spark.createDataFrame(
-        generate_data(n_siren=10000,n_lines_by_siren=3, add_noise=True)
-        ,
-        schema,
-    )
-    # fmt: on
-    return df
+    return MockDataFrameGenerator(
+        n_siren=10000, n_rows_per_siren=3, n_rows_perturbation=1
+    ).data
 
 
 def test_siren_padding(siren_padding_df):
