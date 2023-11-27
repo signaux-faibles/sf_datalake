@@ -1,10 +1,58 @@
 import datetime as dt
 import random
 
+import numpy as np
 import pytest
 from pyspark.sql import types as T
 
 from sf_datalake.transform import DateParser, IdentifierNormalizer, RandomResampler
+
+
+# Function to generate example
+def generate_siren():
+    return "".join(str(random.randint(0, 9)) for _ in range(9))
+
+
+def generate_period():
+    l = [30 * i for i in range(2)]
+    n_days = l[random.randint(0, len(l) - 1)]
+    return dt.date(random.randint(2014, 2023), random.randint(1, 12), 1)
+
+
+def generate_value_integer():
+    return random.randint(0, 100)
+
+
+def generate_category():
+    return "".join(str(random.randint(0, 9)) for _ in range(3))
+
+
+def generate_value_double():
+    return random.random()
+
+
+def generate_label(proba=0.5):
+    return int(np.random.choice([0, 1], p=[1 - proba, proba]))
+
+
+def generate_data(n_siren, n_lines_by_siren, add_noise=False):
+    res = []
+    for _ in range(n_siren):
+        if add_noise:
+            n_lines_by_siren += random.randint(-1, 1)
+        s = generate_siren()
+        for _ in range(n_lines_by_siren):
+            res.append(
+                (
+                    s,
+                    generate_period(),
+                    generate_value_integer(),
+                    generate_value_double(),
+                    generate_category(),
+                    generate_label(proba=0.05),
+                )
+            )
+    return res
 
 
 @pytest.fixture
@@ -58,32 +106,8 @@ def random_resampler_df(spark):
     )
     # fmt: off
     df = spark.createDataFrame(
-        [('219385581', dt.date(2017, 12, 1), 35, 0.3034911450601422, '169', 0),
-        ('219385581', dt.date(2022, 3, 1), 54, 0.08394427209402189, '347', 0),
-        ('219385581', dt.date(2017, 3, 1), 41, 0.7482441546718624, '529', 0),
-        ('219385581', dt.date(2015, 1, 1), 48, 0.8458750332248388, '006', 0),
-        ('219385581', dt.date(2018, 1, 1), 71, 0.05922352511577478, '631', 0),
-        ('737745998', dt.date(2016, 6, 1), 6, 0.23554547470210907, '366', 0),
-        ('737745998', dt.date(2014, 10, 1), 39, 0.9144442485558925, '803', 0),
-        ('737745998', dt.date(2015, 8, 1), 92, 0.32033475571920367, '903', 0),
-        ('737745998', dt.date(2015, 1, 1), 66, 0.694039198363326, '944', 0),
-        ('737745998', dt.date(2019, 8, 1), 76, 0.1680343105355956, '808', 0),
-        ('614889185', dt.date(2019, 2, 1), 79, 0.16736434937871758, '521', 0),
-        ('614889185', dt.date(2015, 3, 1), 87, 0.8089011463158653, '250', 0),
-        ('614889185', dt.date(2016, 1, 1), 48, 0.5864655437098659, '358', 0),
-        ('614889185', dt.date(2016, 8, 1), 15, 0.6027506727512615, '883', 0),
-        ('614889185', dt.date(2020, 8, 1), 99, 0.21462396555702568, '017', 0),
-        ('186331439', dt.date(2019, 8, 1), 18, 0.05994703380143718, '711', 0),
-        ('186331439', dt.date(2022, 2, 1), 86, 0.7503833614639871, '708', 0),
-        ('186331439', dt.date(2019, 10, 1), 26, 0.7224095021086719, '615', 0),
-        ('186331439', dt.date(2023, 6, 1), 15, 0.8051712533202542, '408', 1),
-        ('186331439', dt.date(2017, 7, 1), 84, 0.3989912559412453, '195', 1),
-        ('980933722', dt.date(2018, 8, 1), 9, 0.01798403220657474, '103', 1),
-        ('980933722', dt.date(2023, 10, 1), 6, 0.6063299987951098, '995', 1),
-        ('980933722', dt.date(2018, 7, 1), 91, 0.3801052159050209, '778', 0),
-        ('980933722', dt.date(2018, 11, 1), 42, 0.8761944708456222, '331', 0),
-        ('980933722', dt.date(2017, 3, 1), 21, 0.3973330408443837, '488', 0)
-        ],
+        generate_data(n_siren=10000,n_lines_by_siren=3, add_noise=True)
+        ,
         schema,
     )
     # fmt: on
@@ -105,7 +129,7 @@ def test_date_parser(parsed_date_df):
 @pytest.mark.usefixtures("random_resampler_df")
 class TestRandomResampler:
     def test_class_balance_oversampling(self, random_resampler_df):
-        tol = 0.1
+        tol = 0.05
         min_class_ratio = 0.4
         seed = random.randint(1, 1000)
         df_resample = RandomResampler(
@@ -125,7 +149,7 @@ class TestRandomResampler:
         )
 
     def test_class_balance_undersampling(self, random_resampler_df):
-        tol = 0.01
+        tol = 0.05
         min_class_ratio = 0.5
         seed = random.randint(1, 1000)
         df_resample = RandomResampler(
