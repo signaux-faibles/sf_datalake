@@ -44,7 +44,7 @@ from the repository root.
 Activate git hooks using
 
 ``` shell
-pre-commit install
+pre-commit install --install-hooks -t pre-commit -t pre-push
 ```
 
 This will install git hooks that should enforce a set of properties before committing / pushing code. These properties can be customized through the `pre-commit` config file and can cover a wide scope : coding style, code linting, tests, etc.
