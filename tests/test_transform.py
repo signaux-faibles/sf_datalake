@@ -128,42 +128,37 @@ def test_date_parser(parsed_date_df):
 
 @pytest.mark.usefixtures("random_resampler_df")
 class TestRandomResampler:
+    def check_balance(self, df, req_min_cls_ratio, tol):
+        class_counts = df.groupBy("label").count().rdd.collectAsMap()
+        minority_class_count = class_counts[1]
+        majority_class_count = class_counts[0]
+        counts = minority_class_count + majority_class_count
+        assert (
+            req_min_cls_ratio - tol
+            < (minority_class_count / counts)
+            < req_min_cls_ratio + tol
+        )
+
     def test_class_balance_oversampling(self, random_resampler_df):
-        tol = 0.05
+        tolerance = 0.1
         min_class_ratio = 0.4
         seed = random.randint(1, 1000)
-        df_resample = RandomResampler(
+        oversampled_df = RandomResampler(
             class_col="label",
             seed=seed,
             min_class_ratio=min_class_ratio,
             method="oversampling",
         ).transform(random_resampler_df)
-        class_counts = df_resample.groupBy("label").count().rdd.collectAsMap()
-        minority_class_label = min(class_counts, key=class_counts.get)
-        majority_class_label = max(class_counts, key=class_counts.get)
-        majority_class_count: int = class_counts[majority_class_label]
-        minority_class_count: int = class_counts[minority_class_label]
-        counts = minority_class_count + majority_class_count
-        assert (minority_class_count / counts < min_class_ratio + tol) and (
-            minority_class_count / counts > min_class_ratio - tol
-        )
+        return self.check_balance(oversampled_df, min_class_ratio, tolerance)
 
     def test_class_balance_undersampling(self, random_resampler_df):
-        tol = 0.05
+        tolerance = 0.1
         min_class_ratio = 0.5
         seed = random.randint(1, 1000)
-        df_resample = RandomResampler(
+        undersampled_df = RandomResampler(
             class_col="label",
             seed=seed,
             min_class_ratio=min_class_ratio,
             method="undersampling",
         ).transform(random_resampler_df)
-        class_counts = df_resample.groupBy("label").count().rdd.collectAsMap()
-        minority_class_label = min(class_counts, key=class_counts.get)
-        majority_class_label = max(class_counts, key=class_counts.get)
-        majority_class_count: int = class_counts[majority_class_label]
-        minority_class_count: int = class_counts[minority_class_label]
-        counts = minority_class_count + majority_class_count
-        assert (minority_class_count / counts < min_class_ratio + tol) and (
-            minority_class_count / counts > min_class_ratio - tol
-        )
+        self.check_balance(undersampled_df, min_class_ratio, tolerance)
