@@ -31,8 +31,8 @@ class MockDataFrameGenerator:
     Attributes:
         n_siren: the number of individual SIREN to mock.
         n_rows_per_siren: Number of different rows per SIREN.
-        n_rows_perturbation: If not zero, will add or subtract a random number of rows for
-          each subgroup of generated data associated with a SIREN.
+        n_rows_perturbation: If not zero, will add or subtract a random number of rows
+          for each subgroup of generated data associated with a SIREN.
         start_date: The lower bound for the "période" column values.
         end_date: The upper bound for the "période" column values.
         data: The generated dataframe
@@ -90,6 +90,11 @@ class MockDataFrameGenerator:
         return random.randint(0, 1)
 
     def generate_mock_df(self):
+        """Generate the mock DataFrame.
+
+        It will set the `data` attribute. Each generated SIREN will have hold at least a
+        row of data.
+        """
         data: List[Tuple] = []
         for _ in range(self.n_siren):
             n_rows = self.n_rows_per_siren
