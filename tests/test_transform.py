@@ -93,20 +93,20 @@ def test_date_parser(parsed_date_df):
 @pytest.mark.usefixtures("missing_value_handler_df")
 class TestMissingValueHandler:
     def test_filling_with_median(self, missing_value_handler_df):
-        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median")._transform(
+        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median").transform(
             missing_value_handler_df
         )
         assert all(r["ca"] == r["ca_filled_median"] for r in df.collect())
 
     def test_filling_with_value(self, missing_value_handler_df):
         value = {"ca": 0.0}
-        df = MissingValuesHandler(inputCols=["ca"], value=value)._transform(
+        df = MissingValuesHandler(inputCols=["ca"], value=value).transform(
             missing_value_handler_df
         )
         assert all(r["ca"] == r["ca_filled_value"] for r in df.collect())
 
     def test_filling_as_full_completion(self, missing_value_handler_df):
-        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median")._transform(
+        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median").transform(
             missing_value_handler_df
         )
         missdf = count_missing_values(df).select("ca")
