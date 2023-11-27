@@ -29,15 +29,16 @@ class MockDataFrameGenerator:
     "période".
 
     Attributes:
-      n_siren: the number of individual SIREN to mock.
-      n_rows_per_siren: Number of different rows per SIREN.
-      n_rows_perturbation: If not zero, will add or subtract a random number of rows for each subgroup of generated data associated with a SIREN.
-      start_date: The lower bound for the "période" column values.
-      end_date: The upper bound for the "période" column values.
-      data: The generated dataframe
+        n_siren: the number of individual SIREN to mock.
+        n_rows_per_siren: Number of different rows per SIREN.
+        n_rows_perturbation: If not zero, will add or subtract a random number of rows for
+          each subgroup of generated data associated with a SIREN.
+        start_date: The lower bound for the "période" column values.
+        end_date: The upper bound for the "période" column values.
+        data: The generated dataframe
 
     Args:
-      Same
+        Same as Attributes, except `data`, that is generated at the end of instantiation.
 
     """
 
@@ -63,7 +64,7 @@ class MockDataFrameGenerator:
         """Generate a random date at month start.
 
         Returns:
-          A date included in the [self.start_date, self.end_date] interval.
+            A date included in the [self.start_date, self.end_date] interval.
 
         """
         start_year = int(self.start_date.split("-")[0])
