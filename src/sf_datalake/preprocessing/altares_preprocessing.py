@@ -15,10 +15,8 @@ It also computes time-aggregates required through configuration.
 import os
 import sys
 from os import path
-from typing import List
 
 import pyspark.sql.functions as F
-from pyspark.ml import PipelineModel, Transformer
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -68,34 +66,7 @@ df = df.withColumn("fpi_30", F.col("NOTE100_ALERTEUR_PLUS_30").cast("float"))
 df = df.withColumn("fpi_90", F.col("NOTE100_ALERTEUR_PLUS_90_JOURS").cast("float"))
 df = df.withColumnRenamed("SIREN", "siren")
 
-## Pre-processing
-time_computations: List[Transformer] = []
-
-# pylint:disable=unsubscriptable-object
-for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
-    if feature in df.columns:
-        time_computations.append(
-            sf_datalake.transform.LagOperator(
-                inputCol=feature, n_months=n_months, bfill=True
-            )
-        )
-for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
-    if feature in df.columns:
-        time_computations.append(
-            sf_datalake.transform.DiffOperator(
-                inputCol=feature, n_months=n_months, bfill=True
-            )
-        )
-for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
-    if feature in df.columns:
-        time_computations.append(
-            sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
-        )
-df = PipelineModel(time_computations).transform(df)
-
-selected_cols = []
-for sel_col in ["siren", "periode", "paydex", "fpi_30", "fpi_90"]:
-    selected_cols.extend(df_col for df_col in df.columns if df_col.startswith(sel_col))
+selected_cols = ["siren", "periode", "paydex", "fpi_30", "fpi_90"]
 
 sf_datalake.io.write_data(
     df.select(selected_cols),
