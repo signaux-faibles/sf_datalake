@@ -55,37 +55,32 @@ def lag_operator_df(spark):
             T.StructField("siren", T.StringType(), True),
             T.StructField("periode", T.DateType(), True),
             T.StructField("ca", T.IntegerType(), True),
-            T.StructField("ca_lag1m_wo", T.IntegerType(), True),
-            T.StructField("ca_lag1m_bfill", T.IntegerType(), True),
-            T.StructField("ca_lag1m_ffill", T.IntegerType(), True),
-            T.StructField("ebe", T.DoubleType(), True),
-            T.StructField("category", T.StringType(), True),
-            T.StructField("label", T.IntegerType(), True),
+            T.StructField("expected_ca_lag1m", T.IntegerType(), True),
         ]
     )
     # fmt: off
     df = spark.createDataFrame(
         [
-            ("043339338", dt.date(2018, 1, 1), 7, None, 7, None, 0.6354364559266611, "760", 0),
-            ("043339338", dt.date(2018, 2, 1), 9, 7, 7, 7,0.46708377132745593, "971", 0),
-            ("043339338", dt.date(2018, 3, 1), 83, 9, 9,9,0.5866119708529862, "880", 0),
-            ("043339338", dt.date(2018, 4, 1), 76, 83, 83,83,0.9126640598227, "307", 1),
-            ("043339338", dt.date(2018, 5, 1), 90, 76, 76,76,0.434687497902168, "121", 1),
-            ("043339338", dt.date(2018, 6, 1), 64, 90, 90,90, 0.9526150841135487, "540", 0),
-            ("043339338", dt.date(2018, 7, 1), 83, 64, 64,64, 0.9075422885370632, "527", 0),
-            ("043339338", dt.date(2018, 8, 1), 87, 83, 83,83,0.9331836317697791, "806", 0),
-            ("043339338", dt.date(2018, 9, 1), 68, 87, 87,87,0.8741663559131666, "979", 1),
-            ("043339338", dt.date(2018, 10, 1), 21, 68, 68,68,0.6222276906194403, "387", 1),
-            ("293736607", dt.date(2020, 1, 1), 97, None, 97,None, 0.3537846649936036, "107", 0),
-            ("293736607", dt.date(2020, 2, 1), 96, 97, 97, 97,0.042232614177742156, "538", 1),
-            ("293736607", dt.date(2020, 3, 1), 33, 96, 96, 96,0.434218505659813, "068", 1),
-            ("293736607", dt.date(2020, 4, 1), None, 33, 33,33,0.17566080780501403, "315", 1),
-            ("293736607", dt.date(2020, 5, 1), 99, None, 99,33,0.7003481341474471, "670", 0),
-            ("293736607", dt.date(2020, 6, 1), 71, 99, 99,99, 0.6626475549979821, "246", 1),
-            ("293736607", dt.date(2020, 7, 1), 19, 71, 71,71, 0.8235084769687906, "919", 0),
-            ("293736607", dt.date(2020, 8, 1), 95, 19, 19, 19,0.3750939170060519, "806", 0),
-            ("293736607", dt.date(2020, 9, 1), None, 95, 95, 95,0.9831245903009137, "070", 0),
-            ("293736607", dt.date(2020, 10, 1), 38, None, None, 95, 0.6819102467208926, "782", 1),
+            ("043339338", dt.date(2018, 1, 1),  7, None),
+            ("043339338", dt.date(2018, 2, 1),  9, 7),
+            ("043339338", dt.date(2018, 3, 1),  83, 9),
+            ("043339338", dt.date(2018, 4, 1),  76, 83),
+            ("043339338", dt.date(2018, 5, 1),  90, 76),
+            ("043339338", dt.date(2018, 6, 1),  64, 90),
+            ("043339338", dt.date(2018, 7, 1),  83, 64),
+            ("043339338", dt.date(2018, 8, 1),  87, 83),
+            ("043339338", dt.date(2018, 9, 1),  68, 87),
+            ("043339338", dt.date(2018, 10, 1), 21, 68),
+            ("293736607", dt.date(2020, 1, 1),  97, None),
+            ("293736607", dt.date(2020, 2, 1),  96, 97),
+            ("293736607", dt.date(2020, 3, 1),  33, 96),
+            ("293736607", dt.date(2020, 4, 1),  None, 33),
+            ("293736607", dt.date(2020, 5, 1),  99, None),
+            ("293736607", dt.date(2020, 6, 1),  71, 99),
+            ("293736607", dt.date(2020, 7, 1),  19, 71),
+            ("293736607", dt.date(2020, 8, 1),  95, 19),
+            ("293736607", dt.date(2020, 9, 1),  None, 95),
+            ("293736607", dt.date(2020, 10, 1), 38, None)
         ],
         schema,
     )
@@ -107,20 +102,9 @@ def test_date_parser(parsed_date_df):
 
 @pytest.mark.usefixtures("lag_operator_df")
 class TestLagOperator:
-    def test_without_filling(self, lag_operator_df):
-        df_wo = LagOperator(
-            inputCol="ca", n_months=1, bfill=False, ffill=False
+    def test_1m_lag(self, lag_operator_df):
+        df_1m = LagOperator(
+            inputCol="ca",
+            n_months=1,
         ).transform(lag_operator_df)
-        assert all(r["ca_lag1m_wo"] == r["ca_lag1m"] for r in df_wo.collect())
-
-    def test_with_bfill(self, lag_operator_df):
-        df_bfill = LagOperator(
-            inputCol="ca", n_months=1, bfill=True, ffill=False
-        ).transform(lag_operator_df)
-        assert all(r["ca_lag1m_bfill"] == r["ca_lag1m"] for r in df_bfill.collect())
-
-    def test_with_ffill(self, lag_operator_df):
-        df_ffill = LagOperator(
-            inputCol="ca", n_months=1, bfill=False, ffill=True
-        ).transform(lag_operator_df)
-        assert all(r["ca_lag1m_ffill"] == r["ca_lag1m"] for r in df_ffill.collect())
+        assert all(r["expected_ca_lag1m"] == r["ca_lag1m"] for r in df_1m.collect())
