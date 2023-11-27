@@ -1278,9 +1278,10 @@ class RandomResampler(
         minority_class_label = min(class_counts, key=class_counts.get)
         majority_class_count: int = class_counts[majority_class_label]
         minority_class_count: int = class_counts[minority_class_label]
+        if len(class_counts) == 1:
+            raise ValueError("There is only 1 class in the dataset.")
         majority_class_df = dataset.filter(F.col(class_col) == majority_class_label)
         minority_class_df = dataset.filter(F.col(class_col) == minority_class_label)
-
         if method == "undersampling":
             # We compute total number of samples in resampled dataset given fixed
             # minority class samples, then we undersample the majority class subset.
