@@ -271,17 +271,12 @@ class MissingValuesHandler(
                     "Statistical imputation of a non-numerical variable is not "
                     "supported."
                 )
-            n_row = dataset.count()
-            print(n_row)
-            count_missing_values_df = count_missing_values(dataset)
-            for c in input_cols:
-                null_check = count_missing_values_df.select(F.col(c) == n_row).first()[
-                    0
-                ]
-                if null_check:
+            n_rows = dataset.count()
+            n_missing_values = count_missing_values(dataset).collect()[0]
+            for col in input_cols:
+                if n_missing_values[col] == n_rows:
                     raise ValueError(
-                        "Statistical imputation of a completely null columns is not "
-                        "supported."
+                        "Statistical imputation of a null column is not supported."
                     )
             imputer = Imputer(strategy=stat_strategy)
             imputer.setInputCols(input_cols)
