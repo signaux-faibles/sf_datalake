@@ -711,14 +711,9 @@ class LagOperator(
 ):  # pylint: disable=too-few-public-methods,protected-access
     """A transformer that computes lagged values of a given time-indexed variable.
 
-    A forward or backward fill can optionally be performed when lag data is unavailable.
-    Both are mutually exclusive.
-
     Args:
         inputCol: The column that will be used to derive lagged variables.
         n_months: Number of months that will be considered for lags.
-        bfill: If set, performs a backward completion on missing lag data.
-        ffill: If set, performs a forward completion on missing lag data.
 
     """
 
@@ -734,28 +729,12 @@ class LagOperator(
         "A reference date, used to compute number of months between rows.",
     )
 
-    bfill = Param(
-        Params._dummy(),
-        "bfill",
-        "A boolean, used to specify if a backward completion is applied to missing lag \
-        data.",
-    )
-
-    ffill = Param(
-        Params._dummy(),
-        "ffill",
-        "A boolean, used to specify if a forward completion is applied to missing lag \
-        data.",
-    )
-
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
         self._setDefault(
             inputCol=None,
             n_months=None,
-            bfill=False,
-            ffill=False,
             ref_date=dt.date(2014, 1, 1),
         )
         self.setParams(**kwargs)
@@ -767,8 +746,6 @@ class LagOperator(
         Args:
             inputCol (str): The column that will be used to derive lagged variables.
             n_months (int or list): Number of months that will be considered for lags.
-            bfill (bool) : If set, performs a backward completion on missing lag data.
-            ffill (bool) : If set, performs a forward completion on missing lag data.
 
         """
         return self._set(**kwargs)
@@ -792,17 +769,12 @@ class LagOperator(
         """
         input_col = self.getOrDefault("inputCol")
         n_months = self.getOrDefault("n_months")
-        bfill = self.getOrDefault("bfill")
-        ffill = self.getOrDefault("ffill")
         if isinstance(n_months, int):
             n_months = [n_months]
         elif isinstance(n_months, list):
             pass
         else:
             raise ValueError("`n_months` should either be an int or a list of ints.")
-
-        if bfill and ffill:
-            raise ValueError("`ffill` and `bfill` are mutually exclusive.")
 
         dataset = dataset.withColumn(
             "ref_date", F.lit(self.getOrDefault("ref_date"))
@@ -814,18 +786,6 @@ class LagOperator(
         lag_window = (
             Window().partitionBy("siren").orderBy(F.col("months_from_ref").asc())
         )
-        forward_window = (
-            Window()
-            .partitionBy("siren")
-            .orderBy(F.col("periode").asc())
-            .rowsBetween(Window.currentRow, Window.unboundedFollowing)
-        )
-        backward_window = (
-            Window()
-            .partitionBy("siren")
-            .orderBy(F.col("periode").asc())
-            .rowsBetween(Window.unboundedPreceding, Window.currentRow)
-        )
 
         for n in n_months:
             output_col = f"{input_col}_lag{n}m"
@@ -833,29 +793,6 @@ class LagOperator(
                 output_col,
                 F.lag(F.col(input_col), n).over(lag_window),
             )
-            # Fill missing values
-            if ffill or bfill:
-                # When we do a backward fill, we use a forward_window: we're looking for
-                # future (lagged) values from periods of time where lag values were
-                # unavailable.
-                fill_window = forward_window if bfill else backward_window
-                lookup_function = F.first if bfill else F.last
-                dataset = dataset.withColumn(
-                    output_col,
-                    F.when(
-                        # If not all computed lagged values are null, use them for
-                        # filling.
-                        F.count(F.when(F.isnull(output_col), output_col)).over(
-                            fill_window
-                        )
-                        != F.count(F.col(output_col)).over(fill_window),
-                        lookup_function(output_col, ignorenulls=True).over(fill_window),
-                    ).otherwise(
-                        # Otherwise, use the non-lagged input column values.
-                        lookup_function(input_col, ignorenulls=True).over(fill_window)
-                    ),
-                )
-
         return dataset.drop("ref_date", "months_from_ref")
 
 
@@ -870,8 +807,6 @@ class DiffOperator(
     Args:
         inputCol: The column that will be used to derive the diff.
         n_months: Number of months that will be considered for the difference.
-        bfill: If set, performs a backward completion on missing lag data.
-        ffill: If set, performs a forward completion on missing lag data.
 
     """
 
@@ -880,19 +815,6 @@ class DiffOperator(
         "n_months",
         "Number of months for diff computation.",
     )
-    bfill = Param(
-        Params._dummy(),
-        "bfill",
-        "A boolean, used to specify if a backward completion is applied to missing lag \
-        data.",
-    )
-
-    ffill = Param(
-        Params._dummy(),
-        "ffill",
-        "A boolean, used to specify if a forward completion is applied to missing lag \
-        data.",
-    )
 
     @keyword_only
     def __init__(self, **kwargs):
@@ -900,8 +822,6 @@ class DiffOperator(
         self._setDefault(
             inputCol=None,
             n_months=None,
-            bfill=False,
-            ffill=False,
         )
         self.setParams(**kwargs)
 
@@ -935,8 +855,6 @@ class DiffOperator(
         """
         input_col = self.getOrDefault("inputCol")
         n_months = self.getOrDefault("n_months")
-        bfill = self.getOrDefault("bfill")
-        ffill = self.getOrDefault("ffill")
         if isinstance(n_months, int):
             n_months = [n_months]
         elif isinstance(n_months, list):
@@ -949,10 +867,7 @@ class DiffOperator(
             n for n in n_months if f"{input_col}_lag{n}m" not in dataset.columns
         ]
         dataset = PipelineModel(
-            [
-                LagOperator(inputCol=input_col, n_months=n, bfill=bfill, ffill=ffill)
-                for n in missing_lags
-            ]
+            [LagOperator(inputCol=input_col, n_months=n) for n in missing_lags]
         ).transform(dataset)
 
         # Compute diffs
