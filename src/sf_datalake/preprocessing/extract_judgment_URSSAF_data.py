@@ -46,7 +46,9 @@ df = df.filter(
 )
 # Group by SIREN, then get first judgment within input time period
 df = sf_datalake.transform.SiretToSiren(inputCol="siret").transform(df)
-df_output = df.groupBy("siren").agg(F.min("date_effet").alias("date_jugement"))
+df_output = df.groupBy("siren").agg(
+    F.to_date(F.min("date_effet")).alias("date_jugement")
+)
 
 # Write output
 sf_datalake.io.write_data(df_output, args.output, args.output_format)
