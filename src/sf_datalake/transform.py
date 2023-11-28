@@ -426,8 +426,7 @@ class IdentifierNormalizer(
             identifier in dataset.columns
         ), f"Input DataFrame doesn't have a {identifier} column."
         return dataset.withColumn(
-            identifier,
-            F.lpad(dataset[identifier].cast(T.StringType()), n_pad, "0"),
+            identifier, F.lpad(dataset[identifier].cast(T.StringType()), n_pad, "0")
         )
 
 
@@ -618,8 +617,7 @@ class TimeNormalizer(
                 col,
                 F.col(col)
                 / F.datediff(
-                    F.col(self.getOrDefault("end")),
-                    F.col(self.getOrDefault("start")),
+                    F.col(self.getOrDefault("end")), F.col(self.getOrDefault("start"))
                 ),
             )
         return dataset
@@ -957,12 +955,7 @@ class DiffOperator(
         ]
         dataset = PipelineModel(
             [
-                LagOperator(
-                    inputCol=input_col,
-                    n_months=n,
-                    bfill=bfill,
-                    ffill=ffill,
-                )
+                LagOperator(inputCol=input_col, n_months=n, bfill=bfill, ffill=ffill)
                 for n in missing_lags
             ]
         ).transform(dataset)
@@ -1021,10 +1014,7 @@ class TargetVariable(
         return dataset.withColumn(
             self.getOrDefault("outputCol"),
             (
-                F.add_months(
-                    dataset["periode"],
-                    months=self.getOrDefault("n_months"),
-                )
+                F.add_months(dataset["periode"], months=self.getOrDefault("n_months"))
                 <= dataset[self.getOrDefault("inputCol")]
             ).cast(
                 T.IntegerType()
@@ -1177,28 +1167,23 @@ class LinearInterpolationOperator(
 
             # Create relative references to the gap start value (left bound)
             output_df = output_df.withColumn(
-                "left_bound_val",
-                F.last(col, ignorenulls=True).over(w_start),
+                "left_bound_val", F.last(col, ignorenulls=True).over(w_start)
             )
             output_df = output_df.withColumn(
-                "left_bound_rn",
-                F.last("rn_not_null", ignorenulls=True).over(w_start),
+                "left_bound_rn", F.last("rn_not_null", ignorenulls=True).over(w_start)
             )
 
             # Create relative references to the gap end value (right bound)
             output_df = output_df.withColumn(
-                "right_bound_val",
-                F.first(col, ignorenulls=True).over(w_end),
+                "right_bound_val", F.first(col, ignorenulls=True).over(w_end)
             )
             output_df = output_df.withColumn(
-                "right_bound_rn",
-                F.first("rn_not_null", ignorenulls=True).over(w_end),
+                "right_bound_rn", F.first("rn_not_null", ignorenulls=True).over(w_end)
             )
 
             # Create references to gap length and current gap position.
             output_df = output_df.withColumn(
-                "interval_length_rn",
-                F.col("right_bound_rn") - F.col("left_bound_rn"),
+                "interval_length_rn", F.col("right_bound_rn") - F.col("left_bound_rn")
             )
             output_df = output_df.withColumn(
                 "curr_rn",
