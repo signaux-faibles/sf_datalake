@@ -4,6 +4,7 @@ import datetime as dt
 from typing import List
 
 import pyspark.sql
+import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.sql import SparkSession
 
@@ -66,3 +67,16 @@ def extract_column_names(df: pyspark.sql.DataFrame, assembled_column: str) -> Li
 def to_date(str_date: str, date_format="%Y-%m-%d") -> dt.date:
     """Convert string date to datetime.date object"""
     return dt.datetime.strptime(str_date, date_format).date()
+
+
+def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+    """Counts number of null values in each column.
+
+    Args:
+        df: The input DataFrame.
+
+    Returns:
+        A DataFrame specifying the number of null values for each column.
+
+    """
+    return df.select([F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns])
