@@ -4,7 +4,7 @@ The script expects the "siren", "djug", "najug" columns inside the input table. 
 latter correspond to the date and type of judgment (represented using a one character
 encoding)
 
-USAGE python extract_judgment_data.py <input_file> <output_file>
+USAGE python extract_judgment_DGFiP_data.py <input_file> <output_file>
     [--start_date START_DATE] [--end_date END_DATE]
 
 """
@@ -27,15 +27,15 @@ import sf_datalake.utils
 
 spark = sf_datalake.utils.get_spark_session()
 
+# pylint: disable=duplicate-code
 parser = sf_datalake.io.data_path_parser()
-parser.description = "Extract judgment data"
+parser.description = "Extract judgment data from DGFiP source."
 parser.add_argument("--start_date", type=str, default="2014-01-01")
 parser.add_argument("--end_date", type=str, default=datetime.date.today().isoformat())
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
 args = parser.parse_args()
-
 
 df = spark.read.csv(
     args.input,
