@@ -22,6 +22,8 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.sql import Window
 
+from sf_datalake.utils import count_missing_values
+
 
 def vector_disassembler(
     df: pyspark.sql.DataFrame,
@@ -166,7 +168,7 @@ class BinsOrdinalEncoder(
             dataset: DataFrame to transform.
 
         Returns:
-             Transformed DataFrame with extra `{var}_bins` columns.
+            Transformed DataFrame with extra `{var}_bins` columns.
 
         """
 
@@ -188,16 +190,17 @@ class MissingValuesHandler(
     """A transformer to handle missing values.
 
     Uses pyspark.sql.DataFrame.fillna or an (statistical) Imputer object to fill missing
-    values. Both strategies are mutually exclusive, so use either `value` or
-    `stat_strategy`.
+    values.  Both strategies are mutually exclusive, so use either `value` or
+    `stat_strategy`. Median convention: for an even number of samples, the median is
+    computed as the `n/2`th sample.
 
     Args:
-      inputCols: The input dataset columns to consider for filling.
-      value: Value to replace null values with. It must be a mapping from column name
-        (string) to replacement value. The replacement value must be an int, float,
-        boolean, or string.
-      stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median' \
-        and 'mode'
+        inputCols: The input dataset columns to consider for filling.
+        value: Value to replace null values with. It must be a mapping from column name
+          (string) to replacement value. The replacement value must be an int, float,
+          boolean, or string.
+        stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median'
+          and 'mode'
 
     """
 
@@ -222,12 +225,12 @@ class MissingValuesHandler(
     def setParams(self, **kwargs):
         """Set parameters for this transformer.
 
-        inputCols (list[str]): The input dataset columns to consider for filling.
-        value (dict): Value to replace null values with. It must be a mapping from
-          column name (string) to replacement value. If it is None, stat imputaion is
-          applied.
-        stat_strategy (string) : strategy for the Imputer class. Possible values are:
-          'mean', 'median' and 'mode'.
+        Args:
+            inputCols (list[str]): The input dataset columns to consider for filling.
+            value (dict): Value to replace null values with. It must be a mapping from
+              column name to replacement value. If None, stat imputation is applied.
+            stat_strategy (str) : strategy for the Imputer class. Possible values are:
+              'mean', 'median' and 'mode'.
         """
         return self._set(**kwargs)
 
@@ -265,6 +268,13 @@ class MissingValuesHandler(
                     "Statistical imputation of a non-numerical variable is not "
                     "supported."
                 )
+            n_rows = dataset.count()
+            n_missing_values = count_missing_values(dataset)
+            for col in input_cols:
+                if n_missing_values[col] == n_rows:
+                    raise ValueError(
+                        "Statistical imputation of a null column is not supported."
+                    )
             imputer = Imputer(strategy=stat_strategy)
             imputer.setInputCols(input_cols)
             imputer.setOutputCols(input_cols)
@@ -343,7 +353,8 @@ class MissingValuesDropper(
 
         if dropna_dataset.count() != dataset.count():
             logging.info(
-                "Some rows containing null values in subset %s were dropped", input_cols
+                "Some rows containing null values in subset %s were dropped",
+                input_cols,
             )
         return dropna_dataset
 
@@ -779,7 +790,6 @@ class LagOperator(
                 output_col,
                 F.lag(F.col(input_col), n).over(lag_window),
             )
-
         return dataset.drop("ref_date", "months_from_ref")
 
 

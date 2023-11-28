@@ -6,10 +6,10 @@ import operator
 from typing import List, Union
 
 import pyspark.sql
+import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.sql import SparkSession
 from pyspark.sql import Window as W
-from pyspark.sql import functions as F
 
 
 def get_spark_session():
@@ -213,3 +213,35 @@ def merge_asof(  # pylint: disable=too-many-arguments, too-many-locals
     return df.select(
         "pre_join.*", *(f"right.{col}" for col in set(df_r.columns) - set(join_keys))
     )
+
+
+def count_nan_values(
+    df: pyspark.sql.DataFrame,
+) -> pyspark.sql.Row:
+    """Counts number of NaN values in numerical columns.
+
+    Args:
+        df: The input DataFrame.
+
+    Returns:
+        A Row specifying the number of NaN values in numerical fields.
+
+    """
+    return df.select(
+        [F.count(F.when(F.isnull(c), c)).alias(c) for c in numerical_columns(df)]
+    ).collect()[0]
+
+
+def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.Row:
+    """Counts number of null values in each column.
+
+    Args:
+        df: The input DataFrame.
+
+    Returns:
+        A Row specifying the number of null values for each column.
+
+    """
+    return df.select(
+        [F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns]
+    ).collect()[0]

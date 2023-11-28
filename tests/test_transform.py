@@ -1,7 +1,6 @@
 import datetime as dt
 import random
 
-import numpy as np
 import pytest
 from pyspark.sql import types as T
 
@@ -9,6 +8,7 @@ from sf_datalake.transform import (
     DateParser,
     IdentifierNormalizer,
     LagOperator,
+    MissingValuesHandler,
     RandomResampler,
 )
 from tests.conftest import MockDataFrameGenerator
@@ -24,7 +24,7 @@ def siren_padding_df(spark):
     )
     df = spark.createDataFrame(
         [(524893758, "524893758"), (45378, "000045378"), (54489542, "054489542")],
-        schema,
+        schema=schema,
     )
     return df
 
@@ -52,7 +52,7 @@ def parsed_date_df(spark):
 
 
 @pytest.fixture(scope="class")
-def random_resampler_df(spark):
+def random_resampler_df():
     return MockDataFrameGenerator(
         n_siren=10000, n_rows_per_siren=3, n_rows_perturbation=1
     ).data
@@ -62,8 +62,8 @@ def random_resampler_df(spark):
 def lag_operator_df(spark):
     schema = T.StructType(
         [
-            T.StructField("siren", T.StringType(), True),
-            T.StructField("periode", T.DateType(), True),
+            T.StructField("siren", T.StringType(), False),
+            T.StructField("periode", T.DateType(), False),
             T.StructField("ca", T.IntegerType(), True),
             T.StructField("expected_ca_lag1m", T.IntegerType(), True),
         ]
@@ -92,7 +92,42 @@ def lag_operator_df(spark):
             ("293736607", dt.date(2020, 9, 1),  None, 95),
             ("293736607", dt.date(2020, 10, 1), 38, None)
         ],
-        schema,
+        schema=schema,
+    )
+    # fmt: on
+    return df
+
+
+@pytest.fixture(scope="class")
+def missing_value_handler_df(spark):
+    schema = T.StructType(
+        [
+            T.StructField("siren", T.StringType(), False),
+            T.StructField("periode", T.DateType(), False),
+            T.StructField("ca", T.DoubleType(), True),
+            T.StructField("ca_filled_value", T.DoubleType(), True),
+            T.StructField("ca_filled_median", T.DoubleType(), True),
+            T.StructField("ebe", T.DoubleType(), True),
+            T.StructField("category", T.StringType(), True),
+            T.StructField("label", T.IntegerType(), True),
+        ]
+    )
+
+    # fmt: off
+    df = spark.createDataFrame(
+        [
+            ('219385581', dt.date(2017, 12, 1), 35.0, 35.0, 35.0, 0.3034911450601422, '169', 0),
+            ('219385581', dt.date(2022, 3, 1), 54.0, 54.0, 54.0, 0.08394427209402189, '347', 0),
+            ('219385581', dt.date(2017, 3, 1), None, 0.0, 39.0,0.7482441546718624, '529', 0),
+            ('219385581', dt.date(2015, 1, 1), None, 0.0, 39.0,0.8458750332248388, '006', 0),
+            ('219385581', dt.date(2018, 1, 1), None, 0.0, 39.0, 0.05922352511577478, '631', 0),
+            ('737745998', dt.date(2016, 6, 1), 6.0, 6.0, 6.0,0.23554547470210907, '366', 0),
+            ('737745998', dt.date(2014, 10, 1), 39.0, 39.0, 39.0, 0.9144442485558925, '803', 0),
+            ('737745998', dt.date(2015, 8, 1), 92.0, 92.0, 92.0,0.32033475571920367, '903', 1),
+            ('737745998', dt.date(2015, 1, 1), None, 0.0, 39.0, 0.694039198363326, '944', 1),
+            ('737745998', dt.date(2015, 1, 1), 76.0, 76.0, 76.0, 0.694039198363326, '944', 1),
+        ],
+        schema=schema,
     )
     # fmt: on
     return df
@@ -146,6 +181,22 @@ class TestRandomResampler:
             method="undersampling",
         ).transform(random_resampler_df)
         self.check_balance(undersampled_df, min_class_ratio, tolerance)
+
+
+@pytest.mark.usefixtures("missing_value_handler_df")
+class TestMissingValueHandler:
+    def test_filling_with_median(self, missing_value_handler_df):
+        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median").transform(
+            missing_value_handler_df
+        )
+        assert all(r["ca"] == r["ca_filled_median"] for r in df.collect())
+
+    def test_filling_with_value(self, missing_value_handler_df):
+        value = {"ca": 0.0}
+        df = MissingValuesHandler(inputCols=["ca"], value=value).transform(
+            missing_value_handler_df
+        )
+        assert all(r["ca"] == r["ca_filled_value"] for r in df.collect())
 
 
 @pytest.mark.usefixtures("lag_operator_df")
