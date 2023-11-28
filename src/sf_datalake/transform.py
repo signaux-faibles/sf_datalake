@@ -22,6 +22,8 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.sql import Window
 
+from sf_datalake.utils import count_missing_values
+
 
 def vector_disassembler(
     df: pyspark.sql.DataFrame,
@@ -187,9 +189,10 @@ class MissingValuesHandler(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
-    Uses pyspark.sql.DataFrame.fillna or an (statistical) Imputer object to fill missing
-    values. Both strategies are mutually exclusive, so use either `value` or
-    `stat_strategy`.
+    Uses pyspark.sql.DataFrame.fillna or an (statistical)
+    Imputer object to fill missing values.
+    Both strategies are mutually exclusive,
+    so use either `value` or `stat_strategy`.
 
     Note on median convention: the computed median
     for an even number of samples is the `n/2`th sample
@@ -268,28 +271,18 @@ class MissingValuesHandler(
                     "Statistical imputation of a non-numerical variable is not "
                     "supported."
                 )
-
-            null_columns = [
-                c
-                for c, const in dataset.select(
-                    [
-                        (
-                            (F.min(c).isNull() & F.max(c).isNull())
-                            | (F.min(c) == F.max(c))
-                        ).alias(c)
-                        for c in input_cols
-                    ]
-                )
-                .first()
-                .asDict()
-                .items()
-                if const
-            ]
-            if len(null_columns) > 0:
-                raise ValueError(
-                    "Statistical imputation of a completely null columns is not "
-                    "supported."
-                )
+            n_row = dataset.count()
+            print(n_row)
+            count_missing_values_df = count_missing_values(dataset)
+            for c in input_cols:
+                null_check = count_missing_values_df.select(F.col(c) == n_row).first()[
+                    0
+                ]
+                if null_check:
+                    raise ValueError(
+                        "Statistical imputation of a completely null columns is not "
+                        "supported."
+                    )
             imputer = Imputer(strategy=stat_strategy)
             imputer.setInputCols(input_cols)
             imputer.setOutputCols(input_cols)

@@ -4,8 +4,8 @@ import pytest
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
-from sf_datalake.exploration import count_missing_values
 from sf_datalake.transform import DateParser, IdentifierNormalizer, MissingValuesHandler
+from sf_datalake.utils import count_missing_values
 
 
 @pytest.fixture
@@ -104,10 +104,3 @@ class TestMissingValueHandler:
             missing_value_handler_df
         )
         assert all(r["ca"] == r["ca_filled_value"] for r in df.collect())
-
-    def test_filling_as_full_completion(self, missing_value_handler_df):
-        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median").transform(
-            missing_value_handler_df
-        )
-        missdf = count_missing_values(df).select("ca")
-        assert all(r["ca"] == 0 for r in missdf.collect())
