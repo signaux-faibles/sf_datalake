@@ -16,39 +16,6 @@ from pyspark.mllib.linalg.distributed import RowMatrix
 import sf_datalake.utils
 
 
-def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Counts number of null values in each column.
-
-    Args:
-        df: The input DataFrame.
-
-    Returns:
-        A DataFrame specifying the number of null values for each column.
-
-    """
-    return df.select([F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns])
-
-
-def count_nan_values(
-    df: pyspark.sql.DataFrame,
-) -> pyspark.sql.DataFrame:
-    """Counts number of NaN values in numerical columns.
-
-    Args:
-        df: The input DataFrame.
-
-    Returns:
-        A DataFrame specifying the number of NaN values in numerical fields.
-
-    """
-    return df.select(
-        [
-            F.count(F.when(F.isnull(c), c)).alias(c)
-            for c in sf_datalake.utils.numerical_columns(df)
-        ]
-    )
-
-
 def accounting_time_span(
     df: pyspark.sql.DataFrame,
 ) -> Tuple[pyspark.sql.Row, pyspark.sql.Row]:

@@ -272,7 +272,7 @@ class MissingValuesHandler(
                     "supported."
                 )
             n_rows = dataset.count()
-            n_missing_values = count_missing_values(dataset).collect()[0]
+            n_missing_values = count_missing_values(dataset)
             for col in input_cols:
                 if n_missing_values[col] == n_rows:
                     raise ValueError(

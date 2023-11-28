@@ -69,14 +69,33 @@ def to_date(str_date: str, date_format="%Y-%m-%d") -> dt.date:
     return dt.datetime.strptime(str_date, date_format).date()
 
 
-def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+def count_nan_values(
+    df: pyspark.sql.DataFrame,
+) -> pyspark.sql.Row:
+    """Counts number of NaN values in numerical columns.
+
+    Args:
+        df: The input DataFrame.
+
+    Returns:
+        A Row specifying the number of NaN values in numerical fields.
+
+    """
+    return df.select(
+        [F.count(F.when(F.isnull(c), c)).alias(c) for c in numerical_columns(df)]
+    ).collect()[0]
+
+
+def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.Row:
     """Counts number of null values in each column.
 
     Args:
         df: The input DataFrame.
 
     Returns:
-        A DataFrame specifying the number of null values for each column.
+        A Row specifying the number of null values for each column.
 
     """
-    return df.select([F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns])
+    return df.select(
+        [F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns]
+    ).collect()[0]
