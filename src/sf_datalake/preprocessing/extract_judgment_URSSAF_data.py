@@ -1,9 +1,9 @@
 """Extract URSSAF judgment data for machine learning classification target definition.
 
 The script expects the "siret", "date_effet", "action_procol" columns
-inside the input table. The latter correspond to the date.
+inside the input table.
 
-USAGE python extract_judgment_data.py <input_file> <output_file>
+USAGE python extract_judgment_URSSAF_data.py <input_file> <output_file>
     [--start_date START_DATE] [--end_date END_DATE]
 
 """
@@ -39,7 +39,6 @@ args = parser.parse_args()
 
 df = spark.read.csv(
     args.input,
-    sep="|",
     inferSchema=True,
     header=True,
 )
@@ -49,8 +48,8 @@ df = df.filter(
     (F.col("date_effet") >= args.start_date) & (F.col("date_effet") <= args.end_date)
 )
 # Get siren from siret
-SiretSiren_pipeline = sf_datalake.transform.SiretToSiren(inputCol="siret")
-df = SiretSiren_pipeline.transform(df)
+siren_siret_transformer = sf_datalake.transform.SiretToSiren(inputCol="siret")
+df = siren_siret_transformer.transform(df)
 
 # Get first judgment within input time period and only keep this judgment.
 window_spec = Window.partitionBy("siren")
