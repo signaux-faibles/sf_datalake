@@ -168,7 +168,7 @@ class BinsOrdinalEncoder(
             dataset: DataFrame to transform.
 
         Returns:
-             Transformed DataFrame with extra `{var}_bins` columns.
+            Transformed DataFrame with extra `{var}_bins` columns.
 
         """
 
@@ -189,21 +189,18 @@ class MissingValuesHandler(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
-    Uses pyspark.sql.DataFrame.fillna or an (statistical)
-    Imputer object to fill missing values.
-    Both strategies are mutually exclusive,
-    so use either `value` or `stat_strategy`.
-
-    Note on median convention: the computed median
-    for an even number of samples is the `n/2`th sample
+    Uses pyspark.sql.DataFrame.fillna or an (statistical) Imputer object to fill missing
+    values.  Both strategies are mutually exclusive, so use either `value` or
+    `stat_strategy`. Median convention: for an even number of samples, the median is
+    computed as the `n/2`th sample.
 
     Args:
-      inputCols: The input dataset columns to consider for filling.
-      value: Value to replace null values with. It must be a mapping from column name
-        (string) to replacement value. The replacement value must be an int, float,
-        boolean, or string.
-      stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median' \
-        and 'mode'
+        inputCols: The input dataset columns to consider for filling.
+        value: Value to replace null values with. It must be a mapping from column name
+          (string) to replacement value. The replacement value must be an int, float,
+          boolean, or string.
+        stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median'
+          and 'mode'
 
     """
 
@@ -228,12 +225,12 @@ class MissingValuesHandler(
     def setParams(self, **kwargs):
         """Set parameters for this transformer.
 
-        inputCols (list[str]): The input dataset columns to consider for filling.
-        value (dict): Value to replace null values with. It must be a mapping from
-          column name (string) to replacement value. If it is None, stat imputaion is
-          applied.
-        stat_strategy (string) : strategy for the Imputer class. Possible values are:
-          'mean', 'median' and 'mode'.
+        Args:
+            inputCols (list[str]): The input dataset columns to consider for filling.
+            value (dict): Value to replace null values with. It must be a mapping from
+              column name to replacement value. If None, stat imputation is applied.
+            stat_strategy (str) : strategy for the Imputer class. Possible values are:
+              'mean', 'median' and 'mode'.
         """
         return self._set(**kwargs)
 
