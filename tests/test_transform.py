@@ -186,7 +186,7 @@ class TestRandomResampler:
 @pytest.mark.usefixtures("missing_value_handler_df")
 class TestMissingValueHandler:
     def test_filling_with_median(self, missing_value_handler_df):
-        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median").transform(
+        df = MissingValuesHandler(inputCols=["ca"], strategy="median").transform(
             missing_value_handler_df
         )
         assert all(r["ca"] == r["ca_filled_median"] for r in df.collect())

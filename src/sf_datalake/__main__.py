@@ -188,7 +188,7 @@ if configuration.preprocessing.fill_imputation_strategy:
     missing_values_handling_steps.extend(
         sf_datalake.transform.MissingValuesHandler(
             inputCols=features,
-            stat_strategy=strategy,
+            strategy=strategy,
         )
         for strategy, features in imputation_strategy_features.items()
     )

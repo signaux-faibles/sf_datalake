@@ -189,18 +189,22 @@ class MissingValuesHandler(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
-    Uses pyspark.sql.DataFrame.fillna or an (statistical) Imputer object to fill missing
-    values.  Both strategies are mutually exclusive, so use either `value` or
-    `stat_strategy`. Median convention: for an even number of samples, the median is
-    computed as the `n/2`th sample.
+    Uses pyspark.sql.DataFrame.fillna, statistical Imputer object or backward/forward
+    filling to fill missing values. Use either the `value` or `strategy` argument as
+    both are mutually exclusive. If `strategy` is set to bfill or ffill, missing values
+    are filled by using the next valid observation to fill the gap in the forward (resp.
+    backward) direction.
+
+    Median convention: for an even number of samples, the median is computed as the
+    `n/2`th sample.
 
     Args:
         inputCols: The input dataset columns to consider for filling.
         value: Value to replace null values with. It must be a mapping from column name
           (string) to replacement value. The replacement value must be an int, float,
           boolean, or string.
-        stat_strategy : strategy for the Imputer. Possible values are : 'mean', 'median'
-          and 'mode'
+        strategy: For statistical imputation, use : 'mean', 'median' or 'mode'. For
+          forward / backward filling use 'ffill'/'bfill'
 
     """
 
@@ -209,16 +213,16 @@ class MissingValuesHandler(
         "value",
         "Value to replace null values with.",
     )
-    stat_strategy = Param(
+    strategy = Param(
         Params._dummy(),  # pylint: disable=protected-access
-        "stat_strategy",
-        "Statistic method to use into the Imputer class.",
+        "strategy",
+        "Method to use for imputation.",
     )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(value=None, stat_strategy=None)
+        self._setDefault(value=None, strategy=None)
         self.setParams(**kwargs)
 
     @keyword_only
@@ -229,8 +233,8 @@ class MissingValuesHandler(
             inputCols (list[str]): The input dataset columns to consider for filling.
             value (dict): Value to replace null values with. It must be a mapping from
               column name to replacement value. If None, stat imputation is applied.
-            stat_strategy (str) : strategy for the Imputer class. Possible values are:
-              'mean', 'median' and 'mode'.
+            strategy (str): For statistical imputation, use : 'mean', 'median' or
+              'mode'. For forward / backward filling use 'ffill'/'bfill'
         """
         return self._set(**kwargs)
 
@@ -241,29 +245,60 @@ class MissingValuesHandler(
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-            DataFrame where previously missing values are either filled.
+            DataFrame where previously missing values are filled using selected method.
 
         Raises:
             ValueError if:
-            - both `value` and `stat_strategy` or neither are set.
+            - both `value` and `strategy` or neither are set.
             - statistical imputation is required on non-numerical columns.
 
         """
-        stat_strategy: str = self.getOrDefault("stat_strategy")
+        strategy: str = self.getOrDefault("strategy")
         value: dict = self.getOrDefault("value")
         input_cols: List[str] = self.getOrDefault("inputCols")
 
-        if value is not None and stat_strategy is not None:
+        # Check arguments
+        if value is not None and strategy is not None:
             raise ValueError(
-                "`value` and `stat_strategy` are mutually exclusive. Use either one."
+                "`value` and `strategy` are mutually exclusive. Use either one."
             )
+        if value is None and strategy is None:
+            raise ValueError("Either `value` or `strategy` must be set.")
+
+        # Use values
         if value is not None:
-            dataset = dataset.fillna(
+            return dataset.fillna(
                 {var: val for var, val in value.items() if var in input_cols}
             )
-        elif stat_strategy is not None:
-            dtypes = [dtype for _, dtype in dataset.select(input_cols).dtypes]
-            if any(dtype in {"bool", "timestamp", "string"} for dtype in dtypes):
+
+        # Use a strategy
+        ## Filling strategy
+        if strategy in ["bfill", "ffill"]:
+            forward_window = (
+                Window()
+                .partitionBy("siren")
+                .orderBy(F.col("periode").asc())
+                .rowsBetween(Window.currentRow, Window.unboundedFollowing)
+            )
+            backward_window = (
+                Window()
+                .partitionBy("siren")
+                .orderBy(F.col("periode").asc())
+                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+            )
+            fill_window = forward_window if strategy == "bfill" else backward_window
+            lookup_function = F.first if strategy == "bfill" else F.last
+            for col in input_cols:
+                dataset = dataset.withColumn(
+                    col, lookup_function(col, ignorenulls=True).over(fill_window)
+                )
+        ## Statistical imputation
+        if strategy in ["median", "mean", "mode"]:
+            # Check that columns are of numerical type and non-empty
+            if any(
+                dtype in {"bool", "timestamp", "date", "string"}
+                for dtype in [dtype for _, dtype in dataset.select(input_cols).dtypes]
+            ):
                 raise ValueError(
                     "Statistical imputation of a non-numerical variable is not "
                     "supported."
@@ -275,12 +310,11 @@ class MissingValuesHandler(
                     raise ValueError(
                         "Statistical imputation of a null column is not supported."
                     )
-            imputer = Imputer(strategy=stat_strategy)
+
+            imputer = Imputer(strategy=strategy)
             imputer.setInputCols(input_cols)
             imputer.setOutputCols(input_cols)
             dataset = imputer.fit(dataset).transform(dataset)
-        else:
-            raise ValueError("Either `value` or `stat_strategy` must be set.")
         return dataset
 
 
