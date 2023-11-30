@@ -75,9 +75,26 @@ for feature, n_months in configuration.preprocessing.time_aggregation["mean"].it
         sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
     )
 
+#################
+# Create target #
+#################
+
+building_steps = [
+    sf_datalake.transform.TargetVariable(
+        inputCol=configuration.learning.target["judgment_date_col"],
+        outputCol=configuration.learning.target["class_col"],
+        n_months=configuration.learning.target["n_months"],
+    ),
+]
+
 ##########################
 # Missing Value Handling #
 ##########################
+
+if not configuration.preprocessing.drop_missing_values:
+    raise NotImplementedError(
+        " VectorAssembler in spark < 2.4.0 doesn't handle including missing values."
+    )
 
 missing_values_handling_steps = []
 if configuration.preprocessing.fill_default_values:
@@ -104,7 +121,7 @@ if configuration.preprocessing.fill_imputation_strategy:
     )
 
 output_ds = PipelineModel(
-    stages=time_computations + missing_values_handling_steps
+    stages=time_computations + building_steps + missing_values_handling_steps
 ).transform(df)
 
 
