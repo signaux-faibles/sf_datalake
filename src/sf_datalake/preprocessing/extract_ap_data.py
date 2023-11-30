@@ -136,6 +136,14 @@ demande = demande.join(
     & (date_range["date"] <= demande["date_fin"]),
 )
 
+# Normalize the "Value" column (/days)
+
+demande = demande.withColumn(
+    "time_frame_size", F.expr("DATEDIFF(date_fin, date_début) + 1")
+)
+demande = demande.withColumn(
+    "ap_demande", F.col("ap_demande") / F.col("time_frame_size")
+)
 
 # Group by siren and date, and sum the values for demand.
 # Summing the siren_date_index aims to create a new id
@@ -168,22 +176,13 @@ demande = demande.withColumn(
     "group", F.sum("siren_date_index_Change").over(window_spec)
 )
 
-# Group by siren and group to create new timeframes and,
+# Group by siren and group to create new distinct timeframes and,
 # compute de total amount for "ap_demande".
 # The value of ap_demande is the same in a group.
 demande = demande.groupBy("siren", "group").agg(
     F.min("date").alias("date_début_mr"),
     F.max("date").alias("date_fin_mr"),
     F.first("Total_ap_demande").alias("ap_demande"),
-)
-
-# Normalize the "Value" column (/days)
-
-demande = demande.withColumn(
-    "time_frame_size", F.expr("DATEDIFF(date_fin_mr, date_début_mr) + 1")
-)
-demande = demande.withColumn(
-    "ap_demande", F.col("ap_demande") / F.col("time_frame_size")
 )
 
 
