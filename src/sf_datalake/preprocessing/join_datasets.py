@@ -100,17 +100,28 @@ df_judgments = siren_normalizer.transform(datasets["judgments"])
 df_altares = siren_normalizer.transform(datasets["altares"])
 df_urssaf_debit = siren_normalizer.transform(datasets["urssaf_debit"])
 df_urssaf_cotisation = siren_normalizer.transform(datasets["urssaf_cotisation"])
-df_sirene = siren_normalizer.transform(datasets["sirene"])
+df_sirene = siren_normalizer.transform(datasets["sirene"]).fillna(
+    {"date_fin": "2100-01-01"}
+)
 df_ap = siren_normalizer.transform(datasets["ap"])
 
 # Join "monthly" datasets
 joined_df_monthly = (
     df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "periode"], how="inner")
     .drop(df_urssaf_cotisation.siren)
-    .join(df_ap, on=["siren", "periode"], how="inner")
-    .join(df_sirene, on="siren", how="inner")
+    .join(df_ap, on=["siren", "periode"], how="left")
     .join(df_judgments, on="siren", how="left")
     .join(df_altares, on=["siren", "periode"], how="left")
+)
+
+joined_df_monthly = joined_df_monthly.join(
+    df_sirene,
+    on=(
+        (joined_df_monthly.siren == df_sirene.siren)
+        & (joined_df_monthly.periode >= df_sirene.date_début)
+        & (joined_df_monthly.periode < df_sirene.date_fin)
+    ),
+    how="inner",
 )
 # Rename "target" time index for merge asof
 df_dgfip_yearly = df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "periode")
