@@ -23,9 +23,6 @@ import os
 import sys
 from os import path
 
-import pyspark.sql.functions as F
-from pyspark.sql import Window
-
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
@@ -105,16 +102,6 @@ df_urssaf_debit = siren_normalizer.transform(datasets["urssaf_debit"])
 df_urssaf_cotisation = siren_normalizer.transform(datasets["urssaf_cotisation"])
 df_sirene = siren_normalizer.transform(datasets["sirene"])
 df_ap = siren_normalizer.transform(datasets["ap"])
-
-# Join datasets and drop (time, SIREN) duplicates with the highest
-# null values ratio from the DGFiP ratios dataset
-# TODO: Handle this step during dgfip data preprocessing script
-df_dgfip_yearly = df_dgfip_yearly.withColumn(
-    "null_ratio",
-    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_yearly.columns])
-    / len(df_dgfip_yearly.columns),
-)
-w = Window().partitionBy(["siren", "periode"]).orderBy(F.col("null_ratio").asc())
 
 # Join "monthly" datasets
 joined_df_monthly = (
