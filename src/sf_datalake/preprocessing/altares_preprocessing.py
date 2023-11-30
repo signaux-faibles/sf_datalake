@@ -68,8 +68,14 @@ df = df.withColumnRenamed("SIREN", "siren")
 
 selected_cols = ["siren", "periode", "paydex", "fpi_30", "fpi_90"]
 
+# Handle missing values and export
+mvh = sf_datalake.transform.MissingValuesHandler(
+    inputCols=["paydex", "fpi_30", "fpi_90"],
+    value=configuration.preprocessing.fill_default_values,
+)
+
 sf_datalake.io.write_data(
-    df.select(selected_cols),
+    mvh.transform(df.select(selected_cols)),
     args.output,
     args.output_format,
 )
