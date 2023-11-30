@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from os import path
-from typing import Dict, List
+from typing import List
 
 import numpy as np
 import pyspark
@@ -155,49 +155,8 @@ filter_steps = []
 if with_paydex:
     filter_steps.append(sf_datalake.transform.HasPaydexFilter())
 
-building_steps = [
-    sf_datalake.transform.TargetVariable(
-        inputCol=configuration.learning.target["judgment_date_col"],
-        outputCol=configuration.learning.target["class_col"],
-        n_months=configuration.learning.target["n_months"],
-    ),
-]
-
-
-if not configuration.preprocessing.drop_missing_values:
-    raise NotImplementedError(
-        " VectorAssembler in spark < 2.4.0 doesn't handle including missing values."
-    )
-
-missing_values_handling_steps = []
-if configuration.preprocessing.fill_default_values:
-    missing_values_handling_steps.append(
-        sf_datalake.transform.MissingValuesHandler(
-            inputCols=list(configuration.preprocessing.fill_default_values),
-            value=configuration.preprocessing.fill_default_values,
-        ),
-    )
-if configuration.preprocessing.fill_imputation_strategy:
-    imputation_strategy_features: Dict[str, List[str]] = {}
-    for (
-        feature,
-        strategy,
-    ) in configuration.preprocessing.fill_imputation_strategy.items():
-        imputation_strategy_features.setdefault(strategy, []).append(feature)
-
-    missing_values_handling_steps.extend(
-        sf_datalake.transform.MissingValuesHandler(
-            inputCols=features,
-            strategy=strategy,
-        )
-        for strategy, features in imputation_strategy_features.items()
-    )
-
 preprocessing_pipeline = Pipeline(
-    stages=filter_steps
-    + building_steps
-    + missing_values_handling_steps
-    + configuration.encoding_scaling_stages()
+    stages=filter_steps + configuration.encoding_scaling_stages()
 )
 
 preprocessing_pipeline_model = preprocessing_pipeline.fit(raw_dataset)
