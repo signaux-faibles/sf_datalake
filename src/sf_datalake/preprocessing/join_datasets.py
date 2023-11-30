@@ -7,7 +7,8 @@ Expected inputs :
 - URSSAF debit data
 - URSSAF cotisation data
 - DGEFP data
-- INSEE 'sirene' database data
+- INSEE 'sirene' administrative data
+- INSEE 'sirene' activity dates data
 - altares 'paydex' + 'FPI' data
 - DGFiP financial ratios dataset
 - DGFiP judgment data
@@ -52,9 +53,12 @@ parser.add_argument(
     help="Path to the preprocessed DARES dataset.",
 )
 parser.add_argument(
-    "--sirene",
-    dest="sirene",
-    help="Path to the preprocessed Sirene dataset.",
+    "--sirene_catagories",
+    help="Path to the preprocessed sirene categorical dataset.",
+)
+parser.add_argument(
+    "--sirene_dates",
+    help="Path to the sirene companies activity dates.",
 )
 parser.add_argument(
     "--judgments",
@@ -84,7 +88,8 @@ datasets = load_data(
         "urssaf_debit": args.urssaf_debit,
         "urssaf_cotisation": args.urssaf_cotisation,
         "ap": args.ap,
-        "sirene": args.sirene,
+        "sirene_catagories": args.sirene_catagories,
+        "sirene_dates": args.sirene_dates,
         "dgfip_yearly": args.dgfip_yearly,
         "judgments": args.judgments,
         "altares": args.altares,
@@ -100,40 +105,38 @@ df_judgments = siren_normalizer.transform(datasets["judgments"])
 df_altares = siren_normalizer.transform(datasets["altares"])
 df_urssaf_debit = siren_normalizer.transform(datasets["urssaf_debit"])
 df_urssaf_cotisation = siren_normalizer.transform(datasets["urssaf_cotisation"])
-df_sirene = siren_normalizer.transform(datasets["sirene"]).fillna(
+df_sirene_categories = siren_normalizer.transform(datasets["sirene_catagories"])
+df_sirene_dates = siren_normalizer.transform(datasets["sirene_dates"]).fillna(
     {"date_fin": "2100-01-01"}
 )
 df_ap = siren_normalizer.transform(datasets["ap"])
 
 # Join "monthly" datasets
-joined_df_monthly = (
+df_monthly = (
     df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "periode"], how="inner")
-    .drop(df_urssaf_cotisation.siren)
     .join(df_ap, on=["siren", "periode"], how="left")
     .join(df_judgments, on="siren", how="left")
     .join(df_altares, on=["siren", "periode"], how="left")
 )
 
-joined_df_monthly = joined_df_monthly.join(
-    df_sirene,
-    on=(
-        (joined_df_monthly.siren == df_sirene.siren)
-        & (joined_df_monthly.periode >= df_sirene.date_début)
-        & (joined_df_monthly.periode < df_sirene.date_fin)
-    ),
-    how="inner",
-)
-# Rename "target" time index for merge asof
-df_dgfip_yearly = df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "periode")
-
 # Join monthly dataset with yearly dataset
 joined_df = sf_datalake.utils.merge_asof(
-    joined_df_monthly,
-    df_dgfip_yearly,
+    df_monthly,
+    df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "periode"),
     on="periode",
     by="siren",
     tolerance=365,
     direction="backward",
 )
 
-write_data(joined_df, args.output_path, args.output_format)
+output_df = joined_df.join(
+    df_sirene_dates,
+    on=(
+        (joined_df["siren"] == df_sirene_dates["siren"])
+        & (joined_df["periode"] >= df_sirene_dates["date_début"])
+        & (joined_df["periode"] < df_sirene_dates["date_fin"])
+    ),
+    how="left_semi",
+)
+
+write_data(output_df, args.output_path, args.output_format)
