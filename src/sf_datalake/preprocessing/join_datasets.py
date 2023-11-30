@@ -7,13 +7,13 @@ Expected inputs :
 - URSSAF debit data
 - URSSAF cotisation data
 - DGEFP data
-- 'sirene' database data
+- INSEE 'sirene' database data
 - altares 'paydex' + 'FPI' data
 - DGFiP financial ratios dataset
 - DGFiP judgment data
 
-TimeIndex names need to be "période"
-and format as follow : "yyyy-MM-dd"
+The time index column should be named 'période'"
+and formatted as follow : "yyyy-MM-dd"
 
 Type python join_datasets.py --help for detailed usage.
 
