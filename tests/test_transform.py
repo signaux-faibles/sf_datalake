@@ -98,8 +98,8 @@ def lag_operator_df(spark):
     return df
 
 
-@pytest.fixture(scope="class")
-def missing_value_handler_df(spark):
+@pytest.fixture(scope="class", name="missing_value_handler_df")
+def fixture_missing_value_handler_df(spark):
     schema = T.StructType(
         [
             T.StructField("siren", T.StringType(), False),
@@ -107,25 +107,24 @@ def missing_value_handler_df(spark):
             T.StructField("ca", T.DoubleType(), True),
             T.StructField("ca_filled_value", T.DoubleType(), True),
             T.StructField("ca_filled_median", T.DoubleType(), True),
-            T.StructField("ebe", T.DoubleType(), True),
-            T.StructField("category", T.StringType(), True),
-            T.StructField("label", T.IntegerType(), True),
+            T.StructField("ca_filled_bfill", T.DoubleType(), True),
+            T.StructField("ca_filled_ffill", T.DoubleType(), True),
         ]
     )
 
     # fmt: off
     df = spark.createDataFrame(
         [
-            ('219385581', dt.date(2017, 12, 1), 35.0, 35.0, 35.0, 0.3034911450601422, '169', 0),
-            ('219385581', dt.date(2022, 3, 1), 54.0, 54.0, 54.0, 0.08394427209402189, '347', 0),
-            ('219385581', dt.date(2017, 3, 1), None, 0.0, 39.0,0.7482441546718624, '529', 0),
-            ('219385581', dt.date(2015, 1, 1), None, 0.0, 39.0,0.8458750332248388, '006', 0),
-            ('219385581', dt.date(2018, 1, 1), None, 0.0, 39.0, 0.05922352511577478, '631', 0),
-            ('737745998', dt.date(2016, 6, 1), 6.0, 6.0, 6.0,0.23554547470210907, '366', 0),
-            ('737745998', dt.date(2014, 10, 1), 39.0, 39.0, 39.0, 0.9144442485558925, '803', 0),
-            ('737745998', dt.date(2015, 8, 1), 92.0, 92.0, 92.0,0.32033475571920367, '903', 1),
-            ('737745998', dt.date(2015, 1, 1), None, 0.0, 39.0, 0.694039198363326, '944', 1),
-            ('737745998', dt.date(2015, 1, 1), 76.0, 76.0, 76.0, 0.694039198363326, '944', 1),
+            ('219385581', dt.date(2015, 1,  1), None,  0.0, 39.0, 35.0, None),
+            ('219385581', dt.date(2017, 3,  1), None,  0.0, 39.0, 35.0, None),
+            ('219385581', dt.date(2017, 12, 1), 35.0, 35.0, 35.0, 35.0, 35.0),
+            ('219385581', dt.date(2018, 1,  1), None,  0.0, 39.0, 54.0, 35.0),
+            ('219385581', dt.date(2022, 3,  1), 54.0, 54.0, 54.0, 54.0, 54.0),
+            ('737745998', dt.date(2014, 10, 1), 39.0, 39.0, 39.0, 39.0, 39.0),
+            ('737745998', dt.date(2015, 1,  1), None,  0.0, 39.0, 76.0, 39.0),
+            ('737745998', dt.date(2015, 2,  1), 76.0, 76.0, 76.0, 76.0, 76.0),
+            ('737745998', dt.date(2015, 8,  1), 92.0, 92.0, 92.0, 92.0, 92.0),
+            ('737745998', dt.date(2016, 6,  1),  6.0,  6.0,  6.0,  6.0,  6.0),
         ],
         schema=schema,
     )
@@ -186,10 +185,22 @@ class TestRandomResampler:
 @pytest.mark.usefixtures("missing_value_handler_df")
 class TestMissingValueHandler:
     def test_filling_with_median(self, missing_value_handler_df):
-        df = MissingValuesHandler(inputCols=["ca"], stat_strategy="median").transform(
+        df = MissingValuesHandler(inputCols=["ca"], strategy="median").transform(
             missing_value_handler_df
         )
         assert all(r["ca"] == r["ca_filled_median"] for r in df.collect())
+
+    def test_filling_with_bfill(self, missing_value_handler_df):
+        df = MissingValuesHandler(inputCols=["ca"], strategy="bfill").transform(
+            missing_value_handler_df
+        )
+        assert all(r["ca"] == r["ca_filled_bfill"] for r in df.collect())
+
+    def test_filling_with_ffill(self, missing_value_handler_df):
+        df = MissingValuesHandler(inputCols=["ca"], strategy="ffill").transform(
+            missing_value_handler_df
+        )
+        assert all(r["ca"] == r["ca_filled_ffill"] for r in df.collect())
 
     def test_filling_with_value(self, missing_value_handler_df):
         value = {"ca": 0.0}

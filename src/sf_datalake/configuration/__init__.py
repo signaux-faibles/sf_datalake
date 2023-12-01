@@ -123,8 +123,8 @@ class PreprocessingConfiguration:
         drop_missing_values: If true, drop any missing values from datasets before
           proceeding to training.
         fill_default_values: Mapping from feature name to associated default value.
-        fill_imputation_strategy: Mapping from feature name to stat function for
-          missing value imputation.
+        fill_imputation_strategy: Mapping from feature name to method for missing value
+          imputation.
         features_transformers: Mapping from features name to iterable of transformers
           names.
         encoders_params: Encoders kwargs used for instanciation of these objects.
