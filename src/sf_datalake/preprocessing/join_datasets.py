@@ -53,7 +53,7 @@ parser.add_argument(
     help="Path to the preprocessed DARES dataset.",
 )
 parser.add_argument(
-    "--sirene_catagories",
+    "--sirene_categories",
     help="Path to the preprocessed sirene categorical dataset.",
 )
 parser.add_argument(
@@ -88,7 +88,7 @@ datasets = load_data(
         "urssaf_debit": args.urssaf_debit,
         "urssaf_cotisation": args.urssaf_cotisation,
         "ap": args.ap,
-        "sirene_catagories": args.sirene_catagories,
+        "sirene_categories": args.sirene_categories,
         "sirene_dates": args.sirene_dates,
         "dgfip_yearly": args.dgfip_yearly,
         "judgments": args.judgments,
@@ -105,7 +105,7 @@ df_judgments = siren_normalizer.transform(datasets["judgments"])
 df_altares = siren_normalizer.transform(datasets["altares"])
 df_urssaf_debit = siren_normalizer.transform(datasets["urssaf_debit"])
 df_urssaf_cotisation = siren_normalizer.transform(datasets["urssaf_cotisation"])
-df_sirene_categories = siren_normalizer.transform(datasets["sirene_catagories"])
+df_sirene_categories = siren_normalizer.transform(datasets["sirene_categories"])
 df_sirene_dates = siren_normalizer.transform(datasets["sirene_dates"]).fillna(
     {"date_fin": "2100-01-01"}
 )
@@ -117,6 +117,7 @@ df_monthly = (
     .join(df_ap, on=["siren", "periode"], how="left")
     .join(df_judgments, on="siren", how="left")
     .join(df_altares, on=["siren", "periode"], how="left")
+    .join(df_sirene_categories, on="siren", how="inner")
 )
 
 # Join monthly dataset with yearly dataset
