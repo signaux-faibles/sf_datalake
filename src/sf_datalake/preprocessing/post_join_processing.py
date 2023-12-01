@@ -51,11 +51,34 @@ input_ds = sf_datalake.io.load_data(
 # Set every column name to lower case (if not already).
 df = input_ds.toDF(*(col.lower() for col in input_ds.columns))
 
+#####################
+# Time Computations #
+#####################
+
+# pylint: disable=unsubscriptable-object
+
+time_computations: List[Transformer] = []
+for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
+    time_computations.append(
+        sf_datalake.transform.LagOperator(
+            inputCol=feature, n_months=n_months, bfill=True
+        )
+    )
+for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
+    time_computations.append(
+        sf_datalake.transform.DiffOperator(
+            inputCol=feature, n_months=n_months, bfill=True
+        )
+    )
+for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
+    time_computations.append(
+        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
+    )
+
 #################
 # Create target #
 #################
 
-# pylint: disable=E1136
 building_steps = [
     sf_datalake.transform.TargetVariable(
         inputCol=configuration.learning.target["judgment_date_col"],
@@ -92,50 +115,13 @@ if configuration.preprocessing.fill_imputation_strategy:
     missing_values_handling_steps.extend(
         sf_datalake.transform.MissingValuesHandler(
             inputCols=features,
-            strategy=strategy,
+            stat_strategy=strategy,
         )
         for strategy, features in imputation_strategy_features.items()
     )
 
-
-#####################
-# Time Computations #
-#####################
-
-# pylint: disable=unsubscriptable-object
-lag_features = []
-diff_features = []
-time_computations: List[Transformer] = []
-for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
-    time_computations.append(
-        sf_datalake.transform.LagOperator(inputCol=feature, n_months=n_months)
-    )
-    lag_features.append(f"{feature}_lag{n_months}m")
-for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
-    time_computations.append(
-        sf_datalake.transform.DiffOperator(inputCol=feature, n_months=n_months)
-    )
-    diff_features.append(f"{feature}_diff{n_months}m")
-for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
-    time_computations.append(
-        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
-    )
-
-# Fill Missing values created by lag computation
-
-lag_filling_strategy = "bfill"  # Maybe to add into configuration files
-
-time_computations.extend(
-    sf_datalake.transform.MissingValuesHandler(
-        inputCols=features,
-        strategy=lag_filling_strategy,
-    )
-    for features in (lag_features + diff_features)
-)
-
-
 output_ds = PipelineModel(
-    stages=building_steps + missing_values_handling_steps + time_computations
+    stages=time_computations + building_steps + missing_values_handling_steps
 ).transform(df)
 
 
