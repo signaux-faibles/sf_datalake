@@ -52,31 +52,14 @@ input_ds = sf_datalake.io.load_data(
 # Set every column name to lower case (if not already).
 df = input_ds.toDF(*(col.lower() for col in input_ds.columns))
 
-#####################
-# Time Computations #
-#####################
-
-# pylint: disable=unsubscriptable-object
-
-time_computations: List[Transformer] = []
-for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
-    time_computations.append(
-        sf_datalake.transform.LagOperator(inputCol=feature, n_months=n_months)
-    )
-for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
-    time_computations.append(
-        sf_datalake.transform.DiffOperator(inputCol=feature, n_months=n_months)
-    )
-for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
-    time_computations.append(
-        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
-    )
 
 #################
 # Create target #
 #################
 
-building_steps = [
+# pylint: disable=unsubscriptable-object
+
+labeling_step = [
     sf_datalake.transform.TargetVariable(
         inputCol=configuration.learning.target["judgment_date_col"],
         outputCol=configuration.learning.target["class_col"],
@@ -87,11 +70,6 @@ building_steps = [
 ##########################
 # Missing Value Handling #
 ##########################
-
-if not configuration.preprocessing.drop_missing_values:
-    raise NotImplementedError(
-        " VectorAssembler in spark < 2.4.0 doesn't handle including missing values."
-    )
 
 missing_values_handling_steps = []
 if configuration.preprocessing.fill_default_values:
@@ -112,13 +90,53 @@ if configuration.preprocessing.fill_imputation_strategy:
     missing_values_handling_steps.extend(
         sf_datalake.transform.MissingValuesHandler(
             inputCols=features,
-            stat_strategy=strategy,
+            strategy=strategy,
         )
         for strategy, features in imputation_strategy_features.items()
     )
 
+#####################
+# Time Computations #
+#####################
+
+# pylint: disable=unsubscriptable-object
+
+time_computations: List[Transformer] = []
+for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
+    time_computations.append(
+        sf_datalake.transform.LagOperator(inputCol=feature, n_months=n_months)
+    )
+for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
+    time_computations.append(
+        sf_datalake.transform.DiffOperator(inputCol=feature, n_months=n_months)
+    )
+for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
+    time_computations.append(
+        sf_datalake.transform.MovingAverage(inputCol=feature, n_months=n_months)
+    )
+
+# Bfill after time computation
+
+features_lag_bfill = [
+    f"{feature}_lag{n_months}m"
+    for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items()
+]
+
+features_diff_bfill = [
+    f"{feature}_diff{n_months}m"
+    for feature, n_months in configuration.preprocessing.time_aggregation[
+        "diff"
+    ].items()
+]
+
+time_computations.append(
+    sf_datalake.transform.MissingValuesHandler(
+        inputCols=features_diff_bfill + features_lag_bfill, strategy="bfill"
+    )
+)
+
 output_ds = PipelineModel(
-    stages=time_computations + building_steps + missing_values_handling_steps
+    stages=time_computations + labeling_step + missing_values_handling_steps
 ).transform(df)
 
 
