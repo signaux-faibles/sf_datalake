@@ -8,8 +8,8 @@
 An output dataset will be stored as split orc files under the chosen output directory.
 
 USAGE
-    python sf_preprocessing.py <input_directory> <output_directory> \
--t [time_computations_config_filename] -a [aggregation_config_filename]
+    python post_join_processing.py <input_directory> <output_directory> \
+-c [config_filename]
 
 """
 import os
@@ -45,7 +45,8 @@ parser.add_argument(
 args = parser.parse_args()
 configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
 input_ds = sf_datalake.io.load_data(
-    {"input": args.input}, file_format="csv", sep=",", infer_schema=False
+    {"input": args.input},
+    file_format="orc",
 )["input"]
 
 # Set every column name to lower case (if not already).
@@ -60,15 +61,11 @@ df = input_ds.toDF(*(col.lower() for col in input_ds.columns))
 time_computations: List[Transformer] = []
 for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
     time_computations.append(
-        sf_datalake.transform.LagOperator(
-            inputCol=feature, n_months=n_months, bfill=True
-        )
+        sf_datalake.transform.LagOperator(inputCol=feature, n_months=n_months)
     )
 for feature, n_months in configuration.preprocessing.time_aggregation["diff"].items():
     time_computations.append(
-        sf_datalake.transform.DiffOperator(
-            inputCol=feature, n_months=n_months, bfill=True
-        )
+        sf_datalake.transform.DiffOperator(inputCol=feature, n_months=n_months)
     )
 for feature, n_months in configuration.preprocessing.time_aggregation["mean"].items():
     time_computations.append(
