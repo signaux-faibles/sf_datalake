@@ -2,11 +2,10 @@
 
 Run `python extract_debit_urssaf.py --help` to get usage insights.
 
-The data is documented here:
+The data is documented here (variable names may be slightly different after some
+upstream normalization):
 https://github.com/signaux-faibles/documentation/blob/master/description-donnees.md\
 #donn%C3%A9es-sur-les-cotisations-sociales-et-les-d%C3%A9bits
-
-
 
 """
 # pylint: disable=duplicate-code
@@ -83,7 +82,9 @@ date_range = spark.createDataFrame(
 debit = spark.read.csv(args.input, header=True, schema=debit_schema)
 debit = siret_to_siren.transform(debit)
 
-# Select only data after the new created time index: this is what we know "so far".
+# Only select data located after the newly created time index: for a given "période"
+# timestamp in the output dataframe, we only want to select debt data that concern past
+# events, i.e. data located before "période."
 debit = debit.select(
     [
         "siren",
