@@ -4,13 +4,17 @@ The join is made along temporal and SIREN variables. Source files are
 expected to be ORC.
 
 Expected inputs :
-- "sf" dataset. An ill-named dataset that already aggregates different sources such as:
-  - URSSAF data
-  - DGEFP data
-  - 'sirene' database data
-  - altares 'paydex' + 'FPI' data
+- URSSAF debit data
+- URSSAF cotisation data
+- DGEFP data
+- INSEE 'sirene' administrative data
+- INSEE 'sirene' activity dates data
+- altares 'paydex' + 'FPI' data
 - DGFiP financial ratios dataset
 - DGFiP judgment data
+
+The time index column should be named 'période'"
+and formatted as follow : "yyyy-MM-dd"
 
 Type python join_datasets.py --help for detailed usage.
 
@@ -20,9 +24,6 @@ import os
 import sys
 from os import path
 
-import pyspark.sql.functions as F
-from pyspark.sql import Window
-
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
@@ -30,15 +31,34 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint: disable=C0413
 import sf_datalake.transform
+import sf_datalake.utils
 from sf_datalake.io import load_data, write_data
 
 parser = argparse.ArgumentParser(
     description="Merge DGFiP and Signaux Faibles datasets into a single one."
 )
 parser.add_argument(
-    "--sf",
-    dest="sf_data",
-    help="Path to the Signaux Faibles dataset.",
+    "--urssaf_debit",
+    dest="urssaf_debit",
+    help="Path to the preprocessed 'URSSAF debit' dataset.",
+)
+parser.add_argument(
+    "--urssaf_cotisation",
+    dest="urssaf_cotisation",
+    help="Path to the preprocessed 'URSSAF cotisation' dataset.",
+)
+parser.add_argument(
+    "--ap",
+    dest="ap",
+    help="Path to the preprocessed DARES dataset.",
+)
+parser.add_argument(
+    "--sirene_categories",
+    help="Path to the preprocessed sirene categorical dataset.",
+)
+parser.add_argument(
+    "--sirene_dates",
+    help="Path to the sirene companies activity dates.",
 )
 parser.add_argument(
     "--judgments",
@@ -65,7 +85,11 @@ args = parser.parse_args()
 # Load datasets
 datasets = load_data(
     {
-        "sf": args.sf_data,
+        "urssaf_debit": args.urssaf_debit,
+        "urssaf_cotisation": args.urssaf_cotisation,
+        "ap": args.ap,
+        "sirene_categories": args.sirene_categories,
+        "sirene_dates": args.sirene_dates,
         "dgfip_yearly": args.dgfip_yearly,
         "judgments": args.judgments,
         "altares": args.altares,
@@ -79,35 +103,41 @@ siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
 df_dgfip_yearly = siren_normalizer.transform(datasets["dgfip_yearly"])
 df_judgments = siren_normalizer.transform(datasets["judgments"])
 df_altares = siren_normalizer.transform(datasets["altares"])
-df_sf = siren_normalizer.transform(datasets["sf"])
-
-# Join datasets and drop (time, SIREN) duplicates with the highest
-# null values ratio from the DGFiP ratios dataset
-# TODO: Handle this step during dgfip data preprocessing script
-df_dgfip_yearly = df_dgfip_yearly.withColumn(
-    "null_ratio",
-    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_yearly.columns])
-    / len(df_dgfip_yearly.columns),
+df_urssaf_debit = siren_normalizer.transform(datasets["urssaf_debit"])
+df_urssaf_cotisation = siren_normalizer.transform(datasets["urssaf_cotisation"])
+df_sirene_categories = siren_normalizer.transform(datasets["sirene_categories"])
+df_sirene_dates = siren_normalizer.transform(datasets["sirene_dates"]).fillna(
+    {"date_fin": "2100-01-01"}
 )
-w = Window().partitionBy(["siren", "periode"]).orderBy(F.col("null_ratio").asc())
+df_ap = siren_normalizer.transform(datasets["ap"])
 
-# Join all datasets
-joined_df = (
-    df_sf.join(
-        df_dgfip_yearly,
-        on=(
-            (df_sf.siren == df_dgfip_yearly.siren)
-            & (df_sf.periode >= df_dgfip_yearly.date_deb_exercice)
-            & (df_sf.periode < df_dgfip_yearly.date_fin_exercice)
-        ),
-        how="inner",
-    )
-    .drop(df_dgfip_yearly.siren)
-    .withColumn("n_row", F.row_number().over(w))
-    .filter(F.col("n_row") == 1)
-    .drop("n_row")
+# Join "monthly" datasets
+df_monthly = (
+    df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "periode"], how="inner")
+    .join(df_ap, on=["siren", "periode"], how="left")
     .join(df_judgments, on="siren", how="left")
     .join(df_altares, on=["siren", "periode"], how="left")
+    .join(df_sirene_categories, on="siren", how="inner")
 )
 
-write_data(joined_df, args.output_path, args.output_format)
+# Join monthly dataset with yearly dataset
+joined_df = sf_datalake.utils.merge_asof(
+    df_monthly,
+    df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "periode"),
+    on="periode",
+    by="siren",
+    tolerance=365,
+    direction="backward",
+)
+
+output_df = joined_df.join(
+    df_sirene_dates,
+    on=(
+        (joined_df["siren"] == df_sirene_dates["siren"])
+        & (joined_df["periode"] >= df_sirene_dates["date_début"])
+        & (joined_df["periode"] < df_sirene_dates["date_fin"])
+    ),
+    how="left_semi",
+)
+
+write_data(output_df, args.output_path, args.output_format)
