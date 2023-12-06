@@ -126,9 +126,12 @@ consommation = consommation.select(["siret", "période", "ap_heures_consommées"
 siret_to_siren_transformer = sf_datalake.transform.SiretToSiren(inputCol="siret")
 
 ### "Demande" dataset
-# Create the time index for the output dataframe
+# Create the time index for the output DataFrame
 date_range = spark.createDataFrame(
-    pd.date_range(args.min_date, args.max_date).to_frame(name="période")
+    pd.DataFrame(
+        pd.date_range(args.min_date, args.max_date, freq="MS").to_series().dt.date,
+        columns=["période"],
+    )
 )
 
 demande = demande.join(
