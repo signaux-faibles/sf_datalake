@@ -99,6 +99,9 @@ mvh = sf_datalake.transform.MissingValuesHandler(
     value=configuration.preprocessing.fill_default_values,
 )
 declarations = mvh.transform(declarations)
+
+# We are trying to remove duplicate data about duplicate exercice declaration for a
+# given SIREN. We keep the line where we have the lower rate of null ratios.
 declarations = declarations.withColumn(
     "null_ratio",
     sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in declarations.columns])

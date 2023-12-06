@@ -8,7 +8,7 @@
 An output dataset will be stored as split orc files under the chosen output directory.
 
 USAGE
-    python post_join_processing.py <input_directory> <output_directory> \
+    python post_join_processing.py <input_dataset> <output_dataset> \
 -c [config_filename]
 
 """
@@ -33,9 +33,7 @@ import sf_datalake.transform
 ####################
 
 parser = sf_datalake.io.data_path_parser()
-parser.description = "Build a complete dataset with new time \
-averaged/lagged variables."
-
+parser.description = "Build a complete dataset with new time averaged/lagged variables."
 parser.add_argument("-c", "--configuration", help="Configuration file.", required=True)
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."

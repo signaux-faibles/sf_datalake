@@ -159,13 +159,12 @@ if not configuration.preprocessing.drop_missing_values:
     raise NotImplementedError(
         " VectorAssembler in spark < 2.4.0 doesn't handle including missing values."
     )
-handling_nan_steps = []
-handling_nan_steps.append(
+filter_steps.append(
     sf_datalake.transform.MissingValuesDropper(inputCols=raw_dataset.columns)
 )
 
 preprocessing_pipeline = Pipeline(
-    stages=filter_steps + handling_nan_steps + configuration.encoding_scaling_stages()
+    stages=filter_steps + configuration.encoding_scaling_stages()
 )
 
 preprocessing_pipeline_model = preprocessing_pipeline.fit(raw_dataset)
