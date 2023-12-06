@@ -1,9 +1,9 @@
-"""Carry out some pre-processing over the "sf" dataset.
+"""Carry out some pre-processing over the "join" dataset.
 
-1) Adds new columns to dataset by:
+1) Manage Missing values
+2) Adds new columns to dataset by:
+- create target from judgment data;
 - computing averages, lags, etc. of existing variables.
-- computing new features derived from existing ones.
-2) Aggregates data at the SIREN level.
 
 An output dataset will be stored as split orc files under the chosen output directory.
 
@@ -33,7 +33,7 @@ import sf_datalake.transform
 ####################
 
 parser = sf_datalake.io.data_path_parser()
-parser.description = "Build a dataset with aggregated SIREN-level data and new time \
+parser.description = "Build a complete dataset with new time \
 averaged/lagged variables."
 
 parser.add_argument("-c", "--configuration", help="Configuration file.", required=True)
@@ -99,7 +99,6 @@ if configuration.preprocessing.fill_imputation_strategy:
 # Time Computations #
 #####################
 
-# pylint: disable=unsubscriptable-object
 
 time_computations: List[Transformer] = []
 for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
