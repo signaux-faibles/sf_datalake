@@ -75,9 +75,9 @@ args = parser.parse_args()
 
 # Parse configuration files and possibly override parameters.
 
-config_file: str = args.pop("configuration")
-
-configuration = sf_datalake.configuration.ConfigurationHelper(config_file=config_file)
+configuration = sf_datalake.configuration.ConfigurationHelper(
+    config_file=args.configuration
+)
 
 # Load Data
 consommation_schema = T.StructType(
