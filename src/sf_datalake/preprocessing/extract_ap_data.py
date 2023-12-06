@@ -21,6 +21,7 @@ from os import path
 import pandas as pd
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
+from pyspark.ml import PipelineModel
 from pyspark.sql.window import Window
 
 # isort: off
@@ -122,10 +123,7 @@ consommation = spark.read.csv(
 demande = demande.select(["siret", "date_statut", "date_début", "date_fin", "hta"])
 consommation = consommation.select(["siret", "période", "ap_heures_consommées"])
 
-# Extract SIRENs from SIRETs
 siret_to_siren_transformer = sf_datalake.transform.SiretToSiren(inputCol="siret")
-demande = siret_to_siren_transformer.transform(demande)
-consommation = siret_to_siren_transformer.transform(consommation)
 
 ### "Demande" dataset
 # Create the time index for the output dataframe
@@ -156,7 +154,7 @@ demande = demande.withColumn(
 w = (
     Window.partitionBy("siret")
     .orderBy("date_début")
-    .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    .rangeBetween(Window.unboundedPreceding, Window.currentRow)
 )
 
 demande = (
@@ -164,7 +162,11 @@ demande = (
     .withColumn(
         "nouvel_intervalle",
         F.when(
-            F.col("date_début") > F.lag("date_fin_max_cumulé").over(w), F.lit(1)
+            F.col("date_début")
+            > F.lag("date_fin_max_cumulé").over(
+                Window.partitionBy("siret").orderBy("date_début")
+            ),
+            F.lit(1),
         ).otherwise(F.lit(0)),
     )
     # The cumulative sum uniquely indentifies a new disjoint interval.
@@ -174,34 +176,40 @@ demande = (
 
 # Sum over newly defined joined timeframes, then over siren.
 demande_agg = (
-    demande.groupBy(["période", "siret", "id_intervalle"])
-    .agg(
-        F.sum("ap_heures_autorisées_par_jour").alias("ap_heures_autorisées_par_jour"),
-        F.min("date_début").alias("ap_date_début_autorisation"),
-        F.max("date_fin").alias("ap_date_fin_autorisation"),
+    siret_to_siren_transformer.transform(
+        demande.groupBy(["période", "siret", "id_intervalle"]).agg(
+            F.sum("ap_heures_autorisées_par_jour").alias(
+                "ap_heures_autorisées_par_jour"
+            ),
+            F.min("date_début").alias("ap_date_début_autorisation"),
+            F.max("date_fin").alias("ap_date_fin_autorisation"),
+        )
     )
     # TODO: we may want to keep "date_début" and "date_fin" by early exporting
     # SIRET-level data here ?
-    .groupBy(["siren", "période"])
-    .agg(
+    .groupBy(["siren", "période"]).agg(
         F.sum("ap_heures_autorisées_par_jour").alias("ap_heures_autorisées"),
     )
 )
 
 # Restrict dataset to user-input dates
-demande = demande.filter(args.min_date <= F.col("période") <= args.max_date)
-
+demande_out = demande_agg.filter(F.col("période").between(args.min_date, args.max_date))
 
 ### 'consommation' dataset
-consommation_preprocess = sf_datalake.transform.SirenAggregator(
+siren_aggregator = sf_datalake.transform.SirenAggregator(
     grouping_cols=["siren", "période"],
     aggregation_map={"ap_heures_consommées": "sum"},
     no_aggregation=[],
-).transform(consommation)
+)
+consommation_pipeline_model = PipelineModel(
+    [siret_to_siren_transformer, siren_aggregator]
+)
+
+consommation_out = consommation_pipeline_model.transform(consommation)
 
 # Join 'demande' & 'consommation' dataset
-ap_ds = demande.join(
-    consommation,
+ap_ds = demande_out.join(
+    consommation_out,
     on=["période", "siren"],
     how="outer",
 ).select("siren", "période", "ap_heures_consommées", "ap_heures_autorisées")
