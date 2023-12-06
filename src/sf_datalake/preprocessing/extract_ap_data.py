@@ -113,10 +113,12 @@ demande_schema = T.StructType(
 
 # Select required columns and filter "demande" set according to the reason the
 # unemployment authorization was requested.
-demande = spark.read.csv(args.demande_data, header=True, schema=demande_schema)
+demande = spark.read.csv(args.demande_data, header=True, schema=demande_schema).filter(
+    F.col("motif_recours_se") < 6
+)
 consommation = spark.read.csv(
     args.demande_data, header=True, schema=consommation_schema
-).filter(F.col("motif_recours_se") < 6)
+)
 demande = demande.select(["siret", "date_statut", "date_début", "date_fin", "hta"])
 consommation = consommation.select(["siret", "période", "ap_heures_consommées"])
 
