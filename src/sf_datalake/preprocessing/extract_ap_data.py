@@ -96,9 +96,9 @@ demande_schema = T.StructType(
         T.StructField("siret", T.StringType(), False),
         T.StructField("eff_ent", T.DoubleType(), True),
         T.StructField("eff_étab", T.DoubleType(), True),
-        T.StructField("date_statut", T.TimestampType(), True),
-        T.StructField("date_début", T.TimestampType(), True),
-        T.StructField("date_fin", T.TimestampType(), True),
+        T.StructField("date_statut", T.DateType(), True),
+        T.StructField("date_début", T.DateType(), True),
+        T.StructField("date_fin", T.DateType(), True),
         T.StructField("hta", T.DoubleType(), True),
         T.StructField("mta", T.DoubleType(), True),
         T.StructField("eff_auto", T.DoubleType(), True),
@@ -160,7 +160,7 @@ w = (
 )
 
 demande = (
-    demande.withColumn("date_fin_max_cumulé", F.max("end").over(w))
+    demande.withColumn("date_fin_max_cumulé", F.max("date_fin").over(w))
     .withColumn(
         "nouvel_intervalle",
         F.when(F.col("date_début") > F.lag("date_fin_max_cumulé").over(w), F.lit(1)),
