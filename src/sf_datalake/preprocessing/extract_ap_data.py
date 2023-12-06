@@ -1,16 +1,19 @@
-"""DGEFP historicized data preprocessing.
+"""DARES historicized "activité partielle" data pre-processing.
 
 This script parses and extracts data from raw historicized files supplied by DGEFP. It
 will output a dataset containing the following information:
-- siren
-- periode (date, first day of each month where data is available)
-- ap_consommation
-- ap_demande
-
+- siren.
+- période: date, first day of each month where data is available.
+- ap_heures_consommées: number of 'activité partielle' (partial unemployment) hours used
+  over a given (siren, période) couple.
+- ap_heures_demandées: requested 'activité partielle' at a given `(siren, période)`
+  couple. This data's unit is a number of hours, normalized by the number of days
+  contained in the time frame over which the request was made. If multiple requests were
+  made for a given `période`, the normalized data is summed over all found requests.
 
 """
 
-import datetime
+import argparse
 import os
 import sys
 from os import path
@@ -33,9 +36,17 @@ import sf_datalake.utils
 
 spark = sf_datalake.utils.get_spark_session()
 
-parser = sf_datalake.io.data_path_parser()
-parser.description = "Extract and pre-process DGEFP data."
-parser.add_argument("--min_date", default="2014-01-01")
+parser = argparse.ArgumentParser(description="Extract and pre-process DGEFP data.")
+parser.add_argument(
+    "--min_date",
+    default="2014-01-01",
+    help="Minimum date to consider for requested ap data.",
+)
+parser.add_argument(
+    "--max_date",
+    default="2100-01-01",
+    help="Maximum date to consider for requested ap data.",
+)
 parser.add_argument(
     "--configuration",
     help="""
@@ -44,7 +55,6 @@ parser.add_argument(
     """,
     default="standard.json",
 )
-
 parser.add_argument(
     "--demande",
     dest="demande_data",
@@ -57,6 +67,7 @@ parser.add_argument(
     help="Path to the 'consommation' dataset.",
     required=True,
 )
+parser.add_argument("--output", help="The output path.")
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
@@ -71,158 +82,127 @@ configuration = sf_datalake.configuration.ConfigurationHelper(config_file=config
 # Load Data
 consommation_schema = T.StructType(
     [
-        T.StructField("id_da", T.StringType(), False),
+        T.StructField("id_da", T.StringType(), True),
         T.StructField("siret", T.StringType(), False),
-        T.StructField("ap_consommation", T.DoubleType(), True),
+        T.StructField("ap_heures_consommées", T.DoubleType(), True),
         T.StructField("montants", T.DoubleType(), True),
         T.StructField("effectifs", T.DoubleType(), True),
-        T.StructField("periode", T.TimestampType(), True),
+        T.StructField("période", T.DateType(), False),
     ]
 )
 demande_schema = T.StructType(
     [
-        T.StructField("id_da", T.StringType(), False),
+        T.StructField("id_da", T.StringType(), True),
         T.StructField("siret", T.StringType(), False),
         T.StructField("eff_ent", T.DoubleType(), True),
-        T.StructField("eff_etab", T.DoubleType(), True),
+        T.StructField("eff_étab", T.DoubleType(), True),
         T.StructField("date_statut", T.TimestampType(), True),
         T.StructField("date_début", T.TimestampType(), True),
         T.StructField("date_fin", T.TimestampType(), True),
-        T.StructField("ap_demande", T.DoubleType(), True),
+        T.StructField("hta", T.DoubleType(), True),
         T.StructField("mta", T.DoubleType(), True),
         T.StructField("eff_auto", T.DoubleType(), True),
         T.StructField("motif_recours_se", T.IntegerType(), True),
-        T.StructField("perimetre_ap", T.IntegerType(), True),
+        T.StructField("périmètre_ap", T.IntegerType(), True),
         T.StructField("s_heure_consom_tot", T.DoubleType(), True),
         T.StructField("s_eff_consom_tot", T.DoubleType(), True),
         T.StructField("s_montant_consom_tot", T.DoubleType(), True),
-        T.StructField("recours_anterieur", T.IntegerType(), True),
+        T.StructField("recours_antérieur", T.IntegerType(), True),
     ]
 )
+
+# Select required columns and filter "demande" set according to request category
 demande = spark.read.csv(args.demande_data, header=True, schema=demande_schema)
 consommation = spark.read.csv(
     args.demande_data, header=True, schema=consommation_schema
-)
+).filter(F.col("motif_recours_se") < 6)
+demande = demande.select(["siret", "date_statut", "date_début", "date_fin", "hta"])
+consommation = consommation.select(["siret", "période", "ap_heures_consommées"])
 
-# Select ap spent and demand hours columns
+# Extract SIRENs from SIRETs
+siret_to_siren_transformer = sf_datalake.transform.SiretToSiren(inputCol="siret")
+demande = siret_to_siren_transformer.transform(demande)
+consommation = siret_to_siren_transformer.transform(consommation)
 
-demande = demande.select(
-    ["siret", "date_statut", "date_début", "date_fin", "ap_demande"]
-)
-consommation = consommation.select(["siret", "periode", "ap_consommation"])
-
-# Extract Siren from Siret
-siretsiren_transformer = sf_datalake.transform.SiretToSiren(inputCol="siret")
-demande = siretsiren_transformer.transform(demande)
-consommation = siretsiren_transformer.transform(consommation)
-
-# Preprocess 'demande' dataset by aggreging data 'ap_demande'
-# according to siren and timeframes (date_début / date_fin)
-
-# Indexing "demande dataframe" in order to indentify the demande
-demande = demande.withColumn("siren_date_index", F.monotonically_increasing_id())
-
-# Add a new column with the list of dates in the range
-
-
+### "Demande" dataset
+# Create the time index for the output dataframe
 date_range = spark.createDataFrame(
-    pd.date_range(args.min_date, datetime.date.today().isoformat()).to_frame(
-        name="date"
-    )
+    pd.date_range(args.min_date, args.max_date).to_frame(name="période")
 )
+
 demande = demande.join(
     date_range,
-    (date_range["date"] >= demande["date_début"])
-    & (date_range["date"] <= demande["date_fin"]),
+    (date_range["période"] >= demande["date_début"])
+    & (date_range["période"] <= demande["date_fin"]),
 )
 
-# Normalize the "Value" column (/days)
 
+# Normalize by timeframes length, in days.
 demande = demande.withColumn(
-    "time_frame_size", F.expr("DATEDIFF(date_fin, date_début) + 1")
-)
-demande = demande.withColumn(
-    "ap_demande", F.col("ap_demande") / F.col("time_frame_size")
+    "ap_heures_demandées_par_jour",
+    F.col("hta") / (F.datediff(end="date_fin", start="date_début") + 1),
 )
 
-# Group by siren and date, and sum the values for demand.
-# Summing the siren_date_index aims to create a new id
-# for intersection between two demands.
-demande = demande.groupBy("siren", "date").agg(
-    F.sum("ap_demande").alias("Total_ap_demande"),
-    F.sum("siren_date_index").alias("Total_siren_date_index"),
+# We determine disjoint time intervals for a given SIRET and merge them as follows:
+# - For each new start date that appears, we check if it is located later in time than
+#   the latest end date associated with the previous start date. We keep track of where
+#   these changes occur.
+# - We add up every "ap" request (per unit of time) located between the tracked changes
+#   and create new intervals boundaries that cover every previously intersecting
+#   timeframes.
+w = (
+    Window.partitionBy(["siret", "période"])
+    .orderBy("date_début")
+    .rowsBetween(Window.unboundedPreceding, Window.currentRow)
 )
 
-# Next part of the code is used to merge intersection between demand time frames.
-# Therefore, the goal is to compute new time frames based on intersection.
-# Create a lag column to compare Total_siren_date_index with the previous row
-window_spec = Window.partitionBy("siren").orderBy("date")
-demande = demande.withColumn(
-    "Previous_siren_date_index",
-    F.lag("Total_siren_date_index").over(window_spec),
+demande = (
+    demande.withColumn("date_fin_max_cumulé", F.max("end").over(w))
+    .withColumn(
+        "nouvel_intervalle",
+        F.when(F.col("date_début") > F.lag("date_fin_max_cumulé").over(w), F.lit(1)),
+    )
+    .otherwise(F.lit(0))
+    # The cumulative sum uniquely indentifies a new disjoint interval.
+    .withColumn("id_intervalle", F.sum("nouvel_intervalle").over(w))
+    .drop("nouvel_intervalle", "date_fin_max_cumulé")
 )
 
-# Find the rows where the siren_date_index changes
-demande = demande.withColumn(
-    "siren_date_index_Change",
-    F.when(
-        F.col("Total_siren_date_index") != F.col("Previous_siren_date_index"),
-        1,
-    ).otherwise(0),
+# Sum over newly defined joined timeframes, then over siren.
+demande_agg = (
+    ## TODO: we may want to keep the timeframes date
+    demande.groupBy(["période", "siret", "id_intervalle"])
+    .agg(
+        F.sum("ap_heures_demandées_par_jour").alias("ap_heures_demandées_par_jour"),
+    )
+    .groupBy(["siren", "période"])
+    .agg(
+        F.sum("ap_heures_demandées_par_jour").alias("ap_heures_demandées"),
+    )
 )
 
-# Create groups based on cumulative sum of the siren_date_index_Change column
-demande = demande.withColumn(
-    "group", F.sum("siren_date_index_Change").over(window_spec)
-)
-
-# Group by siren and group to create new distinct timeframes and,
-# compute de total amount for "ap_demande".
-# The value of ap_demande is the same in a group.
-demande = demande.groupBy("siren", "group").agg(
-    F.min("date").alias("date_début_mr"),
-    F.max("date").alias("date_fin_mr"),
-    F.first("Total_ap_demande").alias("ap_demande"),
-)
+# Restrict dataset to user-input dates
+demande = demande.filter(args.min_date <= F.col("période") <= args.max_date)
 
 
-# Preprocess 'consommation' dataset by aggreging data 'ap_consommation'
-
-sirenagg_transformer = sf_datalake.transform.SirenAggregator(
-    grouping_cols=["siren", "periode"],
-    aggregation_map={"ap_consommation": "sum"},
+### 'consommation' dataset
+consommation_preprocess = sf_datalake.transform.SirenAggregator(
+    grouping_cols=["siren", "période"],
+    aggregation_map={"ap_heures_consommées": "sum"},
     no_aggregation=[],
-)
-
-consommation_preprocess = sirenagg_transformer.transform(consommation).drop("siret")
+).transform(consommation)
 
 # Join 'demande' & 'consommation' dataset
 ap_ds = demande.join(
     consommation,
-    on=(
-        (consommation.siren == demande.siren)
-        & (consommation.periode >= demande.date_début_mr)
-        & (consommation.periode < demande.date_fin_mr)
-    ),
-    how="inner",
-).drop(demande.siren)
-
-
-ap_ds = ap_ds.select(
-    F.col("siren"),
-    F.col("periode").alias("periode"),
-    F.col("ap_consommation"),
-    F.col("ap_demande"),
-)
+    on=["période", "siren"],
+    how="outer",
+).select("siren", "période", "ap_heures_consommées", "ap_heures_demandées")
 
 # Manage missing values
-missingvalueHander_transformer = sf_datalake.transform.MissingValuesHandler(
-    inputCols=["ap_consommation", "ap_demande"],
+output_ds = sf_datalake.transform.MissingValuesHandler(
+    inputCols=["ap_heures_consommées", "ap_heures_demandées"],
     value=configuration.preprocessing.fill_default_values,
-)
-
-output_ds = missingvalueHander_transformer.transform(ap_ds)
-
-# Export output data
+).transform(ap_ds)
 
 sf_datalake.io.write_data(output_ds, args.output, args.output_format)
