@@ -126,10 +126,11 @@ consommation = consommation.select(["siret", "période", "ap_heures_consommées"
 siret_to_siren_transformer = sf_datalake.transform.SiretToSiren(inputCol="siret")
 
 ### "Demande" dataset
-# Create the time index for the output DataFrame
+# Create the time index for the output DataFrame. For now it has daily frequency in
+# order to normalize and aggregate data easily.
 date_range = spark.createDataFrame(
     pd.DataFrame(
-        pd.date_range(args.min_date, args.max_date, freq="MS").to_series().dt.date,
+        pd.date_range(args.min_date, args.max_date, freq="D").to_series(),
         columns=["période"],
     )
 )
@@ -177,21 +178,30 @@ demande = (
     .drop("nouvel_intervalle", "date_fin_max_cumulé")
 )
 
-# Sum over newly defined joined timeframes, then over siren.
+# Sum over newly defined merged timeframes, then over siren. The first aggregation is
+# done over all days belonging to the same month so that "période" becomes a monthly
+# index.
 demande_agg = (
     siret_to_siren_transformer.transform(
-        demande.groupBy(["période", "siret", "id_intervalle"]).agg(
-            F.sum("ap_heures_autorisées_par_jour").alias(
-                "ap_heures_autorisées_par_jour"
-            ),
+        demande.groupBy(
+            [
+                F.date_trunc(format="month", timestamp="période")
+                .cast("date")
+                .alias("période"),
+                "siret",
+                "id_intervalle",
+            ]
+        ).agg(
+            F.sum("ap_heures_autorisées_par_jour").alias("ap_heures_autorisées"),
+            # TODO: we may want to keep these boundary dates by early exporting
+            # SIRET-level data here
             F.min("date_début").alias("ap_date_début_autorisation"),
             F.max("date_fin").alias("ap_date_fin_autorisation"),
         )
     )
-    # TODO: we may want to keep "date_début" and "date_fin" by early exporting
-    # SIRET-level data here ?
-    .groupBy(["siren", "période"]).agg(
-        F.sum("ap_heures_autorisées_par_jour").alias("ap_heures_autorisées"),
+    .groupBy(["siren", "période"])
+    .agg(
+        F.sum("ap_heures_autorisées").alias("ap_heures_autorisées"),
     )
 )
 
@@ -217,7 +227,7 @@ ap_ds = demande_out.join(
     how="outer",
 ).select("siren", "période", "ap_heures_consommées", "ap_heures_autorisées")
 
-# Manage missing values
+### Manage missing values and export
 output_ds = sf_datalake.transform.MissingValuesHandler(
     inputCols=["ap_heures_consommées", "ap_heures_autorisées"],
     value=configuration.preprocessing.fill_default_values,
