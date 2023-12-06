@@ -1,8 +1,9 @@
-"""Carry out some pre-processing over URSSAF "cotisation" data.
+"""Carry out some pre-processing over URSSAF "débit" data.
 
-Run `python extract_cotisation_urssaf.py --help` to get usage insights.
+Run `python extract_debit_urssaf.py --help` to get usage insights.
 
-The data is documented here:
+The data is documented here (variable names may be slightly different after some
+upstream normalization):
 https://github.com/signaux-faibles/documentation/blob/master/description-donnees.md\
 #donn%C3%A9es-sur-les-cotisations-sociales-et-les-d%C3%A9bits
 
@@ -80,6 +81,10 @@ date_range = spark.createDataFrame(
 
 debit = spark.read.csv(args.input, header=True, schema=debit_schema)
 debit = siret_to_siren.transform(debit)
+
+# Only select data located after the newly created time index: for a given "période"
+# timestamp in the output dataframe, we only want to select debt data that concern past
+# events, i.e. data located before "période."
 debit = debit.select(
     [
         "siren",
@@ -94,6 +99,10 @@ debit = debit.select(
     ]
 ).join(date_range, on=date_range["période"] >= debit["date_traitement"], how="inner")
 
+# Each debt file, at URSSAF, has a "numéro_compte" identifier. Within this debt file,
+# there may be sub-files, describing a precise due amount, indexed by
+# "numéro_écart_négatif". This is the lower level of independent data that we'll
+# consider. These indexes are defined within a given "période_cotisation" time frame.
 w = (
     Window()
     .partitionBy(
@@ -103,6 +112,9 @@ w = (
     .rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing)
 )
 
+# We take the last value of contribution an each debt variable, as ordered by
+# "numéro_historique_écart_négatif", which precisely indicates the last known value up
+# to date for each "numéro_écart_négatif"-indexed debt. It is renamed to reflect this.
 debit_par_compte = debit.select(
     [
         "siren",
@@ -119,7 +131,7 @@ debit_par_compte = debit.select(
     F.col("numéro_historique_écart_négatif") == F.col("indicateur_dernier_traitement")
 )
 
-# Handle missing values and export
+# Handle missing values, sum by SIREN and export
 mvh = sf_datalake.transform.MissingValuesHandler(
     inputCols=["dette_sociale_ouvrière", "dette_sociale_patronale"],
     value=configuration.preprocessing.fill_default_values,
