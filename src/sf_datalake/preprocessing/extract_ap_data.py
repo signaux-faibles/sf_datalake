@@ -6,7 +6,7 @@ will output a dataset containing the following information:
 - période: date, first day of each month where data is available.
 - ap_heures_consommées: number of 'activité partielle' (partial unemployment) hours used
   over a given (siren, période) couple.
-- ap_heures_demandées: requested 'activité partielle' at a given `(siren, période)`
+- ap_heures_autorisées: granted 'activité partielle' at a given `(siren, période)`
   couple. This data's unit is a number of hours, normalized by the number of days
   contained in the time frame over which the request was made. If multiple requests were
   made for a given `période`, the normalized data is summed over all found requests.
@@ -111,7 +111,8 @@ demande_schema = T.StructType(
     ]
 )
 
-# Select required columns and filter "demande" set according to request category
+# Select required columns and filter "demande" set according to the reason the
+# unemployment authorization was requested.
 demande = spark.read.csv(args.demande_data, header=True, schema=demande_schema)
 consommation = spark.read.csv(
     args.demande_data, header=True, schema=consommation_schema
@@ -139,7 +140,7 @@ demande = demande.join(
 
 # Normalize by timeframes length, in days.
 demande = demande.withColumn(
-    "ap_heures_demandées_par_jour",
+    "ap_heures_autorisées_par_jour",
     F.col("hta") / (F.datediff(end="date_fin", start="date_début") + 1),
 )
 
@@ -147,7 +148,7 @@ demande = demande.withColumn(
 # - For each new start date that appears, we check if it is located later in time than
 #   the latest end date associated with the previous start date. We keep track of where
 #   these changes occur.
-# - We add up every "ap" request (per unit of time) located between the tracked changes
+# - We add up every granted "ap" (per unit of time) located between the tracked changes
 #   and create new intervals boundaries that cover every previously intersecting
 #   timeframes.
 w = (
@@ -173,11 +174,11 @@ demande_agg = (
     ## TODO: we may want to keep the timeframes date
     demande.groupBy(["période", "siret", "id_intervalle"])
     .agg(
-        F.sum("ap_heures_demandées_par_jour").alias("ap_heures_demandées_par_jour"),
+        F.sum("ap_heures_autorisées_par_jour").alias("ap_heures_autorisées_par_jour"),
     )
     .groupBy(["siren", "période"])
     .agg(
-        F.sum("ap_heures_demandées_par_jour").alias("ap_heures_demandées"),
+        F.sum("ap_heures_autorisées_par_jour").alias("ap_heures_autorisées"),
     )
 )
 
@@ -197,11 +198,11 @@ ap_ds = demande.join(
     consommation,
     on=["période", "siren"],
     how="outer",
-).select("siren", "période", "ap_heures_consommées", "ap_heures_demandées")
+).select("siren", "période", "ap_heures_consommées", "ap_heures_autorisées")
 
 # Manage missing values
 output_ds = sf_datalake.transform.MissingValuesHandler(
-    inputCols=["ap_heures_consommées", "ap_heures_demandées"],
+    inputCols=["ap_heures_consommées", "ap_heures_autorisées"],
     value=configuration.preprocessing.fill_default_values,
 ).transform(ap_ds)
 
