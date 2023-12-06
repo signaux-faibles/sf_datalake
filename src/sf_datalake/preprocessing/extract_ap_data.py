@@ -154,7 +154,7 @@ demande = demande.withColumn(
 #   and create new intervals boundaries that cover every previously intersecting
 #   timeframes.
 w = (
-    Window.partitionBy(["siret", "période"])
+    Window.partitionBy("siret")
     .orderBy("date_début")
     .rowsBetween(Window.unboundedPreceding, Window.currentRow)
 )
@@ -163,9 +163,10 @@ demande = (
     demande.withColumn("date_fin_max_cumulé", F.max("date_fin").over(w))
     .withColumn(
         "nouvel_intervalle",
-        F.when(F.col("date_début") > F.lag("date_fin_max_cumulé").over(w), F.lit(1)),
+        F.when(
+            F.col("date_début") > F.lag("date_fin_max_cumulé").over(w), F.lit(1)
+        ).otherwise(F.lit(0)),
     )
-    .otherwise(F.lit(0))
     # The cumulative sum uniquely indentifies a new disjoint interval.
     .withColumn("id_intervalle", F.sum("nouvel_intervalle").over(w))
     .drop("nouvel_intervalle", "date_fin_max_cumulé")
@@ -173,11 +174,14 @@ demande = (
 
 # Sum over newly defined joined timeframes, then over siren.
 demande_agg = (
-    ## TODO: we may want to keep the timeframes date
     demande.groupBy(["période", "siret", "id_intervalle"])
     .agg(
         F.sum("ap_heures_autorisées_par_jour").alias("ap_heures_autorisées_par_jour"),
+        F.min("date_début").alias("ap_date_début_autorisation"),
+        F.max("date_fin").alias("ap_date_fin_autorisation"),
     )
+    # TODO: we may want to keep "date_début" and "date_fin" by early exporting
+    # SIRET-level data here ?
     .groupBy(["siren", "période"])
     .agg(
         F.sum("ap_heures_autorisées_par_jour").alias("ap_heures_autorisées"),
