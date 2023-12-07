@@ -113,18 +113,18 @@ df_ap = siren_normalizer.transform(datasets["ap"])
 
 # Join "monthly" datasets
 df_monthly = (
-    df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "periode"], how="inner")
-    .join(df_ap, on=["siren", "periode"], how="left")
+    df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "période"], how="inner")
+    .join(df_ap, on=["siren", "période"], how="left")
     .join(df_judgments, on="siren", how="left")
-    .join(df_altares, on=["siren", "periode"], how="left")
+    .join(df_altares, on=["siren", "période"], how="left")
     .join(df_sirene_categories, on="siren", how="inner")
 )
 
 # Join monthly dataset with yearly dataset
 joined_df = sf_datalake.utils.merge_asof(
     df_monthly,
-    df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "periode"),
-    on="periode",
+    df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "période"),
+    on="période",
     by="siren",
     tolerance=365,
     direction="backward",
@@ -134,8 +134,8 @@ output_df = joined_df.join(
     df_sirene_dates,
     on=(
         (joined_df["siren"] == df_sirene_dates["siren"])
-        & (joined_df["periode"] >= df_sirene_dates["date_début"])
-        & (joined_df["periode"] < df_sirene_dates["date_fin"])
+        & (joined_df["période"] >= df_sirene_dates["date_début"])
+        & (joined_df["période"] < df_sirene_dates["date_fin"])
     ),
     how="left_semi",
 )

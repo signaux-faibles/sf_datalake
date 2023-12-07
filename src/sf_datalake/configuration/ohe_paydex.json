@@ -2,10 +2,10 @@
     "fill_default_values": {
         "paydex": 0,
         "cotisation": 0.0,
-        "montant_part_ouvriere": 0.0,
-        "montant_part_patronale": 0.0,
+        "dette_sociale_ouvri\u00e8re": 0.0,
+        "dette_sociale_patronale": 0.0,
         "dette_sur_cotisation_liss\u00e9e": 0.0,
-        "apart_heures_consommees": 0.0,
+        "ap_heures_consomm\u00e9es": 0.0,
         "dette_par_effectif": 0.0,
         "effectif": 0,
         "mnt_af_bfonc_bfr": 0.0,
@@ -50,16 +50,16 @@
         "cotisation": [
             "StandardScaler"
         ],
-        "montant_part_ouvriere": [
+        "dette_sociale_ouvri\u00e8re": [
             "StandardScaler"
         ],
-        "montant_part_patronale": [
+        "dette_sociale_patronale": [
             "StandardScaler"
         ],
         "effectif": [
             "StandardScaler"
         ],
-        "apart_heures_consommees": [
+        "ap_heures_consomm\u00e9es": [
             "StandardScaler"
         ],
         "dette_sur_cotisation_liss\u00e9e": [
@@ -102,7 +102,7 @@
         ]
     },
     "topic_groups": {
-        "sante_financiere": [
+        "sant\u00e9_financi\u00e8re": [
             "mnt_af_bfonc_bfr",
             "mnt_af_bfonc_frng",
             "mnt_af_bfonc_tresorerie",
@@ -113,13 +113,13 @@
             "rto_af_solidite_financiere",
             "rto_invest_ca"
         ],
-        "activite_partielle": [
-            "apart_heures_consommees"
+        "activit\u00e9_partielle": [
+            "ap_heures_consomm\u00e9es"
         ],
         "dette_urssaf": [
             "cotisation",
-            "montant_part_ouvriere",
-            "montant_part_patronale",
+            "dette_sociale_ouvri\u00e8re",
+            "dette_sociale_patronale",
             "dette"
         ],
         "retards_paiement": [
@@ -144,14 +144,14 @@
             ]
         },
         "lag": {
-            "montant_part_ouvriere": [
+            "dette_sociale_ouvri\u00e8re": [
                 1,
                 2,
                 3,
                 6,
                 12
             ],
-            "montant_part_patronale": [
+            "dette_sociale_patronale": [
                 1,
                 2,
                 3,

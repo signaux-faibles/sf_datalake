@@ -175,10 +175,10 @@ train_data, test_data = sf_datalake.model_selection.train_test_split(
     pre_dataset.filter(
         (
             sf_datalake.utils.to_date(configuration.learning.train_dates[0])
-            <= F.col("periode")
+            <= F.col("période")
         )
         & (
-            F.col("periode")
+            F.col("période")
             < sf_datalake.utils.to_date(configuration.learning.train_dates[1])
         )
     ),
@@ -187,7 +187,7 @@ train_data, test_data = sf_datalake.model_selection.train_test_split(
     group_col="siren",
 )
 prediction_data = pre_dataset.filter(
-    F.col("periode")
+    F.col("période")
     == sf_datalake.utils.to_date(configuration.learning.prediction_date)
 )
 

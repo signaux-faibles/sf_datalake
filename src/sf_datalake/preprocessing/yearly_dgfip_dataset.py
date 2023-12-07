@@ -9,7 +9,9 @@ contains 3 directories containing the data as (possibly multiple) orc file(s):
 A yearly dataset will be stored as split orc files under the chosen output directory.
 
 USAGE
-    python make_yearly_data.py <DGFiP_tables_directory> <output_directory>
+    python yearly_dgfip_dataset.py --help
+
+to get more info on expected args.
 
 """
 import os
@@ -81,7 +83,7 @@ declarations = datasets["indmap"].join(
 #     datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
 # )
 
-feature_cols: List[str] = configuration.explanation.topic_groups.get("sante_financiere")
+feature_cols: List[str] = configuration.explanation.topic_groups.get("santé_financière")
 time_normalizer = [
     sf_datalake.transform.TimeNormalizer(
         inputCols=feature_cols,
@@ -100,7 +102,7 @@ declarations = declarations.withColumn(
     sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in declarations.columns])
     / len(declarations.columns),
 )
-w = Window().partitionBy(["siren", "periode"]).orderBy(F.col("null_ratio").asc())
+w = Window().partitionBy(["siren", "période"]).orderBy(F.col("null_ratio").asc())
 
 declarations = (
     declarations.withColumn("n_row", F.row_number().over(w))

@@ -3,7 +3,7 @@
 This script parses and extracts data from raw historicized files supplied by Altares. It
 will output a dataset containing the following information:
 - siren
-- periode (date, first day of each month where data is available)
+- période (date, first day of each month where data is available)
 - paydex
 - fpi30
 - fpi90
@@ -52,7 +52,7 @@ df = spark.read.csv(
 
 ## Extraction
 df = df.withColumn(
-    "periode",
+    "période",
     F.to_date(F.date_trunc("month", F.to_date(F.col("DATE_VALEUR"), "dd/MM/yyyy"))),
 )
 # We have to extract from a dumb string format.
@@ -66,7 +66,7 @@ df = df.withColumn("fpi_30", F.col("NOTE100_ALERTEUR_PLUS_30").cast("float"))
 df = df.withColumn("fpi_90", F.col("NOTE100_ALERTEUR_PLUS_90_JOURS").cast("float"))
 df = df.withColumnRenamed("SIREN", "siren")
 
-selected_cols = ["siren", "periode", "paydex", "fpi_30", "fpi_90"]
+selected_cols = ["siren", "période", "paydex", "fpi_30", "fpi_90"]
 
 # Handle missing values and export
 mvh = sf_datalake.transform.MissingValuesHandler(

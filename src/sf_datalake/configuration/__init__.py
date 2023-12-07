@@ -136,15 +136,15 @@ class PreprocessingConfiguration:
     """
 
     identifiers: List[str] = dataclasses.field(
-        default_factory=lambda: ["siren", "periode"]
+        default_factory=lambda: ["siren", "période"]
     )
     siren_aggregation: Dict[str, str] = dataclasses.field(
         default_factory=lambda: {
             "cotisation": "sum",
-            "montant_part_ouvriere": "sum",
-            "montant_part_patronale": "sum",
+            "dette_sociale_ouvrière": "sum",
+            "dette_sociale_patronale": "sum",
             "effectif": "sum",
-            "apart_heures_consommees": "sum",
+            "ap_heures_consommées": "sum",
         }
     )
     # Time-series aggregates
