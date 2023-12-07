@@ -36,16 +36,9 @@ spark = sf_datalake.utils.get_spark_session()
 parser = sf_datalake.io.data_path_parser()
 parser.description = "Extract and pre-process Altares data."
 parser.add_argument(
-    "--configuration",
-    help="Configuration file containing required time-computations.",
-    required=True,
-)
-parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
 )
 args = parser.parse_args()
-
-configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
 
 paydex_schema = T.StructType(
     [
