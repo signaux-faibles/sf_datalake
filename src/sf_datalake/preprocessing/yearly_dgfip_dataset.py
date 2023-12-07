@@ -93,13 +93,6 @@ time_normalizer = [
     # ),
 ]
 
-# Handle missing values and export
-mvh = sf_datalake.transform.MissingValuesHandler(
-    inputCols=feature_cols,
-    value=configuration.preprocessing.fill_default_values,
-)
-declarations = mvh.transform(declarations)
-
 # We are trying to remove duplicate data about duplicate exercice declaration for a
 # given SIREN. We keep the line where we have the lower rate of null ratios.
 declarations = declarations.withColumn(
@@ -115,6 +108,12 @@ declarations = (
     .drop("n_row")
 )
 
+# Handle missing values and export
+mvh = sf_datalake.transform.MissingValuesHandler(
+    inputCols=feature_cols,
+    value=configuration.preprocessing.fill_default_values,
+)
+declarations = mvh.transform(declarations)
 
 sf_datalake.io.write_data(
     declarations.select(feature_cols + list(join_columns)),
