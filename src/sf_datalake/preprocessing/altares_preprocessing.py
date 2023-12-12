@@ -9,8 +9,9 @@ will output a dataset containing the following information:
 - fpi_90
 
 
-The provided file may be a concatenation of different files that are not sampled evenly
-accross time, therefore we truncate dates to month start.
+The input file may be a concatenation of different files that are not sampled evenly
+across time. In case there are multiple rows for a given (SIREN, month) couple, we only
+keep the most recent data and truncate date to the first day of month.
 
 """
 
@@ -69,7 +70,7 @@ num_cols = [
 df = df.withColumn("fpi_30", sf_datalake.utils.clip("fpi_30", lower=0, upper=100) / 100)
 df = df.withColumn("fpi_90", sf_datalake.utils.clip("fpi_90", lower=0, upper=100) / 100)
 
-# There may be multiple data for a given month, in which case we average all values
+# There may be multiple data for a given month, in which case we only keep last values
 df = df.groupBy(["siren", F.trunc(format="month", date="date").alias("période")]).agg(
     *(F.last(col).alias(col) for col in num_cols)
 )
