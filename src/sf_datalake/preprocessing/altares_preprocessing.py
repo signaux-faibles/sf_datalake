@@ -70,10 +70,8 @@ df = df.withColumn("fpi_30", sf_datalake.utils.clip("fpi_30", lower=0, upper=100
 df = df.withColumn("fpi_90", sf_datalake.utils.clip("fpi_90", lower=0, upper=100) / 100)
 
 # There may be multiple data for a given month, in which case we average all values
-df = (
-    df.groupBy(["siren", F.trunc(format="month", date="date").alias("période")])
-    .agg(*(F.mean(col).alias(col) for col in num_cols))
-    .withColumn("n_fournisseurs", F.col("n_fournisseurs").cast("integer"))
+df = df.groupBy(["siren", F.trunc(format="month", date="date").alias("période")]).agg(
+    *(F.last(col).alias(col) for col in num_cols)
 )
 
 sf_datalake.io.write_data(
