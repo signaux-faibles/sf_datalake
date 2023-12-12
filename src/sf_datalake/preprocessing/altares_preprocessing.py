@@ -50,30 +50,34 @@ paydex_schema = T.StructType(
         T.StructField("encours_étudiés", T.FloatType(), True),
         T.StructField("fpi_30", T.FloatType(), True),
         T.StructField("fpi_90", T.FloatType(), True),
-        T.StructField("période", T.StringType(), False),
+        T.StructField("date", T.DateType(), False),
     ]
 )
 
 df = spark.read.csv(args.input, sep=",", header=True, schema=paydex_schema)
+num_cols = [
+    "paydex",
+    "fpi_30",
+    "fpi_90",
+    "encours_étudiés",
+    "n_fournisseurs",
+]
 
 ## Pre-processing and export
-df = df.withColumn("période", F.trunc(format="month", date="période"))
+
+# Clip and normalize FPIs to the [0, 1] range
 df = df.withColumn("fpi_30", sf_datalake.utils.clip("fpi_30", lower=0, upper=100) / 100)
 df = df.withColumn("fpi_90", sf_datalake.utils.clip("fpi_90", lower=0, upper=100) / 100)
 
+# There may be multiple data for a given month, in which case we average all values
+df = (
+    df.groupBy(["siren", F.trunc(format="month", date="date").alias("période")])
+    .agg(*(F.mean(col).alias(col) for col in num_cols))
+    .withColumn("n_fournisseurs", F.col("n_fournisseurs").cast("integer"))
+)
 
 sf_datalake.io.write_data(
-    df.select(
-        [
-            "siren",
-            "période",
-            "paydex",
-            "fpi_30",
-            "fpi_90",
-            "n_fournisseurs",
-            "encours_étudiés",
-        ]
-    ),
+    df,
     args.output,
     args.output_format,
 )
