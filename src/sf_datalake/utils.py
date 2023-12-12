@@ -80,10 +80,10 @@ def clip(
     Args:
         col: A column object or a column name.
         lower: Minimum value to clip.
-        upper: Minimum value to clip.
+        upper: Maximum value to clip.
 
     Returns:
-        A colum clipped between the input  min and/or max values.
+        A colum clipped between the input min and/or max values.
     """
     if isinstance(col, pyspark.sql.Column):
         trimmed_col = col
