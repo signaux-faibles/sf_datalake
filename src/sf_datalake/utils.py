@@ -3,7 +3,7 @@
 import datetime as dt
 import functools
 import operator
-from typing import List, Union
+from typing import Any, List, Union
 
 import pyspark.sql
 import pyspark.sql.functions as F
@@ -70,6 +70,32 @@ def extract_column_names(df: pyspark.sql.DataFrame, assembled_column: str) -> Li
 def to_date(str_date: str, date_format="%Y-%m-%d") -> dt.date:
     """Convert string date to datetime.date object"""
     return dt.datetime.strptime(str_date, date_format).date()
+
+
+def clip(
+    col: Union[str, pyspark.sql.Column], lower: Any = None, upper: Any = None
+) -> pyspark.sql.Column:
+    """Trim values at input threshold(s).
+
+    Args:
+        col: A column object or a column name.
+        lower: Minimum value to clip.
+        upper: Maximum value to clip.
+
+    Returns:
+        A colum clipped between the input min and/or max values.
+    """
+    if isinstance(col, pyspark.sql.Column):
+        trimmed_col = col
+    elif isinstance(col, str):
+        trimmed_col = F.col(col)
+    else:
+        raise ValueError(f"col should be a Column object or str, but got {type(col)}.")
+    if lower:
+        trimmed_col = F.when(trimmed_col < lower, lower).otherwise(trimmed_col)
+    if upper:
+        trimmed_col = F.when(trimmed_col > upper, upper).otherwise(trimmed_col)
+    return trimmed_col
 
 
 def merge_asof(  # pylint: disable=too-many-arguments, too-many-locals
