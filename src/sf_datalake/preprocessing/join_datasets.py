@@ -24,6 +24,9 @@ import os
 import sys
 from os import path
 
+import pyspark.sql.functions as F
+from pyspark.sql import Window
+
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
@@ -129,6 +132,22 @@ joined_df = sf_datalake.utils.merge_asof(
     tolerance=365,
     direction="backward",
 )
+
+# We are trying to remove duplicate data about duplicate exercice declaration for a
+# given SIREN. We keep the line where we have the lower rate of null ratios.
+joined_df = joined_df.withColumn(
+    "null_ratio",
+    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_yearly.columns])
+    / len(df_dgfip_yearly.columns),
+)
+w = Window().partitionBy(["siren", "période"]).orderBy(F.col("null_ratio").asc())
+
+joined_df = (
+    joined_df.withColumn("n_row", F.row_number().over(w))
+    .filter(F.col("n_row") == 1)
+    .drop("n_row")
+)
+
 
 output_df = joined_df.join(
     df_sirene_dates,

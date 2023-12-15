@@ -19,9 +19,6 @@ import sys
 from os import path
 from typing import List
 
-import pyspark.sql.functions as F
-from pyspark.sql import Window
-
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
@@ -95,20 +92,6 @@ time_normalizer = [
     # ),
 ]
 
-# We are trying to remove duplicate data about duplicate exercice declaration for a
-# given SIREN. We keep the line where we have the lower rate of null ratios.
-declarations = declarations.withColumn(
-    "null_ratio",
-    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in declarations.columns])
-    / len(declarations.columns),
-)
-w = Window().partitionBy(["siren", "période"]).orderBy(F.col("null_ratio").asc())
-
-declarations = (
-    declarations.withColumn("n_row", F.row_number().over(w))
-    .filter(F.col("n_row") == 1)
-    .drop("n_row")
-)
 
 # Handle missing values and export
 mvh = sf_datalake.transform.MissingValuesHandler(
