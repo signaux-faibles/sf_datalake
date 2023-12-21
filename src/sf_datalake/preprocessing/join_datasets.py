@@ -25,6 +25,7 @@ import sys
 from os import path
 
 import pyspark.sql.functions as F
+import pyspark.sql.types as T
 from pyspark.sql import Window
 
 # isort: off
@@ -37,8 +38,15 @@ import sf_datalake.transform
 import sf_datalake.utils
 from sf_datalake.io import load_data, write_data
 
+spark = sf_datalake.utils.get_spark_session()
+
 parser = argparse.ArgumentParser(
     description="Merge DGFiP and Signaux Faibles datasets into a single one."
+)
+parser.add_argument(
+    "--effectif",
+    dest="effectif",
+    help="Path to the preprocessed 'URSSAF effectif_ent' dataset.",
 )
 parser.add_argument(
     "--urssaf_debit",
@@ -100,6 +108,15 @@ datasets = load_data(
     file_format="orc",
 )
 
+effectif_schema = T.StructType(
+    [
+        T.StructField("siren", T.StringType(), False),
+        T.StructField("periode", T.TimestampType(), True),
+        T.StructField("effectif", T.IntegerType(), True),
+    ]
+)
+df_effectif = spark.read.csv(args.effectif, header=True, schema=effectif_schema)
+
 
 # Prepare datasets
 siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
@@ -113,10 +130,12 @@ df_sirene_dates = siren_normalizer.transform(datasets["sirene_dates"]).fillna(
     {"date_fin": "2100-01-01"}
 )
 df_ap = siren_normalizer.transform(datasets["ap"])
+df_effectif = siren_normalizer.transform(df_effectif)
 
 # Join "monthly" datasets
 df_monthly = (
     df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "période"], how="inner")
+    .join(df_effectif, on=["siren", "période"], how="inner")
     .join(df_ap, on=["siren", "période"], how="left")
     .join(df_judgments, on="siren", how="left")
     .join(df_altares, on=["siren", "période"], how="left")
