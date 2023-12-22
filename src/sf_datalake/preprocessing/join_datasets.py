@@ -99,8 +99,6 @@ datasets = load_data(
         "urssaf_debit": args.urssaf_debit,
         "urssaf_cotisation": args.urssaf_cotisation,
         "ap": args.ap,
-        "sirene_categories": args.sirene_categories,
-        "sirene_dates": args.sirene_dates,
         "dgfip_yearly": args.dgfip_yearly,
         "judgments": args.judgments,
         "altares": args.altares,
@@ -108,12 +106,36 @@ datasets = load_data(
     file_format="orc",
 )
 
+sirene_dates_shcema = T.StructType(
+    [
+        T.StructField("siren", T.StringType(), False),
+        T.StructField("date_fin", T.DateType(), True),
+        T.StructField("date_début", T.DateType(), True),
+    ]
+)
+
+sirene_categories_schema = T.StructType(
+    [
+        T.StructField("siren", T.StringType(), False),
+        T.StructField("siret", T.StringType(), False),
+        T.StructField("code_commune", T.StringType(), True),
+        T.StructField("code_naf", T.StringType(), True),
+        T.StructField("région", T.StringType(), True),
+        T.StructField("catégorie_juridique", T.StringType(), True),
+    ]
+)
 effectif_schema = T.StructType(
     [
         T.StructField("siren", T.StringType(), False),
-        T.StructField("periode", T.TimestampType(), True),
+        T.StructField("période", T.DateType(), True),
         T.StructField("effectif", T.IntegerType(), True),
     ]
+)
+df_sirene_categories = spark.read.csv(
+    args.sirene_categories, header=True, schema=sirene_categories_schema
+)
+df_sirene_dates = spark.read.csv(
+    args.sirene_dates, header=True, schema=sirene_dates_shcema
 )
 df_effectif = spark.read.csv(args.effectif, header=True, schema=effectif_schema)
 
@@ -125,8 +147,8 @@ df_judgments = siren_normalizer.transform(datasets["judgments"])
 df_altares = siren_normalizer.transform(datasets["altares"])
 df_urssaf_debit = siren_normalizer.transform(datasets["urssaf_debit"])
 df_urssaf_cotisation = siren_normalizer.transform(datasets["urssaf_cotisation"])
-df_sirene_categories = siren_normalizer.transform(datasets["sirene_categories"])
-df_sirene_dates = siren_normalizer.transform(datasets["sirene_dates"]).fillna(
+df_sirene_categories = siren_normalizer.transform(df_sirene_categories)
+df_sirene_dates = siren_normalizer.transform(df_sirene_dates).fillna(
     {"date_fin": "2100-01-01"}
 )
 df_ap = siren_normalizer.transform(datasets["ap"])
@@ -142,10 +164,11 @@ df_monthly = (
     .join(df_sirene_categories, on="siren", how="inner")
 )
 
+df_dgfip_yearly = df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "période")
 # Join monthly dataset with yearly dataset
 joined_df = sf_datalake.utils.merge_asof(
     df_monthly,
-    df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "période"),
+    df_dgfip_yearly,
     on="période",
     by="siren",
     tolerance=365,
