@@ -7,6 +7,7 @@
         "dette_sur_cotisation_liss\u00e9e": 0.0,
         "ap_heures_consomm\u00e9es": 0.0,
         "ap_heures_autoris\u00e9es": 0.0,
+        "dette_par_effectif": 0.0,
         "effectif": 0,
         "mnt_af_bfonc_bfr": 0.0,
         "mnt_af_bfonc_tresorerie": 0.0,
@@ -63,6 +64,9 @@
             "StandardScaler"
         ],
         "dette_sur_cotisation_liss\u00e9e": [
+            "StandardScaler"
+        ],
+        "dette_par_effectif": [
             "StandardScaler"
         ],
         "paydex": [
@@ -130,6 +134,9 @@
         "diff": {
             "paydex": [
                 12
+            ],
+            "dette_par_effectif": [
+                3
             ]
         },
         "mean": {
