@@ -2,35 +2,35 @@
     "fill_default_values": {
         "paydex": 0,
         "cotisation": 0.0,
-        "dette_sociale_ouvri\u00e8re": 0.0,
+        "dette_sociale_ouvrière": 0.0,
         "dette_sociale_patronale": 0.0,
-        "dette_sur_cotisation_liss\u00e9e": 0.0,
-        "ap_heures_consomm\u00e9es": 0.0,
-        "ap_heures_autoris\u00e9es": 0.0,
+        "dette_sur_cotisation_lissée": 0.0,
+        "ap_heures_consommées": 0.0,
+        "ap_heures_autorisées": 0.0,
         "dette_par_effectif": 0.0,
         "effectif": 0,
         "dette_nette/caf": 0.0,
-        "dette_\u00e0_terme/k_propres": 0.0,
+        "dette_à_terme/k_propres": 0.0,
         "ebe/ca": 0.0,
         "va/effectif": 0.0,
         "charges_personnel/va": 0.0,
         "stocks/ca": 0.0,
-        "liquidit\u00e9_absolue": 0.0,
-        "liquidit\u00e9_g\u00e9n\u00e9rale": 0.0,
-        "liquidit\u00e9_r\u00e9duite": 0.0,
-        "d\u00e9lai_paiement/d\u00e9lai_encaissement": 0.0,
+        "liquidité_absolue": 0.0,
+        "liquidité_générale": 0.0,
+        "liquidité_réduite": 0.0,
+        "délai_paiement/délai_encaissement": 0.0,
         "k_propres/k_social": 0.0,
         "bfr/k_propres": 0.0,
         "taux_investissement": 0.0,
-        "rentabilit\u00e9_\u00e9conomique": 0.0,
-        "solidit\u00e9_financi\u00e8re": 0.0
+        "rentabilité_économique": 0.0,
+        "solidité_financière": 0.0
     },
     "fill_imputation_strategy": {},
     "features_transformers": {
         "dette_nette/caf": [
             "StandardScaler"
         ],
-        "dette_\u00e0_terme/k_propres": [
+        "dette_à_terme/k_propres": [
             "StandardScaler"
         ],
         "ebe/ca": [
@@ -45,16 +45,16 @@
         "stocks/ca": [
             "StandardScaler"
         ],
-        "liquidit\u00e9_absolue": [
+        "liquidité_absolue": [
             "StandardScaler"
         ],
-        "liquidit\u00e9_g\u00e9n\u00e9rale": [
+        "liquidité_générale": [
             "StandardScaler"
         ],
-        "liquidit\u00e9_r\u00e9duite": [
+        "liquidité_réduite": [
             "StandardScaler"
         ],
-        "d\u00e9lai_paiement/d\u00e9lai_encaissement": [
+        "délai_paiement/délai_encaissement": [
             "StandardScaler"
         ],
         "k_propres/k_social": [
@@ -66,16 +66,16 @@
         "taux_investissement": [
             "StandardScaler"
         ],
-        "rentabilit\u00e9_\u00e9conomique": [
+        "rentabilité_économique": [
             "StandardScaler"
         ],
-        "solidit\u00e9_financi\u00e8re": [
+        "solidité_financière": [
             "StandardScaler"
         ],
         "cotisation": [
             "StandardScaler"
         ],
-        "dette_sociale_ouvri\u00e8re": [
+        "dette_sociale_ouvrière": [
             "StandardScaler"
         ],
         "dette_sociale_patronale": [
@@ -84,10 +84,10 @@
         "effectif": [
             "StandardScaler"
         ],
-        "ap_heures_consomm\u00e9es": [
+        "ap_heures_consommées": [
             "StandardScaler"
         ],
-        "dette_sur_cotisation_liss\u00e9e": [
+        "dette_sur_cotisation_lissée": [
             "StandardScaler"
         ],
         "dette_par_effectif": [
@@ -127,29 +127,29 @@
         ]
     },
     "topic_groups": {
-        "sant\u00e9_financi\u00e8re": [
+        "santé_financière": [
             "dette_nette/caf",
-            "dette_\u00e0_terme/k_propres",
+            "dette_à_terme/k_propres",
             "ebe/ca",
             "va/effectif",
             "charges_personnel/va",
             "stocks/ca",
-            "liquidit\u00e9_absolue",
-            "liquidit\u00e9_g\u00e9n\u00e9rale",
-            "liquidit\u00e9_r\u00e9duite",
-            "d\u00e9lai_paiement/d\u00e9lai_encaissement",
+            "liquidité_absolue",
+            "liquidité_générale",
+            "liquidité_réduite",
+            "délai_paiement/délai_encaissement",
             "k_propres/k_social",
             "bfr/k_propres",
             "taux_investissement",
-            "rentabilit\u00e9_\u00e9conomique",
-            "solidit\u00e9_financi\u00e8re"
+            "rentabilité_économique",
+            "solidité_financière"
         ],
-        "activit\u00e9_partielle": [
-            "ap_heures_consomm\u00e9es"
+        "activité_partielle": [
+            "ap_heures_consommées"
         ],
         "dette_urssaf": [
             "cotisation",
-            "dette_sociale_ouvri\u00e8re",
+            "dette_sociale_ouvrière",
             "dette_sociale_patronale",
             "dette"
         ],
@@ -178,7 +178,7 @@
             ]
         },
         "lag": {
-            "dette_sociale_ouvri\u00e8re": [
+            "dette_sociale_ouvrière": [
                 1,
                 2,
                 3,
