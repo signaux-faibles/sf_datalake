@@ -20,7 +20,6 @@ import sys
 from os import path
 from typing import List
 
-import dateutil.parser
 import pandas as pd
 import pyspark.sql.functions as F
 from pyspark.ml import PipelineModel
@@ -32,6 +31,8 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint:disable=wrong-import-position
+import dateutil.parser
+
 import sf_datalake.configuration
 import sf_datalake.io
 import sf_datalake.utils
