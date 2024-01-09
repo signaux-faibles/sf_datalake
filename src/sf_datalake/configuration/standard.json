@@ -172,9 +172,6 @@
         "mean": {
             "cotisation": [
                 12
-            ],
-            "dette_sur_cotisation": [
-                12
             ]
         },
         "lag": {

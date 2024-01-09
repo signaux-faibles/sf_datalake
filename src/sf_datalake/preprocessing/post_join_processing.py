@@ -24,9 +24,10 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
-# pylint: disable=C0413
+# pylint: disable=unsubscriptable-object, wrong-import-position
 import sf_datalake.io
 import sf_datalake.transform
+import sf_datalake.utils
 
 ####################
 # Loading datasets #
@@ -42,20 +43,16 @@ parser.add_argument(
 
 args = parser.parse_args()
 configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
-input_ds = sf_datalake.io.load_data(
-    {"input": args.input},
-    file_format="orc",
-)["input"]
+spark = sf_datalake.utils.get_spark_session()
+input_ds = spark.read.orc(args.input)
 
 # Set every column name to lower case (if not already).
 df = input_ds.toDF(*(col.lower() for col in input_ds.columns))
 
 
-#################
-# Create target #
-#################
-
-# pylint: disable=unsubscriptable-object
+###################
+# Target creation #
+###################
 
 labeling_step = [
     sf_datalake.transform.TargetVariable(
@@ -64,6 +61,15 @@ labeling_step = [
         n_months=configuration.learning.target["n_months"],
     ),
 ]
+
+#######################
+# Feature engineering #
+#######################
+
+df = df.withColumn(
+    "dette_par_effectif",
+    (df["dette_sociale_ouvrière"] + df["dette_sociale_patronale"]) / df["effectif"],
+)
 
 ##########################
 # Missing Value Handling #
@@ -94,9 +100,8 @@ if configuration.preprocessing.fill_imputation_strategy:
     )
 
 #####################
-# Time Computations #
+# Time computations #
 #####################
-
 
 time_computations: List[Transformer] = []
 for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items():
@@ -113,17 +118,20 @@ for feature, n_months in configuration.preprocessing.time_aggregation["mean"].it
     )
 
 # Bfill after time computation
-
 features_lag_bfill = [
     f"{feature}_lag{n_months}m"
-    for feature, n_months in configuration.preprocessing.time_aggregation["lag"].items()
+    for feature, n_months_list in configuration.preprocessing.time_aggregation[
+        "lag"
+    ].items()
+    for n_months in n_months_list
 ]
 
 features_diff_bfill = [
     f"{feature}_diff{n_months}m"
-    for feature, n_months in configuration.preprocessing.time_aggregation[
+    for feature, n_months_list in configuration.preprocessing.time_aggregation[
         "diff"
     ].items()
+    for n_months in n_months_list
 ]
 
 time_computations.append(
@@ -132,9 +140,19 @@ time_computations.append(
     )
 )
 
-output_ds = PipelineModel(
-    stages=time_computations + labeling_step + missing_values_handling_steps
+
+df = PipelineModel(
+    stages=labeling_step + missing_values_handling_steps + time_computations
 ).transform(df)
 
+## Feature engineering based on time computations
+for n_months in configuration.preprocessing.time_aggregation.get("mean", {}).get(
+    "cotisation", []
+):
+    df = df.withColumn(
+        f"dette_sur_[cotisation_mean{n_months}m]",
+        (df["dette_sociale_patronale"] + df["dette_sociale_ouvrière"])
+        / df[f"cotisation_mean{n_months}m"],
+    )
 
-sf_datalake.io.write_data(output_ds, args.output, args.output_format)
+sf_datalake.io.write_data(df, args.output, args.output_format)
