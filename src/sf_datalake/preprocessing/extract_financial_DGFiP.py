@@ -19,6 +19,8 @@ import sys
 from os import path
 from typing import List
 
+import dateutil.parser
+import pyspark.sql.functions as F
 from pyspark.ml import PipelineModel
 
 # isort: off
@@ -33,7 +35,6 @@ import sf_datalake.io
 ####################
 # Loading datasets #
 ####################
-
 parser = sf_datalake.io.data_path_parser()
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
@@ -45,6 +46,11 @@ parser.add_argument(
     Configuration file. This will be used to fetch required features.
     """,
     required=True,
+)
+parser.add_argument(
+    "--min_date",
+    help="""Requested start date for the output dataset.""",
+    default="2014-01-01",
 )
 parser.description = "Build a dataset of yearly DGFiP data."
 args = parser.parse_args()
@@ -60,18 +66,10 @@ datasets = sf_datalake.io.load_data(
     data_paths, file_format="csv", sep="|", infer_schema=False
 )
 
+### Parse and clean file
 # Set every column name to lower case (if not already).
 for name, ds in datasets.items():
     datasets[name] = ds.toDF(*(col.lower() for col in ds.columns))
-
-### TODO cast columns to the right type
-# str: siren, no_ocfi
-# dates: dates début, date fin
-# int : année exercice,
-#
-
-### TODO : filter by date
-
 
 ###################
 # Merge datasets  #
@@ -105,6 +103,12 @@ df = (
 #     datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
 # )
 
+### Cast columns
+df = df.withColumn("année_exercice", F.col("annee_exercice").cast("int"))
+df = df.withColumn("date_début_exercice", F.to_date("date_deb_exercice"))
+df = df.withColumn("date_fin_exercice", F.to_date("date_fin_exercice"))
+
+# Rename to readable french
 df = df.withColumnRenamed("mnt_af_bfonc_bfr", "bfr")
 df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
 df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
@@ -114,8 +118,8 @@ df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
 df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
 df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
 
-
-df = df.withColumnRenamed("date_deb_exercice", "date_début_exercice")
+# Filter by date
+df = df.filter(F.col("date_fin_exercice") > dateutil.parser.parse(args.min_date))
 
 feature_cols: List[str] = configuration.explanation.topic_groups.get("santé_financière")
 engineered_feature_cols: List[str] = [
