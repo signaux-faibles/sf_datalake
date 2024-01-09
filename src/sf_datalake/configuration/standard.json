@@ -1,5 +1,6 @@
 {
     "fill_default_values": {
+        "paydex": 0,
         "cotisation": 0.0,
         "dette_sociale_ouvri\u00e8re": 0.0,
         "dette_sociale_patronale": 0.0,
@@ -8,43 +9,67 @@
         "ap_heures_autoris\u00e9es": 0.0,
         "dette_par_effectif": 0.0,
         "effectif": 0,
-        "mnt_af_bfonc_bfr": 0.0,
-        "mnt_af_bfonc_tresorerie": 0.0,
-        "mnt_af_bfonc_frng": 0.0,
-        "mnt_af_ca": 0.0,
-        "mnt_af_sig_ebe_ret": 0.0,
-        "rto_af_ratio_rent_mbe": 0.0,
-        "rto_af_rent_eco": 0.0,
-        "rto_af_solidite_financiere": 0.0,
-        "rto_invest_ca": 0.0
+        "dette_nette/caf": 0.0,
+        "dette_\u00e0_terme/k_propres": 0.0,
+        "ebe/ca": 0.0,
+        "va/effectif": 0.0,
+        "charges_personnel/va": 0.0,
+        "stocks/ca": 0.0,
+        "liquidit\u00e9_absolue": 0.0,
+        "liquidit\u00e9_g\u00e9n\u00e9rale": 0.0,
+        "liquidit\u00e9_r\u00e9duite": 0.0,
+        "d\u00e9lai_paiement/d\u00e9lai_encaissement": 0.0,
+        "k_propres/k_social": 0.0,
+        "bfr/k_propres": 0.0,
+        "taux_investissement": 0.0,
+        "rentabilit\u00e9_\u00e9conomique": 0.0,
+        "solidit\u00e9_financi\u00e8re": 0.0
     },
     "fill_imputation_strategy": {},
     "features_transformers": {
-        "mnt_af_bfonc_bfr": [
+        "dette_nette/caf": [
             "StandardScaler"
         ],
-        "mnt_af_bfonc_tresorerie": [
+        "dette_\u00e0_terme/k_propres": [
             "StandardScaler"
         ],
-        "rto_af_ratio_rent_mbe": [
+        "ebe/ca": [
             "StandardScaler"
         ],
-        "mnt_af_bfonc_frng": [
+        "va/effectif": [
             "StandardScaler"
         ],
-        "mnt_af_ca": [
+        "charges_personnel/va": [
             "StandardScaler"
         ],
-        "mnt_af_sig_ebe_ret": [
+        "stocks/ca": [
             "StandardScaler"
         ],
-        "rto_af_rent_eco": [
+        "liquidit\u00e9_absolue": [
             "StandardScaler"
         ],
-        "rto_af_solidite_financiere": [
+        "liquidit\u00e9_g\u00e9n\u00e9rale": [
             "StandardScaler"
         ],
-        "rto_invest_ca": [
+        "liquidit\u00e9_r\u00e9duite": [
+            "StandardScaler"
+        ],
+        "d\u00e9lai_paiement/d\u00e9lai_encaissement": [
+            "StandardScaler"
+        ],
+        "k_propres/k_social": [
+            "StandardScaler"
+        ],
+        "bfr/k_propres": [
+            "StandardScaler"
+        ],
+        "taux_investissement": [
+            "StandardScaler"
+        ],
+        "rentabilit\u00e9_\u00e9conomique": [
+            "StandardScaler"
+        ],
+        "solidit\u00e9_financi\u00e8re": [
             "StandardScaler"
         ],
         "cotisation": [
@@ -67,20 +92,57 @@
         ],
         "dette_par_effectif": [
             "StandardScaler"
+        ],
+        "paydex": [
+            "BinsOrdinalEncoder",
+            "OneHotEncoder"
         ]
     },
-    "ordinal_encoding_bins": {},
+    "ordinal_encoding_bins": {
+        "paydex": [
+            [
+                "-inf",
+                "0"
+            ],
+            [
+                "0",
+                "15"
+            ],
+            [
+                "15",
+                "30"
+            ],
+            [
+                "30",
+                "60"
+            ],
+            [
+                "60",
+                "90"
+            ],
+            [
+                "90",
+                "inf"
+            ]
+        ]
+    },
     "topic_groups": {
         "sant\u00e9_financi\u00e8re": [
-            "mnt_af_bfonc_bfr",
-            "mnt_af_bfonc_frng",
-            "mnt_af_bfonc_tresorerie",
-            "mnt_af_ca",
-            "mnt_af_sig_ebe_ret",
-            "rto_af_ratio_rent_mbe",
-            "rto_af_rent_eco",
-            "rto_af_solidite_financiere",
-            "rto_invest_ca"
+            "dette_nette/caf",
+            "dette_\u00e0_terme/k_propres",
+            "ebe/ca",
+            "va/effectif",
+            "charges_personnel/va",
+            "stocks/ca",
+            "liquidit\u00e9_absolue",
+            "liquidit\u00e9_g\u00e9n\u00e9rale",
+            "liquidit\u00e9_r\u00e9duite",
+            "d\u00e9lai_paiement/d\u00e9lai_encaissement",
+            "k_propres/k_social",
+            "bfr/k_propres",
+            "taux_investissement",
+            "rentabilit\u00e9_\u00e9conomique",
+            "solidit\u00e9_financi\u00e8re"
         ],
         "activit\u00e9_partielle": [
             "ap_heures_consomm\u00e9es"
@@ -91,18 +153,27 @@
             "dette_sociale_patronale",
             "dette"
         ],
+        "retards_paiement": [
+            "paydex"
+        ],
         "misc": [
             "effectif"
         ]
     },
     "time_aggregation": {
         "diff": {
+            "paydex": [
+                12
+            ],
             "dette_par_effectif": [
                 3
             ]
         },
         "mean": {
             "cotisation": [
+                12
+            ],
+            "dette_sur_cotisation": [
                 12
             ]
         },
