@@ -24,9 +24,7 @@ import os
 import sys
 from os import path
 
-import pyspark.sql.functions as F
 import pyspark.sql.types as T
-from pyspark.sql import Window
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -154,42 +152,16 @@ df_sirene_dates = siren_normalizer.transform(df_sirene_dates).fillna(
 df_ap = siren_normalizer.transform(datasets["ap"])
 df_effectif = siren_normalizer.transform(df_effectif)
 
-# Join "monthly" datasets
-df_monthly = (
+# Join datasets
+joined_df = (
     df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "période"], how="inner")
     .join(df_effectif, on=["siren", "période"], how="inner")
     .join(df_ap, on=["siren", "période"], how="left")
     .join(df_judgments, on="siren", how="left")
     .join(df_altares, on=["siren", "période"], how="left")
     .join(df_sirene_categories, on="siren", how="inner")
+    .join(df_dgfip_yearly, on=["siren", "période"], how="inner")
 )
-
-df_dgfip_yearly = df_dgfip_yearly.withColumnRenamed("date_début_exercice", "période")
-# Join monthly dataset with yearly dataset
-joined_df = sf_datalake.utils.merge_asof(
-    df_monthly,
-    df_dgfip_yearly,
-    on="période",
-    by="siren",
-    tolerance=365,
-    direction="backward",
-)
-
-# We are trying to remove duplicate data about duplicate exercice declaration for a
-# given SIREN. We keep the line where we have the lower rate of null ratios.
-joined_df = joined_df.withColumn(
-    "null_ratio",
-    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df_dgfip_yearly.columns])
-    / len(df_dgfip_yearly.columns),
-)
-w = Window().partitionBy(["siren", "période"]).orderBy(F.col("null_ratio").asc())
-
-joined_df = (
-    joined_df.withColumn("n_row", F.row_number().over(w))
-    .filter(F.col("n_row") == 1)
-    .drop("n_row")
-)
-
 
 output_df = joined_df.join(
     df_sirene_dates,

@@ -14,14 +14,17 @@ USAGE
 to get more info on expected args.
 
 """
+import datetime as dt
 import os
 import sys
 from os import path
 from typing import List
 
 import dateutil.parser
+import pandas as pd
 import pyspark.sql.functions as F
 from pyspark.ml import PipelineModel
+from pyspark.sql import Window
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -31,10 +34,13 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # pylint:disable=wrong-import-position
 import sf_datalake.configuration
 import sf_datalake.io
+import sf_datalake.utils
 
 ####################
 # Loading datasets #
 ####################
+
+spark = sf_datalake.utils.get_spark_session()
 parser = sf_datalake.io.data_path_parser()
 parser.add_argument(
     "--output_format", default="orc", help="Output dataset file format."
@@ -118,8 +124,10 @@ df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
 df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
 df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
 
-# Filter by date
-df = df.filter(F.col("date_fin_exercice") > dateutil.parser.parse(args.min_date))
+# Categorize feature columns depending on whether they are:
+# - readily available inside sources
+# - computed from these sources
+# - used inside those computations
 
 feature_cols: List[str] = configuration.explanation.topic_groups.get("santé_financière")
 engineered_feature_cols: List[str] = [
@@ -139,9 +147,73 @@ base_feature_cols: List[str] = list(set(feature_cols)) - list(
     set(engineered_feature_cols)
 )
 
-#################
+source_variables: List[str] = [
+    "mnt_af_endettement_net",
+    "rto_6",
+    "rto_af_endettement_a_terme",
+    "mnt_af_sig_ebe_ret",
+    "mnt_af_ca",
+    "mnt_af_sig_va_ret",
+    "d_dvs_376_nbr_pers",
+    "d_cr_250_expl_salaire",
+    "d_cr_252_expl_ch_soc",
+    "d_cr_260_expl_dt_syndic",
+    "d_actf_stk_march_net",
+    "mnt_af_bfonc_actif_circ_expl",
+    "mnt_af_bfonc_actif_circ_h_expl",
+    "mnt_af_bfonc_passif_circ_expl",
+    "mnt_af_bfonc_passif_circ_h_expl",
+    "mnt_af_bfonc_tresorerie",
+    "nbr_af_jours_reglt_fourn",
+    "nbr_af_jours_creance_cli",
+    "d_passf_120_k",
+    "mnt_af_bfonc_bfr",
+    "d_passf_142_k_propres",
+]
+
+# Filter by date
+df = df.filter(F.col("date_fin_exercice") > dateutil.parser.parse(args.min_date))
+
+# We remove data where multiple declarations exist for a given (SIREN, date) couple and
+# only keep the line with the lowest null values count.
+
+# Create a monthly date range that will become a time index
+date_range = spark.createDataFrame(
+    pd.DataFrame(
+        pd.date_range(args.min_date, dt.date.today().isoformat(), freq="MS")
+        .to_series()
+        .dt.date,
+        columns=["période"],
+    )
+)
+
+df = df.join(
+    date_range,
+    on=date_range["période"].between(
+        df["date_début_exercice"], F.date_sub(df["date_fin_exercice"], 1)
+    ),
+    how="inner",
+)
+df = df.withColumn(
+    "null_count",
+    sum(
+        [
+            F.when(F.col(c).isNull(), 1).otherwise(0)
+            for c in base_feature_cols + source_variables
+        ]
+    ),
+)
+w = Window().partitionBy(["siren", "période"]).orderBy(F.col("null_count").asc())
+df = (
+    df.withColumn("n_row", F.row_number().over(w))
+    .filter(F.col("n_row") == 1)
+    .drop("n_row", "période")
+)
+
+
+###########################
 # Preprocess raw features #
-#################
+###########################
 
 df = sf_datalake.transform.MissingValuesHandler(
     inputCols=base_feature_cols,
@@ -186,12 +258,10 @@ df = df.withColumn(
     "délai_paiement/délai_encaissement",
     (df["nbr_af_jours_reglt_fourn"] / df["nbr_af_jours_creance_cli"]),
 )
-
 df = df.withColumn(
     "k_propres/k_social",
     (df["d_passf_142_k_propres"] / df["d_passf_120_k"]),
 )
-
 df = df.withColumn(
     "bfr/k_propres",
     (df["mnt_af_bfonc_bfr"] / df["d_passf_142_k_propres"]),
@@ -227,7 +297,7 @@ df = PipelineModel([time_normalizer, mvh_fe]).transform(df)
 sf_datalake.io.write_data(
     df.select(
         feature_cols
-        + list({"siren", "date_début_exercice", "date_fin_exercice", "no_ocfi"})
+        + ["siren", "date_début_exercice", "date_fin_exercice", "no_ocfi", "période"]
     ),
     args.output,
     args.output_format,
