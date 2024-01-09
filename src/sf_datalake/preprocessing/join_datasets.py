@@ -164,7 +164,7 @@ df_monthly = (
     .join(df_sirene_categories, on="siren", how="inner")
 )
 
-df_dgfip_yearly = df_dgfip_yearly.withColumnRenamed("date_deb_exercice", "période")
+df_dgfip_yearly = df_dgfip_yearly.withColumnRenamed("date_début_exercice", "période")
 # Join monthly dataset with yearly dataset
 joined_df = sf_datalake.utils.merge_asof(
     df_monthly,

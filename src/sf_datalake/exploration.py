@@ -22,7 +22,7 @@ def accounting_time_span(
     """Computes global time spans of companies accouting years.
 
     Args:
-        df: The input DataFrame. It must have a "date_deb_exercice" and
+        df: The input DataFrame. It must have a "date_début_exercice" and
           "date_fin_exercice" columns.
 
     Returns:
@@ -30,11 +30,11 @@ def accounting_time_span(
           with the beginning and end of accounting years ("exercice comptable").
 
     """
-    assert {"date_deb_exercice", "date_fin_exercice"} <= set(df.columns)
+    assert {"date_début_exercice", "date_fin_exercice"} <= set(df.columns)
 
     date_deb_exercice_span = df.select(
-        F.min("date_deb_exercice"),
-        F.max("date_deb_exercice"),
+        F.min("date_début_exercice"),
+        F.max("date_début_exercice"),
     ).first()
     date_fin_exercice_span = df.select(
         F.min("date_fin_exercice"),
@@ -50,7 +50,7 @@ def accounting_year_distribution(
     """Computes declared accounting year duration distribution.
 
     Args:
-        df: The input DataFrame. It must have a "date_deb_exercice" and
+        df: The input DataFrame. It must have a "date_début_exercice" and
           "date_fin_exercice" columns.
         unit: The unit measuring accounting year duration. Should be "days" or "months".
         duration_col: The accounting year duration column name.
@@ -59,7 +59,7 @@ def accounting_year_distribution(
         The count of declared accounting years for each given duration.
 
     """
-    assert {"date_deb_exercice", "date_fin_exercice"} <= set(df.columns)
+    assert {"date_début_exercice", "date_fin_exercice"} <= set(df.columns)
 
     ayd = accounting_year_duration(df, unit, duration_col)
     return ayd.groupBy(duration_col).count().orderBy(duration_col)
@@ -71,7 +71,7 @@ def accounting_year_duration(
     """Computes declared accounting year duration.
 
     Args:
-        df: The input DataFrame. It must have a "date_deb_exercice" and
+        df: The input DataFrame. It must have a "date_début_exercice" and
           "date_fin_exercice" columns.
         unit: The unit measuring accounting year duration. Should be "days" or "months".
         duration_col: The accounting year duration column name.
@@ -80,7 +80,7 @@ def accounting_year_duration(
         A df with a new column of declared accounting years duration.
 
     """
-    assert {"date_deb_exercice", "date_fin_exercice"} <= set(df.columns)
+    assert {"date_début_exercice", "date_fin_exercice"} <= set(df.columns)
 
     if unit == "days":
         diff_function = F.datediff
@@ -93,7 +93,7 @@ def accounting_year_duration(
         F.round(
             diff_function(
                 F.to_date(df["date_fin_exercice"]),
-                F.to_date(df["date_deb_exercice"]),
+                F.to_date(df["date_début_exercice"]),
             )
         ).cast("int"),
     )
