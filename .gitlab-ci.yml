@@ -167,8 +167,6 @@ send_entrypoint_to_lake:
   stage: deploy
   extends: .lake
   needs:
-    - job: "prepare_maacdo_configuration"
-    - job: "pylint"
     - job: "send_package_to_lake"
       optional: true
   script:
