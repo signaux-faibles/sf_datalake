@@ -169,6 +169,7 @@ send_entrypoint_to_lake:
   needs:
     - job: "prepare_maacdo_configuration"
     - job: "pylint"
+    - job: "send_package_to_lake"
       optional: true
   script:
     - echo "Deleting previous entry point (if it exists) on the lake HDFS."
