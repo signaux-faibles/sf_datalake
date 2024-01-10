@@ -294,16 +294,14 @@ df = df.drop(*source_variables)
 # Preprocess computed features #
 ################################
 
-time_normalizer = [
-    sf_datalake.transform.TimeNormalizer(
-        inputCols=feature_cols,
-        start="date_début_exercice",
-        end="date_fin_exercice",
-    ),
-    # sf_datalake.transform.TimeNormalizer(
-    #     inputCols=[""], start="date_deb_tva", end="date_fin_tva"
-    # ),
-]
+time_normalizer = sf_datalake.transform.TimeNormalizer(
+    inputCols=feature_cols,
+    start="date_début_exercice",
+    end="date_fin_exercice",
+)
+# sf_datalake.transform.TimeNormalizer(
+#     inputCols=[""], start="date_deb_tva", end="date_fin_tva"
+# )
 
 mvh_fe = sf_datalake.transform.MissingValuesHandler(
     inputCols=feature_cols,
