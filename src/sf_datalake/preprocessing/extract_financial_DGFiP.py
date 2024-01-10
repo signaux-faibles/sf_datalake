@@ -232,17 +232,17 @@ df = sf_datalake.transform.MissingValuesHandler(
 
 
 df = df.withColumn(
-    "dette_nette/caf",
+    "dette_nette_sur_caf",
     df["mnt_af_endettement_net"] / df["rto_6"],
 )
-df = df.withColumn("dette_à_terme/k_propres", 1 / df["rto_af_endettement_a_terme"])
-df = df.withColumn("ebe/ca", df["mnt_af_sig_ebe_ret"] / df["mnt_af_ca"])
+df = df.withColumn("dette_à_terme_sur_k_propres", 1 / df["rto_af_endettement_a_terme"])
+df = df.withColumn("ebe_ca", df["mnt_af_sig_ebe_ret"] / df["mnt_af_ca"])
 df = df.withColumn(
-    "va/effectif",
+    "va_sur_effectif",
     df["mnt_af_sig_va_ret"] / df["d_dvs_376_nbr_pers"],
 )
 df = df.withColumn(
-    "charges_personnel/va",
+    "charges_personnel_surva",
     (
         df["d_cr_250_expl_salaire"]
         + df["d_cr_252_expl_ch_soc"]
@@ -250,7 +250,7 @@ df = df.withColumn(
     )
     / df["mnt_af_sig_va_ret"],
 )
-df = df.withColumn("stocks/ca", df["d_actf_stk_march_net"] / df["mnt_af_ca"])
+df = df.withColumn("stocks_sur_ca", df["d_actf_stk_march_net"] / df["mnt_af_ca"])
 df = df.withColumn(
     "liquidité_absolue",
     (df["mnt_af_bfonc_actif_circ_expl"] + df["mnt_af_bfonc_actif_circ_h_expl"])
@@ -262,15 +262,15 @@ df = df.withColumn(
     / (df["mnt_af_bfonc_actif_circ_expl"] + df["mnt_af_bfonc_actif_circ_h_expl"]),
 )
 df = df.withColumn(
-    "délai_paiement/délai_encaissement",
+    "délai_paiement_sur_délai_encaissement",
     (df["nbr_af_jours_reglt_fourn"] / df["nbr_af_jours_creance_cli"]),
 )
 df = df.withColumn(
-    "k_propres/k_social",
+    "k_propres_sur_k_social",
     (df["d_passf_142_k_propres"] / df["d_passf_120_k"]),
 )
 df = df.withColumn(
-    "bfr/k_propres",
+    "bfr_sur_k_propres",
     (df["mnt_af_bfonc_bfr"] / df["d_passf_142_k_propres"]),
 )
 
