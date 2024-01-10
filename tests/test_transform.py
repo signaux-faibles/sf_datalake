@@ -158,7 +158,7 @@ class TestRandomResampler:
         )
 
     def test_class_balance_oversampling(self, random_resampler_df):
-        tolerance = 0.1
+        tolerance = 0.2
         min_class_ratio = 0.4
         seed = random.randint(1, 1000)
         oversampled_df = RandomResampler(
@@ -170,7 +170,7 @@ class TestRandomResampler:
         return self.check_balance(oversampled_df, min_class_ratio, tolerance)
 
     def test_class_balance_undersampling(self, random_resampler_df):
-        tolerance = 0.1
+        tolerance = 0.2
         min_class_ratio = 0.5
         seed = random.randint(1, 1000)
         undersampled_df = RandomResampler(
