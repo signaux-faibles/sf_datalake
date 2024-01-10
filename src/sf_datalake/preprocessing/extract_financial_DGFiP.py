@@ -224,7 +224,9 @@ df = (
 
 # Handle missing values for variables that are used in the following computation
 df = sf_datalake.transform.MissingValuesHandler(
-    inputCols=source_variables, value={var: 0.0 for var in source_variables}
+    inputCols=source_variables,
+    # TODO: Make this mapping better if needed
+    value={var: 0.0 for var in source_variables},
 ).transform(df)
 
 
@@ -276,14 +278,10 @@ df = df.withColumn(
 ############
 
 # Rename to readable french
-df = df.withColumnRenamed("mnt_af_bfonc_bfr", "bfr")
 df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
-df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
 df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
 df = df.withColumnRenamed("rto_56", "liquidité_réduite")
-df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
 df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
-df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
 
 # Drop features that were only used for feature engineering
 # Note that they won't be dropped if they've been renamed in the meantime
