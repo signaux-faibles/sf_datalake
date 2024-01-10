@@ -118,7 +118,13 @@ extract_dict = {
 
 # Join keys, as recommended by data providers, see SJCF-1D confluence.
 decla_common_columns = set(datasets["af"].columns) & set(datasets["indmap"].columns)
-decla_join_columns = {"siren", "date_deb_exercice", "date_fin_exercice", "no_ocfi"}
+decla_join_columns = {
+    "siren",
+    "date_deb_exercice",
+    "date_fin_exercice",
+    "no_ocfi",
+    "annee_exercice",
+}
 decla_drop_columns = decla_common_columns - set(decla_join_columns)
 
 # Combine tables
