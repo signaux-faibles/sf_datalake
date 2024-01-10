@@ -20,7 +20,6 @@ import sys
 from os import path
 from typing import List
 
-import pandas as pd
 import pyspark.sql.functions as F
 from pyspark.ml import PipelineModel
 from pyspark.sql import Window
@@ -32,6 +31,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 
 # pylint:disable=wrong-import-position
 import dateutil.parser
+import pandas as pd
 
 import sf_datalake.configuration
 import sf_datalake.io
@@ -96,12 +96,12 @@ df = (
     datasets["indmap"]
     .join(
         datasets["af"].drop(*drop_columns),
-        on={"siren", "date_deb_exercice", "date_fin_exercice", "no_ocfi"},
+        on=["siren", "date_deb_exercice", "date_fin_exercice", "no_ocfi"],
         how="inner",
     )
     .join(
         datasets["dirco"],
-        on={"siren", "date_deb_exercice", "date_fin_exercice"},
+        on=["siren", "date_deb_exercice", "date_fin_exercice"],
         how="left",
     )
 )
