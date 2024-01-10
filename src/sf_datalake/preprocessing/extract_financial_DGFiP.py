@@ -98,21 +98,19 @@ extract_dict = {
         "nbr_af_jours_creance_cli",
         "nbr_af_jours_reglt_fourn",
         "rto_af_endettement_a_terme",
+        "rto_af_rent_eco",
     },
     "indmap": {
         "d_actf_stk_march_net",
         "d_actf_stk_mat1e_net",
-        "d_cr_242_expl_autr_ch_ext",
         "d_cr_250_expl_salaire",
         "d_cr_252_expl_ch_soc",
         "d_cr_260_expl_dt_syndic",
         "d_dvs_376_nbr_pers",
         "d_passf_120_k",
         "d_passf_142_k_propres",
-        "d_passf_156_emprunts",
-        "d_passf_166_fourn",
-        "d_passf_172_autr_dtt",
-        "d_tva_ded_i0703_imm",
+        "rto_invest_ca",
+        "rto_af_solidite_financiere",
     },
 }
 
@@ -283,9 +281,7 @@ df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
 df = df.withColumnRenamed("rto_56", "liquidité_réduite")
 df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
 
-# Drop features that were only used for feature engineering
-# Note that they won't be dropped if they've been renamed in the meantime
-
+# Drop features that were only used for feature engineering.
 df = df.drop(*source_variables)
 
 ################################
