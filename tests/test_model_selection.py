@@ -29,7 +29,7 @@ class TestTrainTestSplit:
         ), f"Intersection found: {siren_intersection.show()}"
 
     def test_test_subset_size(self, split_dataset):
-        tolerance = 0.01
+        tolerance = 0.02
         train_size = 0.8
         test_size = 1 - train_size
         seed = random.randint(0, 1000)

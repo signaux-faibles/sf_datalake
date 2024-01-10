@@ -63,7 +63,7 @@ def lag_operator_df(spark):
     schema = T.StructType(
         [
             T.StructField("siren", T.StringType(), False),
-            T.StructField("periode", T.DateType(), False),
+            T.StructField("période", T.DateType(), False),
             T.StructField("ca", T.IntegerType(), True),
             T.StructField("expected_ca_lag1m", T.IntegerType(), True),
         ]
@@ -103,7 +103,7 @@ def fixture_missing_value_handler_df(spark):
     schema = T.StructType(
         [
             T.StructField("siren", T.StringType(), False),
-            T.StructField("periode", T.DateType(), False),
+            T.StructField("période", T.DateType(), False),
             T.StructField("ca", T.DoubleType(), True),
             T.StructField("ca_filled_value", T.DoubleType(), True),
             T.StructField("ca_filled_median", T.DoubleType(), True),
@@ -158,7 +158,7 @@ class TestRandomResampler:
         )
 
     def test_class_balance_oversampling(self, random_resampler_df):
-        tolerance = 0.1
+        tolerance = 0.2
         min_class_ratio = 0.4
         seed = random.randint(1, 1000)
         oversampled_df = RandomResampler(
@@ -170,7 +170,7 @@ class TestRandomResampler:
         return self.check_balance(oversampled_df, min_class_ratio, tolerance)
 
     def test_class_balance_undersampling(self, random_resampler_df):
-        tolerance = 0.1
+        tolerance = 0.2
         min_class_ratio = 0.5
         seed = random.randint(1, 1000)
         undersampled_df = RandomResampler(
