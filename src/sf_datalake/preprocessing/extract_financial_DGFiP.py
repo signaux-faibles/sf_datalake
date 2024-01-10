@@ -150,9 +150,13 @@ df = (
 #     datasets["rar_tva"], on=list(join_columns - {"no_ocfi"}), how="left"
 # )
 
-### Cast columns
-df = df.withColumn("année_exercice", F.col("annee_exercice").cast("int"))
-df = df.withColumn("date_début_exercice", F.to_date("date_deb_exercice"))
+### Rename and transform date columns
+df = df.withColumnRenamed("annee_exercice", "année_exercice").withColumn(
+    "année_exercice", F.col("année_exercice").cast("int")
+)
+df = df.withColumnRenamed("date_deb_exercice", "date_début_exercice").withColumn(
+    "date_début_exercice", F.to_date("date_début_exercice")
+)
 df = df.withColumn("date_fin_exercice", F.to_date("date_fin_exercice"))
 
 # Point out which variables are used as source for feature computation
@@ -212,9 +216,8 @@ w = Window().partitionBy(["siren", "période"]).orderBy(F.col("null_count").asc(
 df = (
     df.withColumn("n_row", F.row_number().over(w))
     .filter(F.col("n_row") == 1)
-    .drop("n_row", "période")
+    .drop("n_row")
 )
-
 
 ########################
 # Feature engineering  #
