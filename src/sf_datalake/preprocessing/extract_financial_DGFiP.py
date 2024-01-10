@@ -82,25 +82,61 @@ for name, ds in datasets.items():
 # Merge datasets  #
 ###################
 
-# Join keys, as recommended by data providers, see SJCF-1D confluence.
-common_columns = set(datasets["af"].columns) & set(datasets["indmap"].columns)
-drop_columns = common_columns - {
-    "siren",
-    "date_deb_exercice",
-    "date_fin_exercice",
-    "no_ocfi",
+extract_dict = {
+    "ratios_dirco": {"rto_6", "rto_56"},
+    "declarations_af": {
+        "mnt_af_bfonc_actif_circ_expl",
+        "mnt_af_bfonc_actif_circ_h_expl",
+        "mnt_af_bfonc_bfr",
+        "mnt_af_bfonc_passif_circ_expl",
+        "mnt_af_bfonc_passif_circ_h_expl",
+        "mnt_af_bfonc_tresorerie",
+        "mnt_af_ca",
+        "mnt_af_endettement_net",
+        "mnt_af_sig_ebe_ret",
+        "mnt_af_sig_va_ret",
+        "nbr_af_jours_creance_cli",
+        "nbr_af_jours_reglt_fourn",
+        "rto_af_endettement_a_terme",
+    },
+    "declarations_indmap": {
+        "d_actf_stk_march_net",
+        "d_actf_stk_mat1e_net",
+        "d_cr_242_expl_autr_ch_ext",
+        "d_cr_250_expl_salaire",
+        "d_cr_252_expl_ch_soc",
+        "d_cr_260_expl_dt_syndic",
+        "d_dvs_376_nbr_pers",
+        "d_passf_120_k",
+        "d_passf_142_k_propres",
+        "d_passf_156_emprunts",
+        "d_passf_166_fourn",
+        "d_passf_172_autr_dtt",
+        "d_tva_ded_i0703_imm",
+    },
 }
+
+# Join keys, as recommended by data providers, see SJCF-1D confluence.
+decla_common_columns = set(datasets["af"].columns) & set(datasets["indmap"].columns)
+decla_join_columns = {"siren", "date_deb_exercice", "date_fin_exercice", "no_ocfi"}
+decla_drop_columns = decla_common_columns - set(decla_join_columns)
 
 # Combine tables
 df = (
     datasets["indmap"]
     .join(
-        datasets["af"].drop(*drop_columns),
-        on=["siren", "date_deb_exercice", "date_fin_exercice", "no_ocfi"],
+        datasets["af"].drop(*decla_drop_columns),
+        on=list(decla_join_columns),
         how="inner",
     )
+    .select(*(decla_join_columns | extract_dict["indmap"] | extract_dict["af"]))
     .join(
-        datasets["dirco"],
+        datasets["dirco"].select(
+            *(
+                {"siren", "date_deb_exercice", "date_fin_exercice"}
+                | extract_dict["dirco"]
+            )
+        ),
         on=["siren", "date_deb_exercice", "date_fin_exercice"],
         how="left",
     )
@@ -115,39 +151,8 @@ df = df.withColumn("année_exercice", F.col("annee_exercice").cast("int"))
 df = df.withColumn("date_début_exercice", F.to_date("date_deb_exercice"))
 df = df.withColumn("date_fin_exercice", F.to_date("date_fin_exercice"))
 
-# Rename to readable french
-df = df.withColumnRenamed("mnt_af_bfonc_bfr", "bfr")
-df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
-df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
-df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
-df = df.withColumnRenamed("rto_56", "liquidité_réduite")
-df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
-df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
-df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
-
-# Categorize feature columns depending on whether they are:
-# - readily available inside sources
-# - computed from these sources
-# - used inside those computations
-
+# Point out which variables are used as source for feature computation
 feature_cols: List[str] = configuration.explanation.topic_groups.get("santé_financière")
-engineered_feature_cols: List[str] = [
-    "bfr/k_propres",
-    "k_propres/k_social",
-    "délai_paiement/délai_encaissement",
-    "liquidité_générale",
-    "liquidité_absolue",
-    "stocks/ca",
-    "charges_personnel/va",
-    "va/effectif",
-    "ebe/ca",
-    "dette_à_terme/k_propres",
-    "dette_nette/caf",
-]
-base_feature_cols: List[str] = list(set(feature_cols)) - list(
-    set(engineered_feature_cols)
-)
-
 source_variables: List[str] = [
     "mnt_af_endettement_net",
     "rto_6",
@@ -197,12 +202,7 @@ df = df.join(
 )
 df = df.withColumn(
     "null_count",
-    sum(
-        [
-            F.when(F.col(c).isNull(), 1).otherwise(0)
-            for c in base_feature_cols + source_variables
-        ]
-    ),
+    sum([F.when(F.col(c).isNull(), 1).otherwise(0) for c in df.columns]),
 )
 w = Window().partitionBy(["siren", "période"]).orderBy(F.col("null_count").asc())
 df = (
@@ -212,18 +212,16 @@ df = (
 )
 
 
-###########################
-# Preprocess raw features #
-###########################
-
-df = sf_datalake.transform.MissingValuesHandler(
-    inputCols=base_feature_cols,
-    value=configuration.preprocessing.fill_default_values,
-).transform(df)
-
 ########################
 # Feature engineering  #
 ########################
+
+# Handle missing values for variables that are used in the following computation
+df = sf_datalake.transform.MissingValuesHandler(
+    inputCols=source_variables,
+    value=0.0,
+).transform(df)
+
 
 df = df.withColumn(
     "dette_nette/caf",
@@ -268,9 +266,28 @@ df = df.withColumn(
     (df["mnt_af_bfonc_bfr"] / df["d_passf_142_k_propres"]),
 )
 
-#################
+############
+# Cleaning #
+############
+
+# Rename to readable french
+df = df.withColumnRenamed("mnt_af_bfonc_bfr", "bfr")
+df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
+df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
+df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
+df = df.withColumnRenamed("rto_56", "liquidité_réduite")
+df = df.withColumnRenamed("rto_invest_ca", "taux_investissement")
+df = df.withColumnRenamed("rto_af_rent_eco", "rentabilité_économique")
+df = df.withColumnRenamed("rto_af_solidite_financiere", "solidité_financière")
+
+# Drop features that were only used for feature engineering
+# Note that they won't be dropped if they've been renamed in the meantime
+
+df = df.drop(*source_variables)
+
+################################
 # Preprocess computed features #
-#################
+################################
 
 time_normalizer = [
     sf_datalake.transform.TimeNormalizer(
@@ -284,7 +301,7 @@ time_normalizer = [
 ]
 
 mvh_fe = sf_datalake.transform.MissingValuesHandler(
-    inputCols=engineered_feature_cols,
+    inputCols=feature_cols,
     value=configuration.preprocessing.fill_default_values,
 )
 
