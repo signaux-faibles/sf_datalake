@@ -83,8 +83,8 @@ for name, ds in datasets.items():
 ###################
 
 extract_dict = {
-    "ratios_dirco": {"rto_6", "rto_56"},
-    "declarations_af": {
+    "dirco": {"rto_6", "rto_56"},
+    "af": {
         "mnt_af_bfonc_actif_circ_expl",
         "mnt_af_bfonc_actif_circ_h_expl",
         "mnt_af_bfonc_bfr",
@@ -99,7 +99,7 @@ extract_dict = {
         "nbr_af_jours_reglt_fourn",
         "rto_af_endettement_a_terme",
     },
-    "declarations_indmap": {
+    "indmap": {
         "d_actf_stk_march_net",
         "d_actf_stk_mat1e_net",
         "d_cr_242_expl_autr_ch_ext",
