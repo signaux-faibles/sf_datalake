@@ -224,8 +224,7 @@ df = (
 
 # Handle missing values for variables that are used in the following computation
 df = sf_datalake.transform.MissingValuesHandler(
-    inputCols=source_variables,
-    value=0.0,
+    inputCols=source_variables, value={var: 0.0 for var in source_variables}
 ).transform(df)
 
 
