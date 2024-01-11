@@ -27,22 +27,22 @@
     },
     "fill_imputation_strategy": {},
     "features_transformers": {
-        "dette_nette/caf": [
+        "dette_nette_sur_caf": [
             "StandardScaler"
         ],
-        "dette_à_terme/k_propres": [
+        "dette_à_terme_sur_k_propres": [
             "StandardScaler"
         ],
-        "ebe/ca": [
+        "ebe_sur_ca": [
             "StandardScaler"
         ],
-        "va/effectif": [
+        "va_sur_effectif": [
             "StandardScaler"
         ],
-        "charges_personnel/va": [
+        "charges_personnel_sur_va": [
             "StandardScaler"
         ],
-        "stocks/ca": [
+        "stocks_sur_ca": [
             "StandardScaler"
         ],
         "liquidité_absolue": [
@@ -54,13 +54,13 @@
         "liquidité_réduite": [
             "StandardScaler"
         ],
-        "délai_paiement/délai_encaissement": [
+        "délai_paiement_sur_délai_encaissement": [
             "StandardScaler"
         ],
-        "k_propres/k_social": [
+        "k_propres_sur_k_social": [
             "StandardScaler"
         ],
-        "bfr/k_propres": [
+        "bfr_sur_k_propres": [
             "StandardScaler"
         ],
         "taux_investissement": [
@@ -128,18 +128,18 @@
     },
     "topic_groups": {
         "santé_financière": [
-            "dette_nette/caf",
-            "dette_à_terme/k_propres",
-            "ebe/ca",
-            "va/effectif",
-            "charges_personnel/va",
-            "stocks/ca",
+            "dette_nette_sur_caf",
+            "dette_à_terme_sur_k_propres",
+            "ebe_sur_ca",
+            "va_sur_effectif",
+            "charges_personnel_sur_va",
+            "stocks_sur_ca",
             "liquidité_absolue",
             "liquidité_générale",
             "liquidité_réduite",
-            "délai_paiement/délai_encaissement",
-            "k_propres/k_social",
-            "bfr/k_propres",
+            "délai_paiement_sur_délai_encaissement",
+            "k_propres_sur_k_social",
+            "bfr_sur_k_propres",
             "taux_investissement",
             "rentabilité_économique",
             "solidité_financière"
