@@ -4,7 +4,6 @@
         "cotisation": 0.0,
         "dette_sociale_ouvrière": 0.0,
         "dette_sociale_patronale": 0.0,
-        "dette_sur_cotisation_lissée": 0.0,
         "ap_heures_consommées": 0.0,
         "ap_heures_autorisées": 0.0,
         "dette_par_effectif": 0.0,
@@ -87,7 +86,7 @@
         "ap_heures_consommées": [
             "StandardScaler"
         ],
-        "dette_sur_cotisation_lissée": [
+        "dette_sur_[cotisation_mean12m]": [
             "StandardScaler"
         ],
         "dette_par_effectif": [
