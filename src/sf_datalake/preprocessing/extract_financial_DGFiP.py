@@ -242,7 +242,7 @@ df = df.withColumn(
     df["mnt_af_sig_va_ret"] / df["d_dvs_376_nbr_pers"],
 )
 df = df.withColumn(
-    "charges_personnel_surva",
+    "charges_personnel_sur_va",
     (
         df["d_cr_250_expl_salaire"]
         + df["d_cr_252_expl_ch_soc"]
