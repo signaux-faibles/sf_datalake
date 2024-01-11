@@ -236,7 +236,7 @@ df = df.withColumn(
     df["mnt_af_endettement_net"] / df["rto_6"],
 )
 df = df.withColumn("dette_à_terme_sur_k_propres", 1 / df["rto_af_endettement_a_terme"])
-df = df.withColumn("ebe_ca", df["mnt_af_sig_ebe_ret"] / df["mnt_af_ca"])
+df = df.withColumn("ebe_sur_ca", df["mnt_af_sig_ebe_ret"] / df["mnt_af_ca"])
 df = df.withColumn(
     "va_sur_effectif",
     df["mnt_af_sig_va_ret"] / df["d_dvs_376_nbr_pers"],
