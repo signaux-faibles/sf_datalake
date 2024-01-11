@@ -167,8 +167,10 @@ send_entrypoint_to_lake:
   stage: deploy
   extends: .lake
   needs:
-    - job: "send_package_to_lake"
+    - job: "prepare_maacdo_configuration"
+    - job: "pylint"
       optional: true
+    - job: "send_package_to_lake"
   script:
     - echo "Deleting previous entry point (if it exists) on the lake HDFS."
     - ./api_maacdo.pl
