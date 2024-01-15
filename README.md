@@ -13,7 +13,7 @@ git clone https://forge.dgfip.finances.rie.gouv.fr/dge/signaux-faibles/sf_datala
 
 The virtual environment allows one to install specific version of python packages independantly without messing with the system installation.
 
-Create a virtual environment
+Create a python3 virtual environment
 
 ``` shell
 virtualenv -p `which python3` <virtualenv_dir>
@@ -31,7 +31,11 @@ Make sure the pip version packaged with the env is up to date (it should be >= 1
 pip install -U pip
 ```
 
-Install the package inside the environment
+## Installing the package
+
+### User
+
+To install the package locally, run this command while inside the virtual environment
 
 ``` shell
 pip install .
@@ -39,9 +43,17 @@ pip install .
 
 from the repository root.
 
-## Activate git hooks
+### Developer
 
-Activate git hooks using
+If you're contributing to the package development, you must install the package in editable mode and add some extra requirements for code testing: run this command while inside the virtual environment
+
+``` shell
+pip install -e .[test]
+```
+
+from the repository root.
+
+Then, activate git hooks using
 
 ``` shell
 pre-commit install --install-hooks -t pre-commit -t pre-push
