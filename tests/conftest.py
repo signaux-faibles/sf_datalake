@@ -26,15 +26,15 @@ class MockDataFrameGenerator:
 
     A default schema is enforced, containing data of different types: integers, floats,
     dates (first day of month), strings. Two "index" columns are created: "siren" and
-    "période".
+    "periode".
 
     Attributes:
         n_siren: the number of individual SIREN to mock.
         n_rows_per_siren: Number of different rows per SIREN.
         n_rows_perturbation: If not zero, will add or subtract a random number of rows
           for each subgroup of generated data associated with a SIREN.
-        start_date: The lower bound for the "période" column values.
-        end_date: The upper bound for the "période" column values.
+        start_date: The lower bound for the "periode" column values.
+        end_date: The upper bound for the "periode" column values.
         data: The generated dataframe
 
     Args:
@@ -118,7 +118,7 @@ class MockDataFrameGenerator:
         schema = T.StructType(
             [
                 T.StructField("siren", T.StringType(), nullable=False),
-                T.StructField("période", T.DateType(), nullable=False),
+                T.StructField("periode", T.DateType(), nullable=False),
                 T.StructField("ca", T.IntegerType(), nullable=True),
                 T.StructField("ebe", T.DoubleType(), nullable=True),
                 T.StructField("category", T.StringType(), nullable=True),
