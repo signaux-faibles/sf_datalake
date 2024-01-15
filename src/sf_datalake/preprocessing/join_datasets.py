@@ -1,7 +1,4 @@
-"""Build a dataset by joining data from various sources.
-
-The join is made along temporal and SIREN variables. Source files are
-expected to be ORC. <---- WRONG, TODO
+"""Build a dataset by joining data from various sources along time and SIREN.
 
 Expected inputs :
 - URSSAF debit data
@@ -13,9 +10,17 @@ Expected inputs :
 - DGFiP financial ratios dataset
 - DGFiP judgment data
 
+Inputs are expected to be folders containing ORC files, except for the following
+sources, where a single CSV is expected:
+- "sirene_categories"
+- "sirene_dates"
+- "effectif"
+
 The time index column should be named 'période' and formatted as follows : "yyyy-MM-dd"
 
-Type python join_datasets.py --help for detailed usage.
+Type
+  python join_datasets.py --help
+for detailed usage.
 
 """
 import argparse
