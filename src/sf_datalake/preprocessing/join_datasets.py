@@ -1,7 +1,7 @@
 """Build a dataset by joining data from various sources.
 
 The join is made along temporal and SIREN variables. Source files are
-expected to be ORC.
+expected to be ORC. <---- WRONG, TODO
 
 Expected inputs :
 - URSSAF debit data
@@ -13,8 +13,7 @@ Expected inputs :
 - DGFiP financial ratios dataset
 - DGFiP judgment data
 
-The time index column should be named 'période'"
-and formatted as follow : "yyyy-MM-dd"
+The time index column should be named 'période' and formatted as follows : "yyyy-MM-dd"
 
 Type python join_datasets.py --help for detailed usage.
 
@@ -129,13 +128,15 @@ effectif_schema = T.StructType(
         T.StructField("effectif", T.IntegerType(), True),
     ]
 )
-df_sirene_categories = spark.read.csv(
+datasets["sirene_categories"] = spark.read.csv(
     args.sirene_categories, header=True, schema=sirene_categories_schema
 )
-df_sirene_dates = spark.read.csv(
+datasets["sirene_dates"] = spark.read.csv(
     args.sirene_dates, header=True, schema=sirene_dates_shcema
 )
-df_effectif = spark.read.csv(args.effectif, header=True, schema=effectif_schema)
+datasets["effectif"] = spark.read.csv(
+    args.effectif, header=True, schema=effectif_schema
+)
 
 
 # Prepare datasets
@@ -145,12 +146,12 @@ df_judgments = siren_normalizer.transform(datasets["judgments"])
 df_altares = siren_normalizer.transform(datasets["altares"])
 df_urssaf_debit = siren_normalizer.transform(datasets["urssaf_debit"])
 df_urssaf_cotisation = siren_normalizer.transform(datasets["urssaf_cotisation"])
-df_sirene_categories = siren_normalizer.transform(df_sirene_categories)
-df_sirene_dates = siren_normalizer.transform(df_sirene_dates).fillna(
+df_sirene_categories = siren_normalizer.transform(datasets["sirene_categories"])
+df_sirene_dates = siren_normalizer.transform(datasets["sirene_dates"]).fillna(
     {"date_fin": "2100-01-01"}
 )
 df_ap = siren_normalizer.transform(datasets["ap"])
-df_effectif = siren_normalizer.transform(df_effectif)
+df_effectif = siren_normalizer.transform(datasets["effectif"])
 
 # Join datasets
 joined_df = (
