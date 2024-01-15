@@ -104,7 +104,7 @@ datasets = load_data(
     file_format="orc",
 )
 
-sirene_dates_shcema = T.StructType(
+sirene_dates_schema = T.StructType(
     [
         T.StructField("siren", T.StringType(), False),
         T.StructField("date_fin", T.DateType(), True),
@@ -133,7 +133,7 @@ df_sirene_categories = spark.read.csv(
     args.sirene_categories, header=True, schema=sirene_categories_schema
 )
 df_sirene_dates = spark.read.csv(
-    args.sirene_dates, header=True, schema=sirene_dates_shcema
+    args.sirene_dates, header=True, schema=sirene_dates_schema
 )
 df_effectif = spark.read.csv(args.effectif, header=True, schema=effectif_schema)
 

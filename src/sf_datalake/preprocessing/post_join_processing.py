@@ -25,6 +25,7 @@ sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
 # isort: on
 
 # pylint: disable=unsubscriptable-object, wrong-import-position
+import sf_datalake.configuration
 import sf_datalake.io
 import sf_datalake.transform
 import sf_datalake.utils
@@ -150,7 +151,7 @@ for n_months in configuration.preprocessing.time_aggregation.get("mean", {}).get
     "cotisation", []
 ):
     df = df.withColumn(
-        f"dette_sur_[cotisation_mean{n_months}m]",
+        f"dette_sur_cotisation_mean{n_months}m",
         (df["dette_sociale_patronale"] + df["dette_sociale_ouvrière"])
         / df[f"cotisation_mean{n_months}m"],
     )
