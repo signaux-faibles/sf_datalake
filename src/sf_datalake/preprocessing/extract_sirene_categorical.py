@@ -5,10 +5,11 @@ The input databases are:
 - `StockEtablissement`
 files.
 
-See the argument parser help.
+Type
+  python extract_sirene_categorical.py --help
+for detailed usage.
 
-See https://www.data.gouv.fr/fr/datasets/
-base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/
+See https://www.data.gouv.fr/fr/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/ # pylint: disable=line-too-long
 """
 
 import argparse

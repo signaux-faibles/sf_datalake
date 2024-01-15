@@ -2,17 +2,18 @@
 
 The expected input databases are:
 - The `StockEtablissementHistorique` sirene file.
-- The output of `extract_sirene_categorical.py` :
- a merge of some of `StockEtablissement`
+- The output of `extract_sirene_categorical.py`: a merge of some of `StockEtablissement`
  and `StockUniteLegale` fields.
 
-See the argument parser help.
+Type
+  python extract_sirene_dates.py --help
+for detailed usage.
 
-This script extract dates intervals during which companies are known to be active.
+This script extracts dates intervals during which companies are known to be active.
 
-See https://www.data.gouv.fr/fr/datasets/
-base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/
+See https://www.data.gouv.fr/fr/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/ # pylint: disable=line-too-long
 for more info.
+
 """
 
 import argparse
