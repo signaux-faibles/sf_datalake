@@ -315,7 +315,14 @@ df = PipelineModel([time_normalizer, mvh_fe]).transform(df)
 sf_datalake.io.write_data(
     df.select(
         feature_cols
-        + ["siren", "date_début_exercice", "date_fin_exercice", "no_ocfi", "période"]
+        + [
+            "siren",
+            "date_début_exercice",
+            "date_fin_exercice",
+            "no_ocfi",
+            "période",
+            "année_exercice",
+        ]
     ),
     args.output,
     args.output_format,
