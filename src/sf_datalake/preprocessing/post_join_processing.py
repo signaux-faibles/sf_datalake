@@ -142,10 +142,43 @@ time_computations.append(
 )
 
 
+time_features = features_diff_bfill + features_lag_bfill
+
+if configuration.preprocessing.fill_default_values:
+    values = configuration.preprocessing.fill_default_values
+    strategy = configuration.preprocessing.fill_imputation_strategy
+    time_features_values = {}
+    # pylint: disable=E1133
+    for prefix in values:
+        for feat in time_features:
+            if feat.startswith(prefix):
+                time_features_values[feat] = values[prefix]
+    time_computations.append(
+        sf_datalake.transform.MissingValuesHandler(
+            inputCols=list(time_features_values),
+            value=time_features_values,
+        ),
+    )
+
+if configuration.preprocessing.fill_imputation_strategy:
+    time_features_strategy = {}
+    # pylint: disable=C0206
+    for prefix in imputation_strategy_features:
+        for feat in time_features:
+            if feat.startswith(prefix):
+                time_features_strategy[feat] = imputation_strategy_features[prefix]
+    time_computations.extend(
+        sf_datalake.transform.MissingValuesHandler(
+            inputCols=features,
+            strategy=strategy,
+        )
+        for strategy, features in time_features_strategy.items()
+    )
+
+
 df = PipelineModel(
     stages=labeling_step + missing_values_handling_steps + time_computations
 ).transform(df)
-
 ## Feature engineering based on time computations
 for n_months in configuration.preprocessing.time_aggregation.get("mean", {}).get(
     "cotisation", []
@@ -155,5 +188,6 @@ for n_months in configuration.preprocessing.time_aggregation.get("mean", {}).get
         (df["dette_sociale_patronale"] + df["dette_sociale_ouvrière"])
         / df[f"cotisation_mean{n_months}m"],
     )
+
 
 sf_datalake.io.write_data(df, args.output, args.output_format)

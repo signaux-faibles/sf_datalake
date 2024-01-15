@@ -1,6 +1,8 @@
 {
     "fill_default_values": {
         "paydex": 0,
+        "fpi_30": 0,
+        "fpi_90": 0,
         "cotisation": 0.0,
         "dette_sociale_ouvrière": 0.0,
         "dette_sociale_patronale": 0.0,
