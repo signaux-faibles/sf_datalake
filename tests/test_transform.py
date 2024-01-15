@@ -63,7 +63,7 @@ def lag_operator_df(spark):
     schema = T.StructType(
         [
             T.StructField("siren", T.StringType(), False),
-            T.StructField("période", T.DateType(), False),
+            T.StructField("periode", T.DateType(), False),
             T.StructField("ca", T.IntegerType(), True),
             T.StructField("expected_ca_lag1m", T.IntegerType(), True),
         ]
@@ -103,7 +103,7 @@ def fixture_missing_value_handler_df(spark):
     schema = T.StructType(
         [
             T.StructField("siren", T.StringType(), False),
-            T.StructField("période", T.DateType(), False),
+            T.StructField("periode", T.DateType(), False),
             T.StructField("ca", T.DoubleType(), True),
             T.StructField("ca_filled_value", T.DoubleType(), True),
             T.StructField("ca_filled_median", T.DoubleType(), True),
