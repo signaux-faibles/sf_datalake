@@ -67,11 +67,29 @@ path_group.add_argument(
     """,
 )
 parser.add_argument(
+    "--train_dates",
+    type=str,
+    nargs=2,
+    help="The training set start and end dates (YYYY-MM-DD format).",
+)
+parser.add_argument(
+    "--prediction_date",
+    type=str,
+    help="The date over which prediction should be made (YYYY-MM-DD format).",
+)
+parser.add_argument(
     "--sample_ratio",
     type=float,
     help="Loaded data sample size as a fraction of its full size.",
 )
-
+parser.add_argument(
+    "--drop_missing_values",
+    action="store_true",
+    help="""
+    If specified, missing values will be dropped instead of filling data with default
+    values.
+    """,
+)
 parser.add_argument(
     "--seed",
     dest="random_seed",
@@ -121,11 +139,6 @@ if configuration.io.sample_ratio != 1.0:
 
 
 ## Pre-processing pipeline
-# Remove uncomplete cols
-raw_dataset = raw_dataset.drop(
-    *["encours_étudiés", "n_fournisseurs", "code_naf", "région"]
-)
-
 filter_steps = []
 if not configuration.preprocessing.drop_missing_values:
     raise NotImplementedError(
