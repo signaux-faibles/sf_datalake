@@ -120,17 +120,6 @@ if configuration.io.sample_ratio != 1.0:
     )
 
 
-# Switches
-with_paydex = False
-if any(
-    "paydex" in feat for feat in set(configuration.preprocessing.features_transformers)
-):
-    with_paydex = True
-    logging.info(
-        "Paydex data features were requested through the provided configuration file. \
-        The dataset will be filtered to only keep samples with available paydex data."
-    )
-
 ## Pre-processing pipeline
 # Remove uncomplete cols
 raw_dataset = raw_dataset.drop(
@@ -138,9 +127,6 @@ raw_dataset = raw_dataset.drop(
 )
 
 filter_steps = []
-if with_paydex:
-    filter_steps.append(sf_datalake.transform.HasPaydexFilter())
-
 if not configuration.preprocessing.drop_missing_values:
     raise NotImplementedError(
         " VectorAssembler in spark < 2.4.0 doesn't handle including missing values."
