@@ -152,7 +152,8 @@
             "cotisation",
             "dette_sociale_ouvrière",
             "dette_sociale_patronale",
-            "dette_sur_cotisation_mean12m"
+            "dette_sur_cotisation_mean12m",
+            "dette_par_effectif"
         ],
         "retards_paiement": [
             "paydex"
