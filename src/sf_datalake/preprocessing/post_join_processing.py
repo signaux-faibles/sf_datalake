@@ -15,7 +15,7 @@ USAGE
 import os
 import sys
 from os import path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from pyspark.ml import PipelineModel, Transformer
 
@@ -141,39 +141,23 @@ time_computations.append(
     )
 )
 
+# Fill missing values created by time computations
 
-time_features = features_diff_bfill + features_lag_bfill
+bfilled_features = features_diff_bfill + features_lag_bfill
 
-if configuration.preprocessing.fill_default_values:
-    values = configuration.preprocessing.fill_default_values
-    strategy = configuration.preprocessing.fill_imputation_strategy
-    time_features_values = {}
-    # pylint: disable=E1133
-    for prefix in values:
-        for feat in time_features:
-            if feat.startswith(prefix):
-                time_features_values[feat] = values[prefix]
-    time_computations.append(
-        sf_datalake.transform.MissingValuesHandler(
-            inputCols=list(time_features_values),
-            value=time_features_values,
-        ),
-    )
-
-if configuration.preprocessing.fill_imputation_strategy:
-    time_features_strategy = {}
-    # pylint: disable=C0206
-    for prefix in imputation_strategy_features:
-        for feat in time_features:
-            if feat.startswith(prefix):
-                time_features_strategy[feat] = imputation_strategy_features[prefix]
-    time_computations.extend(
-        sf_datalake.transform.MissingValuesHandler(
-            inputCols=features,
-            strategy=strategy,
-        )
-        for strategy, features in time_features_strategy.items()
-    )
+values = configuration.preprocessing.fill_default_values
+bfilled_features_values: Dict[str, Any] = {}
+# pylint: disable=not-an-iterable
+for prefix in values:
+    for feat in bfilled_features:
+        if feat.startswith(prefix):
+            bfilled_features_values[feat] = values[prefix]
+time_computations.append(
+    sf_datalake.transform.MissingValuesHandler(
+        inputCols=list(bfilled_features_values),
+        value=bfilled_features_values,
+    ),
+)
 
 
 df = PipelineModel(

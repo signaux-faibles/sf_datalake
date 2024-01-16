@@ -1,8 +1,8 @@
 {
     "fill_default_values": {
         "paydex": 0,
-        "fpi_30": 0,
-        "fpi_90": 0,
+        "fpi_30": 0.0,
+        "fpi_90": 0.0,
         "cotisation": 0.0,
         "dette_sociale_ouvrière": 0.0,
         "dette_sociale_patronale": 0.0,
@@ -97,6 +97,12 @@
         "paydex": [
             "BinsOrdinalEncoder",
             "OneHotEncoder"
+        ],
+        "fpi_30": [
+            "StandardScaler"
+        ],
+        "fpi_90": [
+            "StandardScaler"
         ]
     },
     "ordinal_encoding_bins": {
@@ -156,7 +162,9 @@
             "dette_par_effectif"
         ],
         "retards_paiement": [
-            "paydex"
+            "paydex",
+            "fpi_30",
+            "fpi_90"
         ],
         "misc": [
             "effectif"
