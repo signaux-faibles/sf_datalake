@@ -164,6 +164,10 @@ prediction_data = pre_dataset.filter(
     == sf_datalake.utils.to_date(configuration.learning.prediction_date)
 )
 
+assert not train_data.isEmpty(), "Train dataset is empty."
+assert not test_data.isEmpty(), "Test dataset is empty."
+assert not prediction_data.isEmpty(), "Prediction dataset is empty."
+
 # Resample train dataset following requested classes balance
 resampler = sf_datalake.transform.RandomResampler(
     class_col=configuration.learning.target["class_col"],
