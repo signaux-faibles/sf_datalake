@@ -1,9 +1,10 @@
-"""Carry out some pre-processing over the "join" dataset.
+"""Carry out some pre-processing over the "joined" dataset.
 
 1) Manage Missing values
-2) Adds new columns to dataset by:
-- create target from judgment data;
-- computing averages, lags, etc. of existing variables.
+2) Adds new columns to dataset.
+- Target creation from judgment data.
+- Computation of averages, lags, etc. of existing variables.
+- Computation of some combinations of existing features.
 
 An output dataset will be stored as split orc files under the chosen output directory.
 
@@ -141,21 +142,21 @@ time_computations.append(
     )
 )
 
-# Fill missing values created by time computations
-
+# Fill missing values created during some of the above computations
 bfilled_features = features_diff_bfill + features_lag_bfill
+bfilled_default_values: Dict[str, Any] = {}
 
-values = configuration.preprocessing.fill_default_values
-bfilled_features_values: Dict[str, Any] = {}
-# pylint: disable=not-an-iterable
-for prefix in values:
-    for feat in bfilled_features:
-        if feat.startswith(prefix):
-            bfilled_features_values[feat] = values[prefix]
+for (
+    base_feat,
+    default_value,
+) in configuration.preprocessing.fill_default_values.items():
+    for bfilled_feat in bfilled_features:
+        if bfilled_feat.startswith(base_feat):
+            bfilled_default_values[bfilled_feat] = default_value
 time_computations.append(
     sf_datalake.transform.MissingValuesHandler(
-        inputCols=list(bfilled_features_values),
-        value=bfilled_features_values,
+        inputCols=bfilled_features,
+        value=bfilled_default_values,
     ),
 )
 
@@ -163,6 +164,7 @@ time_computations.append(
 df = PipelineModel(
     stages=labeling_step + missing_values_handling_steps + time_computations
 ).transform(df)
+
 ## Feature engineering based on time computations
 for n_months in configuration.preprocessing.time_aggregation.get("mean", {}).get(
     "cotisation", []
@@ -173,5 +175,5 @@ for n_months in configuration.preprocessing.time_aggregation.get("mean", {}).get
         / df[f"cotisation_mean{n_months}m"],
     )
 
-
+## Export
 sf_datalake.io.write_data(df, args.output, args.output_format)
