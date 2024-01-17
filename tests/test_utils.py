@@ -11,7 +11,7 @@ def df_merged_asof_365(spark):
     schema = T.StructType(
         [
             T.StructField("siren", T.StringType(), True),
-            T.StructField("periode", T.DateType(), True),
+            T.StructField("période", T.DateType(), True),
             T.StructField("ca", T.IntegerType(), True),
             T.StructField("category", T.StringType(), True),
             T.StructField("ebe_backward", T.IntegerType(), True),
@@ -52,7 +52,7 @@ def df_left(spark):
     schema_left = T.StructType(
         [
             T.StructField("siren", T.StringType(), True),
-            T.StructField("periode", T.DateType(), True),
+            T.StructField("période", T.DateType(), True),
             T.StructField("ca", T.IntegerType(), True),
             T.StructField("category", T.StringType(), True),
         ]
@@ -91,7 +91,7 @@ def df_right(spark):
     schema_right = T.StructType(
         [
             T.StructField("siren", T.StringType(), True),
-            T.StructField("periode", T.DateType(), True),
+            T.StructField("période", T.DateType(), True),
             T.StructField("ebe", T.IntegerType(), True),
         ]
     )
@@ -110,8 +110,8 @@ def df_right(spark):
 
 def test_merge_asof_backward(df_left, df_right, df_merged_asof_365):
     df = merge_asof(
-        df_left, df_right, on="periode", by="siren", tolerance=365, direction="backward"
-    ).orderBy(["siren", "periode"])
+        df_left, df_right, on="période", by="siren", tolerance=365, direction="backward"
+    ).orderBy(["siren", "période"])
     assert all(
         r["ebe"] == r_merge["ebe_backward"]
         for r, r_merge in zip(df.collect(), df_merged_asof_365.collect())
@@ -120,8 +120,8 @@ def test_merge_asof_backward(df_left, df_right, df_merged_asof_365):
 
 def test_merge_asof_forward(df_left, df_right, df_merged_asof_365):
     df = merge_asof(
-        df_left, df_right, on="periode", by="siren", tolerance=365, direction="forward"
-    ).orderBy(["siren", "periode"])
+        df_left, df_right, on="période", by="siren", tolerance=365, direction="forward"
+    ).orderBy(["siren", "période"])
     print(df.columns)
     assert all(
         r["ebe"] == r_merge["ebe_forward"]

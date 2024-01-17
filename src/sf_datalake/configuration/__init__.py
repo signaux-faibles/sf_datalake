@@ -86,7 +86,7 @@ class LearningConfiguration:
         default_factory=lambda: {
             "LogisticRegression": {
                 "regParam": 0.12,
-                "maxIter": 50,
+                "maxIter": 500,
                 "tol": 1e-05,
                 "standardization": False,
             },
@@ -136,15 +136,15 @@ class PreprocessingConfiguration:
     """
 
     identifiers: List[str] = dataclasses.field(
-        default_factory=lambda: ["siren", "periode"]
+        default_factory=lambda: ["siren", "période"]
     )
     siren_aggregation: Dict[str, str] = dataclasses.field(
         default_factory=lambda: {
             "cotisation": "sum",
-            "montant_part_ouvriere": "sum",
-            "montant_part_patronale": "sum",
+            "dette_sociale_ouvrière": "sum",
+            "dette_sociale_patronale": "sum",
             "effectif": "sum",
-            "apart_heures_consommees": "sum",
+            "ap_heures_consommées": "sum",
         }
     )
     # Time-series aggregates
@@ -360,6 +360,12 @@ class ConfigurationHelper:
 
         def is_scaler(name: str):
             return name in self.preprocessing.scalers_params
+
+        if not self.preprocessing.drop_missing_values:
+            raise NotImplementedError(
+                "VectorAssembler in spark < 2.4.0 doesn't handle including missing "
+                "values."
+            )
 
         # Iterate over each dataset variable, and prepare feature encoding and
         # normalizing pipeline steps.

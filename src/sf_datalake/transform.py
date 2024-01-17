@@ -277,13 +277,13 @@ class MissingValuesHandler(
             forward_window = (
                 Window()
                 .partitionBy("siren")
-                .orderBy(F.col("periode").asc())
+                .orderBy(F.col("période").asc())
                 .rowsBetween(Window.currentRow, Window.unboundedFollowing)
             )
             backward_window = (
                 Window()
                 .partitionBy("siren")
-                .orderBy(F.col("periode").asc())
+                .orderBy(F.col("période").asc())
                 .rowsBetween(Window.unboundedPreceding, Window.currentRow)
             )
             fill_window = forward_window if strategy == "bfill" else backward_window
@@ -535,7 +535,7 @@ class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
     def __init__(self, **kwargs):
         super().__init__()
         self._setDefault(
-            grouping_cols=["siren", "periode"],
+            grouping_cols=["siren", "période"],
             aggregation_map=None,
             no_aggregation=None,
         )
@@ -717,7 +717,7 @@ class MovingAverage(
             "ref_date", F.lit(self.getOrDefault("ref_date"))
         ).withColumn(
             "months_from_ref",
-            F.months_between("periode", "ref_date").cast(T.IntegerType()),
+            F.months_between("période", "ref_date").cast(T.IntegerType()),
         )
 
         time_windows = {
@@ -811,7 +811,7 @@ class LagOperator(
             "ref_date", F.lit(self.getOrDefault("ref_date"))
         ).withColumn(
             "months_from_ref",
-            F.months_between("periode", "ref_date").cast(T.IntegerType()),
+            F.months_between("période", "ref_date").cast(T.IntegerType()),
         )
 
         lag_window = (
@@ -955,7 +955,7 @@ class TargetVariable(
         return dataset.withColumn(
             self.getOrDefault("outputCol"),
             (
-                F.add_months(dataset["periode"], months=self.getOrDefault("n_months"))
+                F.add_months(dataset["période"], months=self.getOrDefault("n_months"))
                 <= dataset[self.getOrDefault("inputCol")]
             ).cast(
                 T.IntegerType()
@@ -1056,7 +1056,7 @@ class LinearInterpolationOperator(
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(id_cols="siren", time_col="periode", inputCols=None)
+        self._setDefault(id_cols="siren", time_col="période", inputCols=None)
         self.setParams(**kwargs)
 
     @keyword_only

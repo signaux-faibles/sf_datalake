@@ -18,7 +18,6 @@ import os
 import sys
 from os import path
 
-import pandas as pd
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark.ml import PipelineModel
@@ -27,9 +26,11 @@ from pyspark.sql.window import Window
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/site-packages/"))
-# isort: on
 
 # pylint: disable=C0413
+import pandas as pd
+
+# isort: on
 import sf_datalake.configuration
 import sf_datalake.io
 import sf_datalake.transform

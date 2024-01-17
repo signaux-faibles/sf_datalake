@@ -138,14 +138,14 @@ def tailoring_rule(df_sig: pd.DataFrame) -> pd.Series:
     )
     delta_alert_col += n_financial_signals.map({0: 0, 1: 0, 2: 1, 3: 2})
     delta_alert_col += (
-        df_sig["augmentation_dette_sur_cotisation_urssaf_recente"]
-        & ~df_sig["dette_urssaf_macro_preponderante"]
+        df_sig["augmentation_dette_sur_cotisation_urssaf_récente"]
+        & ~df_sig["dette_urssaf_macro_prépondérante"]
     )
     delta_alert_col -= (
         df_sig["diminution_dette_urssaf_ancienne"]
         & df_sig["dette_urssaf_ancienne_significative"]
     )
-    delta_alert_col += df_sig["demande_activite_partielle_elevee"]
+    delta_alert_col += df_sig["demande_activité_partielle_élevée"]
 
     return delta_alert_col.clip(lower=-1, upper=1)
 
@@ -188,7 +188,7 @@ additional_data = {
     "idListe": "Juin 2023",
     "batch": "2304",
     "algo": algo_name,
-    "periode": "2023-06-01T00:00:00Z",
+    "période": "2023-06-01T00:00:00Z",
 }
 
 # Load prediction lists
@@ -249,12 +249,12 @@ max_pu_days = ap_df.groupby("siren")["n_jours"].max()
 urssaf_df = pd.read_csv(
     args.urssaf_tailoring_data,
     dtype={"siren": str},
-    parse_dates=["periode"],
+    parse_dates=["période"],
 ).set_index("siren")
 urssaf_df["dette"] = (
-    urssaf_df["montant_part_patronale"] + urssaf_df["montant_part_ouvriere"]
+    urssaf_df["dette_sociale_patronale"] + urssaf_df["dette_sociale_ouvrière"]
 )
-assert hasattr(urssaf_df["periode"], "dt")
+assert hasattr(urssaf_df["période"], "dt")
 
 # Financial tailoring
 financial_df = pd.read_csv(
@@ -263,13 +263,13 @@ financial_df = pd.read_csv(
 ).set_index("siren")
 
 # Masks
-old_debt_mask = urssaf_df["periode"].between(
+old_debt_mask = urssaf_df["période"].between(
     pd.Timestamp("2020-01-01"), pd.Timestamp("2021-09-01")
 )
-after_old_debt_mask = urssaf_df["periode"] >= pd.Timestamp("2021-09-01")
+after_old_debt_mask = urssaf_df["période"] >= pd.Timestamp("2021-09-01")
 recent_period_start = pd.Timestamp("2022-09-01")
 recent_period_end = pd.Timestamp("2022-12-01")
-one_year_schedule_mask = urssaf_df["periode"].between(
+one_year_schedule_mask = urssaf_df["période"].between(
     pd.Timestamp("2020-09-01"), pd.Timestamp("2021-08-31")
 )
 
@@ -297,14 +297,14 @@ tailoring_signals = {
             > 0.1
         },
     ),
-    "augmentation_dette_sur_cotisation_urssaf_recente": (
+    "augmentation_dette_sur_cotisation_urssaf_récente": (
         identity,
         {
             "sig": (
-                urssaf_df[urssaf_df["periode"] == recent_period_end][
+                urssaf_df[urssaf_df["période"] == recent_period_end][
                     "dette_sur_cotisation_lissée"
                 ]
-                - urssaf_df[urssaf_df["periode"] == recent_period_start][
+                - urssaf_df[urssaf_df["période"] == recent_period_start][
                     "dette_sur_cotisation_lissée"
                 ]
             )
@@ -313,14 +313,14 @@ tailoring_signals = {
             > 0.1
         },
     ),
-    "demande_activite_partielle_elevee": (
+    "demande_activité_partielle_élevée": (
         sf_datalake.predictions.high_partial_unemployment_request_indicator,
         {
             "pu_s": max_pu_days,
             "threshold": pd.Timedelta(args.pu_n_days, unit="day"),
         },
     ),
-    "dette_urssaf_macro_preponderante": (
+    "dette_urssaf_macro_prépondérante": (
         sf_datalake.predictions.urssaf_debt_prevails_indicator,
         {"macro_df": macro_explanation},
     ),
