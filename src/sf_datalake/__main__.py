@@ -78,6 +78,11 @@ parser.add_argument(
     help="The date over which prediction should be made (YYYY-MM-DD format).",
 )
 parser.add_argument(
+    "--model_name",
+    type=str,
+    help="Name of the required (spark class) model.",
+)
+parser.add_argument(
     "--sample_ratio",
     type=float,
     help="Loaded data sample size as a fraction of its full size.",
