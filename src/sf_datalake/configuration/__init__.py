@@ -86,7 +86,7 @@ class LearningConfiguration:
         default_factory=lambda: {
             "LogisticRegression": {
                 "regParam": 0.12,
-                "maxIter": 50,
+                "maxIter": 500,
                 "tol": 1e-05,
                 "standardization": False,
             },
