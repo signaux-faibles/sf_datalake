@@ -361,6 +361,12 @@ class ConfigurationHelper:
         def is_scaler(name: str):
             return name in self.preprocessing.scalers_params
 
+        if not self.preprocessing.drop_missing_values:
+            raise NotImplementedError(
+                "VectorAssembler in spark < 2.4.0 doesn't handle including missing "
+                "values."
+            )
+
         # Iterate over each dataset variable, and prepare feature encoding and
         # normalizing pipeline steps.
         for (
