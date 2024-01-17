@@ -95,7 +95,7 @@ class LearningConfiguration:
     features_column: str = "features"
 
     def get_model(self) -> Estimator:
-        # pylint: disable=missing-function-docstring, not-a-mapping
+        # pylint: disable=missing-function-docstring, not-a-mapping, no-member
         model_factory: Dict[str, Transformer] = {
             "LogisticRegression": LogisticRegression,
             "GBTClassifier": GBTClassifier,
@@ -104,7 +104,7 @@ class LearningConfiguration:
 
         return (
             model_factory[self.model_name]()
-            .setParams(**(self.model_params[self.model_name]))
+            .setParams(**(self.model_params.get(self.model_name, {})))
             .setFeaturesCol(self.features_column)
             .setLabelCol(self.target["class_col"])
         )
@@ -284,8 +284,7 @@ class ConfigurationHelper:
 
         # Duplicate config for time-aggregated variables.
         def add_time_aggregate_features(attribute: dict):
-            # pylint: disable=not-an-iterable
-            for operation in self.preprocessing.time_aggregation:
+            for operation in self.preprocessing.time_aggregation.keys():
                 for variable, n_months in self.preprocessing.time_aggregation[
                     operation
                 ].items():
