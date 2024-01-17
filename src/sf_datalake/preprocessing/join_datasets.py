@@ -159,14 +159,23 @@ df_ap = siren_normalizer.transform(datasets["ap"])
 df_effectif = siren_normalizer.transform(datasets["effectif"])
 
 # Join datasets
-joined_df = (
+monthly_df = (
     df_urssaf_debit.join(df_urssaf_cotisation, on=["siren", "période"], how="inner")
     .join(df_effectif, on=["siren", "période"], how="inner")
     .join(df_ap, on=["siren", "période"], how="left")
     .join(df_judgments, on="siren", how="left")
     .join(df_altares, on=["siren", "période"], how="left")
     .join(df_sirene_categories, on="siren", how="inner")
-    .join(df_dgfip_yearly, on=["siren", "période"], how="inner")
+)
+
+# Join monthly dataset with yearly dataset
+joined_df = sf_datalake.utils.merge_asof(
+    monthly_df,
+    df_dgfip_yearly,
+    on="période",
+    by="siren",
+    tolerance=365,
+    direction="backward",
 )
 
 output_df = joined_df.join(
