@@ -78,6 +78,11 @@ parser.add_argument(
     help="The date over which prediction should be made (YYYY-MM-DD format).",
 )
 parser.add_argument(
+    "--model_name",
+    type=str,
+    help="Name of the required (spark class) model.",
+)
+parser.add_argument(
     "--sample_ratio",
     type=float,
     help="Loaded data sample size as a fraction of its full size.",
@@ -190,18 +195,24 @@ if isinstance(classifier_model, pyspark.ml.classification.LogisticRegressionMode
     logging.info("Model weights: %.3f", classifier_model.coefficients)
     logging.info("Model intercept: %.3f", classifier_model.intercept)
 
-# Get features names
+# Retrieve features names
+def is_scaler_col(x: str) -> bool:
+    """Tests if column name starts with a known scaler name."""
+    # pylint:disable=not-an-iterable
+    return any(
+        x == f"{scaler_name}_input"
+        for scaler_name in configuration.preprocessing.scalers_params
+    )
+
+
 model_features: List[str] = sf_datalake.utils.extract_column_names(
     pre_dataset, configuration.learning.features_column
 )
-
-for scaler in list(configuration.preprocessing.scalers_params):
-    scaler_columns = sf_datalake.utils.extract_column_names(
-        pre_dataset, f"{scaler}_input"
-    )
+for scaler_col in filter(is_scaler_col, pre_dataset.columns):
+    inner_columns = sf_datalake.utils.extract_column_names(pre_dataset, scaler_col)
     for i, col in enumerate(model_features):
-        if col.startswith(scaler):
-            model_features[i] = scaler_columns[int(col.split("_")[-1])]
+        if col.startswith(scaler_col.split("_")[0]):
+            model_features[i] = inner_columns[int(col.split("_")[-1])]
 
 # Compute predictions explanation
 shap_values, expected_value = sf_datalake.explain.explanation_data(
