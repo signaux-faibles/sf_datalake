@@ -50,9 +50,7 @@
         "ap_heures_consommées": [],
         "dette_sur_cotisation_mean12m": [],
         "dette_par_effectif": [],
-        "paydex": [
-            "BinsOrdinalEncoder"
-        ],
+        "paydex": [],
         "fpi_30": [],
         "fpi_90": []
     },
