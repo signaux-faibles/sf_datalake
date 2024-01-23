@@ -131,6 +131,12 @@
         "mean": {
             "cotisation": [
                 12
+            ],
+            "dette_sociale_ouvrière": [
+                12
+            ],
+            "dette_sociale_patronale": [
+                12
             ]
         },
         "lag": {
