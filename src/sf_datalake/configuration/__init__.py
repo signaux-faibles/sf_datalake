@@ -90,6 +90,10 @@ class LearningConfiguration:
                 "tol": 1e-05,
                 "standardization": False,
             },
+            "RandomForestClassifier": {
+                "maxDepth": 9,
+                "numTrees": 100,
+            },
         }
     )
     features_column: str = "features"
