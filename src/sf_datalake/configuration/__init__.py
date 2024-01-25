@@ -74,7 +74,7 @@ class LearningConfiguration:
             "class_col": "failure",
             "n_months": 18,
             "judgment_date_col": "date_jugement",
-            "target_resampling_ratio": 0.35,
+            "target_resampling_ratio": 0.5,
             "resampling_method": "oversampling",
         }
     )
