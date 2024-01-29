@@ -129,13 +129,114 @@
             ]
         },
         "mean": {
+            "paydex": [
+                3,
+                6,
+                12
+            ],
             "cotisation": [
+                3,
+                6,
                 12
             ],
             "dette_sociale_ouvrière": [
+                3,
+                6,
                 12
             ],
             "dette_sociale_patronale": [
+                3,
+                6,
+                12
+            ],
+            "ap_heures_consommées": [
+                3,
+                6,
+                12
+            ],
+            "dette_par_effectif": [
+                3,
+                6,
+                12
+            ],
+            "effectif": [
+                3,
+                6,
+                12
+            ],
+            "dette_nette_sur_caf": [
+                3,
+                6,
+                12
+            ],
+            "dette_à_terme_sur_k_propres": [
+                3,
+                6,
+                12
+            ],
+            "ebe_sur_ca": [
+                3,
+                6,
+                12
+            ],
+            "va_sur_effectif": [
+                3,
+                6,
+                12
+            ],
+            "charges_personnel_sur_va": [
+                3,
+                6,
+                12
+            ],
+            "stocks_sur_ca": [
+                3,
+                6,
+                12
+            ],
+            "liquidité_absolue": [
+                3,
+                6,
+                12
+            ],
+            "liquidité_générale": [
+                3,
+                6,
+                12
+            ],
+            "liquidité_réduite": [
+                3,
+                6,
+                12
+            ],
+            "délai_paiement_sur_délai_encaissement": [
+                3,
+                6,
+                12
+            ],
+            "k_propres_sur_k_social": [
+                3,
+                6,
+                12
+            ],
+            "bfr_sur_k_propres": [
+                3,
+                6,
+                12
+            ],
+            "taux_investissement": [
+                3,
+                6,
+                12
+            ],
+            "rentabilité_économique": [
+                3,
+                6,
+                12
+            ],
+            "solidité_financière": [
+                3,
+                6,
                 12
             ]
         },
