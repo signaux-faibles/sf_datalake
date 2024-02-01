@@ -956,7 +956,7 @@ class TargetVariable(
             self.getOrDefault("outputCol"),
             (
                 F.add_months(dataset["période"], months=self.getOrDefault("n_months"))
-                <= dataset[self.getOrDefault("inputCol")]
+                >= dataset[self.getOrDefault("inputCol")]
             ).cast(
                 T.IntegerType()
             ),  # Pyspark models except integer or floating labels.
