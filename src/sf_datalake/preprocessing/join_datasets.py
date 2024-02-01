@@ -28,6 +28,7 @@ import os
 import sys
 from os import path
 
+import pyspark.sql.functions as F
 import pyspark.sql.types as T
 
 # isort: off
@@ -157,6 +158,11 @@ df_sirene_dates = siren_normalizer.transform(datasets["sirene_dates"]).fillna(
 )
 df_ap = siren_normalizer.transform(datasets["ap"])
 df_effectif = siren_normalizer.transform(datasets["effectif"])
+
+# Only keep companies that have had a workforce of at least 10 for some time.
+max_wf_by_siren = df_effectif.groupBy("siren").max("effectif")
+wf_mask = max_wf_by_siren.filter(F.col("max(effectif)") >= 10)
+df_effectif = df_effectif.join(wf_mask, on="siren", how="left_semi")
 
 # Join datasets
 monthly_df = (
