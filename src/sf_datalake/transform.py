@@ -1005,28 +1005,6 @@ class HasPaydexFilter(Transformer):  # pylint: disable=too-few-public-methods
         )
 
 
-class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to filter the dataset according to workforce size."""
-
-    def _transform(  # pylint: disable=no-self-use
-        self, dataset: pyspark.sql.DataFrame
-    ) -> pyspark.sql.DataFrame:
-        """Filters out small companies
-
-        Only keeps companies with more than 10 employees.
-
-        Args:
-            dataset: DataFrame to filter.
-
-        Returns:
-            Filtered DataFrame.
-
-        """
-        if "effectif" not in dataset.columns:
-            raise KeyError("Dataset has no 'effectif' column.")
-        return dataset.filter(F.col("effectif") >= 10)
-
-
 class LinearInterpolationOperator(
     Transformer, HasInputCols
 ):  # pylint: disable=too-few-public-methods,protected-access
