@@ -30,7 +30,6 @@ from os import path
 
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
-from pyspark.sql.types import StringType, StructField, StructType
 
 # isort: off
 sys.path.append(path.join(os.getcwd(), "venv/lib/python3.6/"))
@@ -140,7 +139,7 @@ effectif_schema = T.StructType(
         T.StructField("effectif", T.IntegerType(), True),
     ]
 )
-perimeter_schema = StructType([StructField("siren", StringType(), False)])
+perimeter_schema = T.StructType([T.StructField("siren", T.StringType(), False)])
 
 datasets["sirene_categories"] = spark.read.csv(
     args.sirene_categories, header=True, schema=sirene_categories_schema
@@ -198,9 +197,7 @@ if args.perimeter is not None:
         header=True,
         schema=perimeter_schema,
     )
-    joined_df = joined_df.join(
-        siren_perimeter, siren_perimeter, on="siren", how="left_semi"
-    )
+    joined_df = joined_df.join(siren_perimeter, on="siren", how="left_semi")
 
 output_df = joined_df.join(
     df_sirene_dates,
