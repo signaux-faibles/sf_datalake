@@ -113,9 +113,11 @@ w = (
     .rangeBetween(Window.unboundedPreceding, Window.unboundedFollowing)
 )
 
-# We take the last value of contribution an each debt variable, as ordered by
+# We take the last value associated to each debt variable, as ordered by
 # "numéro_historique_écart_négatif", which precisely indicates the last known value up
-# to date for each "numéro_écart_négatif"-indexed debt. It is renamed to reflect this.
+# to date for each "numéro_écart_négatif"-indexed debt. The highest value of
+# "numéro_historique_écart_négatif" over a given "période_cotisation" time frame is
+# aliased as "indicateur_dernier_traitement" to reflect this.
 debit_par_compte = debit.select(
     [
         "siren",
