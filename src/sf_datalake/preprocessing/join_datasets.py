@@ -87,6 +87,11 @@ parser.add_argument(
     help="Path to the DGFiP yearly dataset.",
 )
 parser.add_argument(
+    "--perimeter",
+    help="Path to the SIREN perimeter data.",
+    required=False,
+)
+parser.add_argument(
     "--output_path",
     help="Output dataset directory path.",
 )
@@ -134,6 +139,8 @@ effectif_schema = T.StructType(
         T.StructField("effectif", T.IntegerType(), True),
     ]
 )
+perimeter_schema = T.StructType([T.StructField("siren", T.StringType(), False)])
+
 datasets["sirene_categories"] = spark.read.csv(
     args.sirene_categories, header=True, schema=sirene_categories_schema
 )
@@ -143,7 +150,6 @@ datasets["sirene_dates"] = spark.read.csv(
 datasets["effectif"] = spark.read.csv(
     args.effectif, header=True, schema=effectif_schema
 )
-
 
 # Prepare datasets
 siren_normalizer = sf_datalake.transform.IdentifierNormalizer(inputCol="siren")
@@ -183,6 +189,15 @@ joined_df = sf_datalake.utils.merge_asof(
     tolerance=365,
     direction="backward",
 )
+
+# Filter dataset to perimeter (if provided), and known activity dates
+if args.perimeter is not None:
+    siren_perimeter = spark.read.csv(
+        args.perimeter,
+        header=True,
+        schema=perimeter_schema,
+    )
+    joined_df = joined_df.join(siren_perimeter, on="siren", how="left_semi")
 
 output_df = joined_df.join(
     df_sirene_dates,
