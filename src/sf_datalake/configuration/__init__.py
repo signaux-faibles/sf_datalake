@@ -90,6 +90,17 @@ class LearningConfiguration:
                 "tol": 1e-05,
                 "standardization": False,
             },
+            "RandomForestClassifier": {
+                "maxDepth": 9,
+                "numTrees": 100,
+            },
+            "GBTClassifier": {
+                "maxDepth": 3,
+                "maxIter": 100,
+                "maxBins": 255,
+                "minInstancesPerNode": 1,
+                "stepSize": 0.025,  # Learning rate
+            },
         }
     )
     features_column: str = "features"
