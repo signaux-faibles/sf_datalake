@@ -172,7 +172,7 @@ df_effectif = df_effectif.join(wf_mask, on="siren", how="left_semi")
 
 # Join datasets
 monthly_df = (
-    df_urssaf_cotisation(df_urssaf_debit.join, on=["siren", "période"], how="left")
+    df_urssaf_cotisation.join(df_urssaf_debit, on=["siren", "période"], how="left")
     .join(df_effectif, on=["siren", "période"], how="inner")
     .join(df_ap, on=["siren", "période"], how="left")
     .join(df_judgments, on="siren", how="left")
