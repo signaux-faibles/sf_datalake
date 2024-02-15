@@ -18,8 +18,8 @@ from tests.conftest import MockDataFrameGenerator
 def siren_padding_df(spark):
     schema = T.StructType(
         [
-            T.StructField("siren", T.IntegerType(), True),
-            T.StructField("padded_siren", T.StringType(), True),
+            T.StructField("siren", T.IntegerType(), False),
+            T.StructField("padded_siren", T.StringType(), False),
         ]
     )
     df = spark.createDataFrame(
@@ -33,8 +33,8 @@ def siren_padding_df(spark):
 def parsed_date_df(spark):
     schema = T.StructType(
         [
-            T.StructField("raw_date", T.StringType(), True),
-            T.StructField("ref_date", T.DateType(), True),
+            T.StructField("raw_date", T.StringType(), False),
+            T.StructField("ref_date", T.DateType(), False),
         ]
     )
 

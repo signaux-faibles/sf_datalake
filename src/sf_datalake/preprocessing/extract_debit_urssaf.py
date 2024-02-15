@@ -65,10 +65,10 @@ debit_schema = T.StructType(
         T.StructField("dette_sociale_patronale", T.DoubleType(), True),
         T.StructField("numéro_historique_écart_négatif", T.ShortType(), True),
         T.StructField("état_compte", T.IntegerType(), True),
-        T.StructField("code_procedure_collective", T.ByteType(), True),
+        T.StructField("code_procédure_collective", T.ByteType(), True),
         T.StructField("période_cotisation", T.StringType(), True),
-        T.StructField("code_operation_ecart_negatif", T.ByteType(), True),
-        T.StructField("code_motif_ecart_negatif", T.ByteType(), True),
+        T.StructField("code_opération_écart_négatif", T.ByteType(), True),
+        T.StructField("code_motif_écart_négatif", T.ByteType(), True),
         T.StructField("recours", T.StringType(), True),
     ]
 )
