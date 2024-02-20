@@ -125,7 +125,7 @@ sirene_dates_schema = T.StructType(
 sirene_categories_schema = T.StructType(
     [
         T.StructField("siren", T.StringType(), False),
-        T.StructField("siret", T.StringType(), False),
+        T.StructField("siret", T.StringType(), True),
         T.StructField("code_commune", T.StringType(), True),
         T.StructField("code_naf", T.StringType(), True),
         T.StructField("région", T.StringType(), True),
@@ -135,7 +135,7 @@ sirene_categories_schema = T.StructType(
 effectif_schema = T.StructType(
     [
         T.StructField("siren", T.StringType(), False),
-        T.StructField("période", T.DateType(), True),
+        T.StructField("période", T.DateType(), False),
         T.StructField("effectif", T.IntegerType(), True),
     ]
 )

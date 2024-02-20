@@ -10,8 +10,8 @@ from sf_datalake.utils import merge_asof
 def df_merged_asof_365(spark):
     schema = T.StructType(
         [
-            T.StructField("siren", T.StringType(), True),
-            T.StructField("période", T.DateType(), True),
+            T.StructField("siren", T.StringType(), False),
+            T.StructField("période", T.DateType(), False),
             T.StructField("ca", T.IntegerType(), True),
             T.StructField("category", T.StringType(), True),
             T.StructField("ebe_backward", T.IntegerType(), True),
@@ -51,8 +51,8 @@ def df_merged_asof_365(spark):
 def df_left(spark):
     schema_left = T.StructType(
         [
-            T.StructField("siren", T.StringType(), True),
-            T.StructField("période", T.DateType(), True),
+            T.StructField("siren", T.StringType(), False),
+            T.StructField("période", T.DateType(), False),
             T.StructField("ca", T.IntegerType(), True),
             T.StructField("category", T.StringType(), True),
         ]
@@ -90,8 +90,8 @@ def df_left(spark):
 def df_right(spark):
     schema_right = T.StructType(
         [
-            T.StructField("siren", T.StringType(), True),
-            T.StructField("période", T.DateType(), True),
+            T.StructField("siren", T.StringType(), False),
+            T.StructField("période", T.DateType(), False),
             T.StructField("ebe", T.IntegerType(), True),
         ]
     )

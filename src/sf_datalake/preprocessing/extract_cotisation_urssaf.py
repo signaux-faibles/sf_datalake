@@ -57,7 +57,7 @@ cotisation_schema = T.StructType(
     [
         T.StructField("siret", T.StringType(), False),
         T.StructField("numéro_compte", T.StringType(), True),
-        T.StructField("fenêtre", T.StringType(), True),
+        T.StructField("fenêtre", T.StringType(), False),
         T.StructField("encaissé", T.DoubleType(), True),
         T.StructField("dû", T.DoubleType(), True),
     ]
