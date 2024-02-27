@@ -3,11 +3,7 @@
 
 This script produces a JSON document that can be used by the front-end component of the
 Signaux Faibles website to display info about selected companies. It requires data
-output by the prediction model, as well as tailoring data:
-- URSSAF debt / contributions data
-- partial unemployment data
-- financial data
-- ...
+output by the prediction model.
 
 See the command-line interface for more details on expected inputs.
 
@@ -15,7 +11,6 @@ See the command-line interface for more details on expected inputs.
 
 import argparse
 import json
-import sys
 from typing import Union
 
 import pandas as pd
@@ -72,28 +67,6 @@ path_group.add_argument(
     help="""Path to a csv file containing data associated with the most 'concerning'
     features (i.e., the ones with highest values) values.""",
 )
-path_group.add_argument(
-    "--urssaf_tailoring_data",
-    required=True,
-    help="Path to a csv containing required urssaf tailoring data.",
-)
-path_group.add_argument(
-    "--financial_tailoring_data",
-    required=True,
-    help="Path to a csv containing required financial tailoring data.",
-)
-path_group.add_argument(
-    "--pu_tailoring_data",
-    required=True,
-    help="Path to a csv containing required partial unemployment tailoring data.",
-)
-parser.add_argument(
-    "--pu_n_days",
-    help="""Number of months to consider as upper threshold for partial unemployment
-    tailoring.""",
-    type=int,
-    default=240,
-)
 parser.add_argument(
     "--concerning_threshold",
     default=None,
@@ -107,47 +80,6 @@ parser.add_argument(
     help="Name of the algorithm that produced the prediction",
     default=None,
 )
-
-
-def tailoring_rule(df_sig: pd.DataFrame) -> pd.Series:
-    """Details how predictions should evolve based on tailorings.
-
-    The tailoring rule will return the DataFrame with a supplementary int column
-    having -1, 0, or 1 value that describes alert level evolution based on the truth
-    values of some of the input's given elements.
-
-    Args:
-        df_sig: A DataFrame with tailoring signal columns.
-
-    Returns:
-        A delta alert column column holding either -1, 0, or 1, respectively
-        corresponding to decrease, no change, increase of the alert level.
-
-    """
-    delta_alert_col = pd.Series(0, index=df_sig.index, dtype=int)
-    n_financial_signals = (
-        df_sig[
-            [
-                "solvabilité_faible",
-                "k_propres_négatifs",
-                "rentabilité_faible",
-            ]
-        ]
-        .sum(axis=1)
-        .astype(int)
-    )
-    delta_alert_col += n_financial_signals.map({0: 0, 1: 0, 2: 1, 3: 2})
-    delta_alert_col += (
-        df_sig["augmentation_dette_sur_cotisation_urssaf_récente"]
-        & ~df_sig["dette_urssaf_macro_prépondérante"]
-    )
-    delta_alert_col -= (
-        df_sig["diminution_dette_urssaf_ancienne"]
-        & df_sig["dette_urssaf_ancienne_significative"]
-    )
-    delta_alert_col += df_sig["demande_activité_partielle_élevée"]
-
-    return delta_alert_col.clip(lower=-1, upper=1)
 
 
 def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
@@ -230,133 +162,16 @@ score_threshold = sf_datalake.evaluation.optimal_beta_thresholds(
 )
 
 # Create encoded alert groups
-prediction_set["pre_tailoring_alert_group"] = prediction_set["probability"].apply(
+prediction_set["alert_group"] = prediction_set["probability"].apply(
     lambda x: 2 - (x < score_threshold[0.5]) - (x < score_threshold[2])
 )
-
-### A posteriori alert tailoring
-
-# Partial unemployment
-ap_df = pd.read_csv(
-    args.pu_tailoring_data, index_col="ETAB_SIRET", dtype={"ETAB_SIREN": "str"}
-)
-ap_df.index = normalize_siret(ap_df.index)
-ap_df["siren"] = ap_df.index.str[:9]
-ap_df["n_jours"] = pd.to_timedelta(ap_df["n_jours"])
-max_pu_days = ap_df.groupby("siren")["n_jours"].max()
-
-# Urssaf tailoring
-urssaf_df = pd.read_csv(
-    args.urssaf_tailoring_data,
-    dtype={"siren": str},
-    parse_dates=["période"],
-).set_index("siren")
-urssaf_df["dette"] = (
-    urssaf_df["dette_sociale_patronale"] + urssaf_df["dette_sociale_ouvrière"]
-)
-assert hasattr(urssaf_df["période"], "dt")
-
-# Financial tailoring
-financial_df = pd.read_csv(
-    args.financial_tailoring_data,
-    dtype={"siren": str},
-).set_index("siren")
-
-# Masks
-old_debt_mask = urssaf_df["période"].between(
-    pd.Timestamp("2020-01-01"), pd.Timestamp("2021-09-01")
-)
-after_old_debt_mask = urssaf_df["période"] >= pd.Timestamp("2021-09-01")
-recent_period_start = pd.Timestamp("2022-09-01")
-recent_period_end = pd.Timestamp("2022-12-01")
-one_year_schedule_mask = urssaf_df["période"].between(
-    pd.Timestamp("2020-09-01"), pd.Timestamp("2021-08-31")
-)
-
-### Apply tailoring
-tailoring_signals = {
-    "solvabilité_faible": (identity, {"sig": financial_df["solvabilité_faible"]}),
-    "k_propres_négatifs": (identity, {"sig": financial_df["k_propres_neg"]}),
-    "rentabilité_faible": (identity, {"sig": financial_df["rentabilité_faible"]}),
-    "diminution_dette_urssaf_ancienne": (
-        sf_datalake.predictions.urssaf_debt_decrease_indicator,
-        {
-            "debt_p1": urssaf_df[old_debt_mask]["dette"],
-            "debt_p2": urssaf_df[after_old_debt_mask]["dette"],
-            "thresh": 0.1,
-        },
-    ),
-    "dette_urssaf_ancienne_significative": (
-        identity,
-        {
-            "sig": urssaf_df[one_year_schedule_mask]
-            .groupby("siren")["dette_sur_cotisation_lissée"]
-            .max()
-            * 1
-            / 12
-            > 0.1
-        },
-    ),
-    "augmentation_dette_sur_cotisation_urssaf_récente": (
-        identity,
-        {
-            "sig": (
-                urssaf_df[urssaf_df["période"] == recent_period_end][
-                    "dette_sur_cotisation_lissée"
-                ]
-                - urssaf_df[urssaf_df["période"] == recent_period_start][
-                    "dette_sur_cotisation_lissée"
-                ]
-            )
-            * 1
-            / 12
-            > 0.1
-        },
-    ),
-    "demande_activité_partielle_élevée": (
-        sf_datalake.predictions.high_partial_unemployment_request_indicator,
-        {
-            "pu_s": max_pu_days,
-            "threshold": pd.Timedelta(args.pu_n_days, unit="day"),
-        },
-    ),
-    "dette_urssaf_macro_prépondérante": (
-        sf_datalake.predictions.urssaf_debt_prevails_indicator,
-        {"macro_df": macro_explanation},
-    ),
-}
-
-prediction_set = sf_datalake.predictions.compute_tailoring_signals(
-    prediction_set,
-    tailoring_signals,
-)
-
-## Export raw
-if args.export_raw:
-    prediction_set.to_csv(args.output_file)
-    sys.exit()
-
-# Fill missing values with False, we lose this information afterwards
-prediction_set = prediction_set.fillna(
-    value={col: 0 for col in tailoring_signals}
-).astype({col: bool for col in tailoring_signals})
-prediction_set = sf_datalake.predictions.tailor_alert(
-    prediction_set,
-    pre_tailoring_alert_col="pre_tailoring_alert_group",
-    post_tailoring_alert_col="post_tailoring_alert_group",
-    tailoring_function=tailoring_rule,
-)
-
 
 # Decode alert groups
 alert_categories = pd.CategoricalDtype(
     categories=["Pas d'alerte", "Alerte seuil F2", "Alerte seuil F1"], ordered=True
 )
-prediction_set["alertPreRedressements"] = pd.Categorical.from_codes(
-    codes=prediction_set["pre_tailoring_alert_group"], dtype=alert_categories
-)
 prediction_set["alert"] = pd.Categorical.from_codes(
-    codes=prediction_set["post_tailoring_alert_group"], dtype=alert_categories
+    codes=prediction_set["alert_group"], dtype=alert_categories
 )
 
 ## Score explanation per categories
@@ -377,14 +192,11 @@ for field, value in additional_data.items():
     prediction_set[field] = value
 
 output_entries = prediction_set.drop(
-    list(tailoring_signals.keys())
-    + ["pre_tailoring_alert_group", "post_tailoring_alert_group"],
+    ["alert_group"],
     axis="columns",
 ).to_dict(orient="index")
 
-for siren in prediction_set[
-    prediction_set["alertPreRedressements"] != "Pas d'alerte"
-].index:
+for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
     output_entries[siren].update(
         {
             "macroRadar": macro_explanation.loc[siren].to_dict(),
@@ -397,16 +209,6 @@ for siren in prediction_set[
                 ]
             },
         }
-    )
-for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
-    output_entries[siren].update(
-        {
-            "redressements": [
-                signal
-                for signal in tailoring_signals
-                if prediction_set.loc[siren, signal]
-            ],
-        },
     )
 
 
