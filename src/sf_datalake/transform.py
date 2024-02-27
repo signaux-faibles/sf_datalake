@@ -70,9 +70,9 @@ class DateParser(
     initial string format should be specified using a datetime pattern.
 
     Args:
-        inputCol: The column containing data to be parsed.
-        outputCol: The output column to be created.
-        format: The input column datetime format. Defaults to "yyyyMMdd".
+        inputCol (str): The column containing data to be parsed.
+        outputCol (str): The output column to be created.
+        format (str): The input column datetime format. Defaults to "yyyyMMdd".
 
     """
 
@@ -90,14 +90,7 @@ class DateParser(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCol: The column containing data to be parsed.
-            outputCol: The output column to be created.
-            format: The input column datetime format. Defaults to "yyyyMMdd".
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -149,16 +142,7 @@ class BinsOrdinalEncoder(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCol (str): The variable to be encoded.
-            bins (list): A list of bins, with adjacent and increasing values, e.g.:
-              `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will be cast to
-              floats.
-            outputCol (str): The ordinal encoded column name.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -199,12 +183,11 @@ class MissingValuesHandler(
     `n/2`th sample.
 
     Args:
-        inputCols: The input dataset columns to consider for filling.
-        value: Value to replace null values with. It must be a mapping from column name
-          (string) to replacement value. The replacement value must be an int, float,
-          boolean, or string.
-        strategy: For statistical imputation, use : 'mean', 'median' or 'mode'. For
-          forward / backward filling use 'ffill'/'bfill'
+        inputCols (list[str]): The input dataset columns to consider for filling.
+        value (dict): Value to replace null values with. It must be a mapping from
+          column name to replacement value. If None, stat imputation is applied.
+        strategy (str): For statistical imputation, use : 'mean', 'median' or
+          'mode'. For forward / backward filling use 'ffill'/'bfill'
 
     """
 
@@ -227,15 +210,7 @@ class MissingValuesHandler(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCols (list[str]): The input dataset columns to consider for filling.
-            value (dict): Value to replace null values with. It must be a mapping from
-              column name to replacement value. If None, stat imputation is applied.
-            strategy (str): For statistical imputation, use : 'mean', 'median' or
-              'mode'. For forward / backward filling use 'ffill'/'bfill'
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -328,8 +303,9 @@ class MissingValuesDropper(
     containing at least one missing value found among `inputCols` will be dropped.
 
     Args:
-        inputCols: The input dataset columns to consider for dropping.
-        ignore_type: Ignore any inputCol if its type is found inside ignore_type.
+        inputCols (list[str]): The input dataset columns to consider for dropping.
+        ignore_type (tuple[str]): Ignore any inputCol if its type is found inside
+          ignore_type.
 
     """
 
@@ -355,14 +331,7 @@ class MissingValuesDropper(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCols (list[str]): The input dataset columns to consider for dropping.
-            ignore_type (tuple[str]): Ignore any inputCol if its type is found inside
-              ignore_type.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -425,14 +394,7 @@ class IdentifierNormalizer(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this IdentifierNormalizer.
-
-        Args:
-            inputCol: The column containing SIRENs to normalize. Default to "siren".
-            n_pad: Length of string to be zero-padded. A SIREN is 9 characters long,
-              while a SIRET is 14 characters long.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -480,13 +442,7 @@ class SiretToSiren(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this SiretToSiren.
-
-        Args:
-            inputCol: The column containing SIRET values. Default to "siret".
-            outputCol: The column containing SIREN values. Default to "siren".
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -513,7 +469,16 @@ class SiretToSiren(
 
 
 class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to aggregate data at a SIREN level."""
+    """A transformer to aggregate data at a SIREN level.
+
+    Args:
+        grouping_cols (list[str]): A list of columns to groupby before aggregation.
+        aggregation_map (dict[str, str]): A mapping between variables names and
+          aggregation operation.
+        no_aggregation (list[str]): A list of columns that should not be aggregated
+          but should be preserved in the output.
+
+    """
 
     grouping_cols = Param(
         Params._dummy(),  # pylint: disable=protected-access
@@ -543,16 +508,7 @@ class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this SiretToSiren.
-
-        Args:
-            grouping_cols (list[str]): A list of columns to groupby before aggregation.
-            aggregation_map (dict[str, str]): A mapping between variables names and
-              aggregation operation.
-            no_aggregation (list[str]): A list of columns that should not be aggregated
-              but should be preserved in the output.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -618,14 +574,7 @@ class TimeNormalizer(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this TimeNormalizer.
-
-        Args:
-            inputCols: A list of the columns that will be normalized.
-            start: The columns that holds start dates of periods.
-            end: The columns that holds end dates of periods.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -655,8 +604,8 @@ class MovingAverage(
     """A transformer that computes moving averages of time-series variables.
 
     Args:
-        inputCol: The column that will be averaged.
-        n_months: Number of months over which the average is computed.
+        inputCol (str): The column that will be averaged.
+        n_months (int or list): Number of months over which the average is computed.
 
     """
 
@@ -679,13 +628,7 @@ class MovingAverage(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this MovingAverage transformer.
-
-        Args:
-            inputCol (str): The column that will be averaged.
-            n_months (int or list): Number of months over which the average is computed.
-
-        """
+        """Set parameters for this MovingAverage transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -702,7 +645,7 @@ class MovingAverage(
 
         Returns:
             DataFrame with new "var_mean[n]m" columns, where [n] is a number of months
-            over which `var`'s average is computed.
+              over which `var`'s average is computed.
 
         """
         n_months = self.getOrDefault("n_months")
@@ -772,13 +715,7 @@ class LagOperator(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this LagOperator transformer.
-
-        Args:
-            inputCol (str): The column that will be used to derive lagged variables.
-            n_months (int or list): Number of months that will be considered for lags.
-
-        """
+        """Set parameters for this LagOperator transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -836,8 +773,9 @@ class DiffOperator(
     variable is not found in the dataset.
 
     Args:
-        inputCol: The column that will be used to derive the diff.
-        n_months: Number of months that will be considered for the difference.
+        inputCol (str): The column that will be used to derive the diff.
+        n_months (int or list): Number of months that will be considered for the
+          difference.
 
     """
 
@@ -858,13 +796,7 @@ class DiffOperator(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this LagOperator transformer.
-
-        Args:
-            inputCol (str): The column that will be used to derive lagged variables.
-            n_months (int or list): Number of months that will be considered for lags.
-
-        """
+        """Set parameters for this LagOperator transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -914,7 +846,15 @@ class DiffOperator(
 class TargetVariable(
     Transformer, HasInputCol, HasOutputCol
 ):  # pylint: disable=too-few-public-methods, protected-access
-    """A transformer to compute the company failure target variable."""
+    """A transformer to compute the company failure target variable.
+
+    Args:
+        inputCol (str): The column that will be used to derive target. It should contain
+          the failure (judgment) date.
+        outputCol (str): The new target variable column.
+        n_months (int): Number of months that will be considered as target threshold.
+
+    """
 
     n_months = Param(
         Params._dummy(),
@@ -930,16 +870,7 @@ class TargetVariable(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCol (str): The column that will be used to derive target. It should
-              contain the failure (judgment) date.
-            outputCol (str): The new target variable column.
-            n_months (int): Number of months that will be considered as target
-              threshold.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame):
@@ -1013,10 +944,11 @@ class LinearInterpolationOperator(
     Data is grouped using the `id_cols` columns and ordered using the `time_col`, any
     null values gap between non-null values will be filled.
 
-    Args :
-        inputCols: Columns to filled.
-        id_cols: Entity index, along which the dataset will be partitioned.
-        time_col: Time index, used to sort the dataset.
+    Args:
+        inputCols (list[str]): Columns to fill.
+        id_cols (str or list[str]): Entity index, along which the dataset will be
+          partitioned.
+        time_col (str): Time index, used to sort the dataset.
 
     """
 
@@ -1039,15 +971,7 @@ class LinearInterpolationOperator(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCols (list[str]): Columns to fill.
-            id_cols (str or list[str]): Entity index, along which the dataset will be
-              partitioned.
-            time_col (str): Time index, used to sort the dataset.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -1141,11 +1065,11 @@ class RandomResampler(
     class samples are oversampled using random sampling with replacement.
 
     Args:
-        seed: Sampling random seed.
-        method: "undersampling" will delete majority class samples, while "oversampling"
-          will sample with replacement from minority class.
-        class_col: Class label column.
-        min_class_ratio: Requested (minority class / dataset size) ratio.
+        seed (int): Sampling random seed.
+        method (str): "undersampling" will delete majority class samples, while
+          "oversampling" will sample with replacement from minority class.
+        class_col (str): Class label column.
+        min_class_ratio (float): Requested (minority class / dataset size) ratio.
 
     """
 
@@ -1180,16 +1104,7 @@ class RandomResampler(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            seed (int): Sampling random seed.
-            method (str): "undersampling" will delete majority class samples, while
-              "oversampling" will sample with replacement from minority class.
-            class_col (str): Class label column.
-            min_class_ratio (float): Requested (minority class / dataset size) ratio.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(  # pylint:disable=too-many-locals
