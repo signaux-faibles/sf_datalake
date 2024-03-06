@@ -13,6 +13,7 @@ import argparse
 import json
 from typing import Union
 
+import importlib_metadata
 import pandas as pd
 
 import sf_datalake.configuration
@@ -70,12 +71,6 @@ parser.add_argument(
     help="""Threshold above which a `feature * weight` product is considered
     'concerning'.""",
 )
-parser.add_argument(
-    "--algo_name",
-    type=str,
-    help="Name of the algorithm that produced the prediction",
-    default=None,
-)
 
 
 def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
@@ -99,19 +94,11 @@ micro_macro = {
     for micro in micros
 }
 
-algo_name = args.algo_name
-if algo_name is None:
-    algo_name = (
-        "avec_paydex"
-        if "retards_paiement" in configuration.explanation.topic_groups.keys()
-        else "sans_paydex"
-    )
-
 additional_data = {
-    "idListe": "Juin 2023",
-    "batch": "2304",
-    "algo": algo_name,
-    "période": "2023-06-01T00:00:00Z",
+    "idListe": "Mars 2024",
+    "batch": "2403",
+    "algo": importlib_metadata.version("sf_datalake"),
+    "période": "2024-03-01T00:00:00Z",
 }
 
 # Load prediction lists
