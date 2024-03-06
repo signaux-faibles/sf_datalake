@@ -15,6 +15,7 @@ from typing import Union
 
 import pandas as pd
 
+import sf_datalake.configuration
 import sf_datalake.evaluation
 import sf_datalake.io
 import sf_datalake.predictions
@@ -52,11 +53,6 @@ path_group.add_argument(
     help="Generated output path.",
 )
 path_group.add_argument(
-    "--export_raw",
-    action="store_true",
-    help="Do not format as JSON. Only export raw data frame.",
-)
-path_group.add_argument(
     "--configuration",
     help="Path to the configuration file.",
     required=True,
@@ -90,11 +86,6 @@ def normalize_siren(x: Union[pd.Series, pd.Index]) -> pd.Series:
 def normalize_siret(x: Union[pd.Series, pd.Index]) -> pd.Series:
     """Left pad an iterable of SIRET with zeroes if needed."""
     return x.astype(str).str.zfill(13)
-
-
-def identity(sig):
-    """Dummy identity function."""
-    return sig
 
 
 # Parse CLI arguments, load predictions configuration and supplementary data
