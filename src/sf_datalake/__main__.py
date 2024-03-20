@@ -5,7 +5,6 @@ Processes datasets according to provided configuration to make predictions.
 # pylint: disable=unsubscriptable-object,wrong-import-position
 
 import argparse
-import logging
 import os
 import sys
 from os import path
@@ -191,12 +190,6 @@ classifier_model = classifier.fit(resampled_train_data)
 train_transformed = classifier_model.transform(resampled_train_data)
 test_transformed = classifier_model.transform(test_data)
 prediction_transformed = classifier_model.transform(prediction_data)
-
-
-# TODO: Update this for other models
-if isinstance(classifier_model, pyspark.ml.classification.LogisticRegressionModel):
-    logging.info("Model weights: %.3f", classifier_model.coefficients)
-    logging.info("Model intercept: %.3f", classifier_model.intercept)
 
 # Retrieve features names
 def is_scaler_col(x: str) -> bool:
