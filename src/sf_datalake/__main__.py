@@ -114,6 +114,9 @@ parser.add_argument(
     results.
     """,
 )
+parser.add_argument(
+    "--plot_type", choices=["radar", "waterfall"], help="Explanation plot type."
+)
 
 args = vars(parser.parse_args())
 
@@ -214,7 +217,8 @@ for scaler_col in filter(is_scaler_col, pre_dataset.columns):
         if col.startswith(scaler_col.split("_")[0]):
             model_features[i] = inner_columns[int(col.split("_")[-1])]
 
-# Compute predictions explanation
+## Predictions explanation
+# Compute explanations using shap
 shap_values, expected_value = sf_datalake.explain.explanation_data(
     model_features,
     configuration.learning.features_column,
@@ -228,6 +232,15 @@ macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
     configuration.explanation.topic_groups,
     configuration.explanation.n_concerning_micro,
 )
+
+# In a radar plot, we set each axis to [prediction set expectation] + topic group
+# shapley coefficient.
+#
+# We export the expected value as a macro score for the waterfall plot.
+if args.plot_type == "radar":
+    macro_scores.update((k, v + expected_value) for k, v in macro_scores.items())
+macro_scores["espérance"] = expected_value
+
 # Convert to [0, 1] range if shap values are expressed in log-odds units.
 if isinstance(
     classifier_model,

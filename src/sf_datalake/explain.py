@@ -86,7 +86,7 @@ def explanation_data(
 
     # Here tree-based models may output a list of two elements corresponding to the
     # two (complementary) classes. Weirdly enough, this seems to happen only with
-    # random forest or decision tree classifiers… Hence the `[1]` item getting.
+    # random forest or decision tree classifiers… Hence the `[1]` indexing.
     if isinstance(
         model,
         (
@@ -116,8 +116,7 @@ def explanation_scores(
 
     This computes individual, as well as aggregated, features contributions. The most
     significant contributions (in favor of a positive prediction) are returned as a
-    DataFrame containing concerning feature names and values. The number of concerning
-    features to be returned is read from configuration `N_CONCERNING_MICRO` field.
+    DataFrame containing concerning feature names and values.
 
     Contributions are first summed within feature groups:
     - at a "feature" scale: lagged variables and such, for a given feature.
@@ -127,7 +126,7 @@ def explanation_scores(
     Args:
         shap_df: The shap values associated with the features used for machine learning.
         topic_groups: A grouping of features, by major topic.
-        n_concerning: Number of most significant features.
+        n_concerning: Number of most significant features to return.
 
     Returns:
         A 2-uple containing:
