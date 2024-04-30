@@ -2,6 +2,7 @@
 
 Processes datasets according to provided configuration to make predictions.
 """
+
 # pylint: disable=unsubscriptable-object,wrong-import-position
 
 import argparse
@@ -114,7 +115,10 @@ parser.add_argument(
     """,
 )
 parser.add_argument(
-    "--plot_type", choices=["radar", "waterfall"], help="Explanation plot type."
+    "--plot_type",
+    choices=["radar", "waterfall"],
+    help="Explanation plot type.",
+    default="radar",
 )
 
 args = vars(parser.parse_args())
@@ -190,6 +194,7 @@ classifier_model = classifier.fit(resampled_train_data)
 train_transformed = classifier_model.transform(resampled_train_data)
 test_transformed = classifier_model.transform(test_data)
 prediction_transformed = classifier_model.transform(prediction_data)
+
 
 # Retrieve features names
 def is_scaler_col(x: str) -> bool:
