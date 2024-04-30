@@ -211,12 +211,14 @@ class ExplanationConfiguration:
           prediction) to extract during explanation
         topic_groups: Mapping from a topic to a list of features associated with this
           topic.
+        plot_type: Type of target UI explanation graph.
 
     """
 
     n_train_sample: int = 5000
     n_concerning_micro: int = 3
     topic_groups: Dict[str, List[str]] = None
+    plot_type: str = "radar"
 
 
 @dataclass
