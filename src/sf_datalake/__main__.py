@@ -118,7 +118,6 @@ parser.add_argument(
     "--plot_type",
     choices=["radar", "waterfall"],
     help="Explanation plot type.",
-    default="radar",
 )
 
 args = vars(parser.parse_args())
