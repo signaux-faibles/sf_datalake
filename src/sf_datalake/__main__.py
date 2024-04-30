@@ -234,7 +234,7 @@ macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
 # shapley coefficient.
 #
 # We export the expected value as a macro score for the waterfall plot.
-if args.plot_type == "radar":
+if configuration.explanation.plot_type == "radar":
     macro_scores.update((k, v + expected_value) for k, v in macro_scores.items())
 macro_scores["espérance"] = expected_value
 
