@@ -13,7 +13,7 @@ git clone https://forge.dgfip.finances.rie.gouv.fr/dge/signaux-faibles/sf_datala
 
 The virtual environment allows one to install specific version of python packages independantly without messing with the system installation.
 
-Create a python3 virtual environment
+Create a python 3.6.8 virtual environment. If your system python version is not 3.6.8 (check using python3 --version), you may use [pyenv](https://github.com/pyenv/pyenv) to manage multiple python versions at once.
 
 ``` shell
 virtualenv -p `which python3` <virtualenv_dir>
