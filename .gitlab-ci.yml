@@ -1,6 +1,6 @@
 variables:
   #REGISTRY_ROOT: "/home/cloudadm/.ci-python_packages"
-  REGISTRY_ROOT: "/home/fraphel-consultant01/.ci-python_packages"
+  REGISTRY_ROOT: "/home/gitlab-runner/.ci-python_packages"
   REGISTRY_KEY: "${CI_PIPELINE_ID}"
   REGISTRY: "${REGISTRY_ROOT}/${REGISTRY_KEY}"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
