@@ -331,6 +331,7 @@ print-python-env:
     - env | sort
     - pwd
     - whoami
+    - ls -al /
     - ls -al /packages
   when: manual
 
