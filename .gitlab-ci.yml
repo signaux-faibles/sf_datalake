@@ -134,8 +134,9 @@ venv_pack:
     - echo "REGISTRY = ${REGISTRY}"
     - echo "CI_PROJECT_DIR (PIP_CACHE_DIR) = ${PIP_CACHE_DIR}"
     - mkdir -p /packages/${REGISTRY_KEY}
-    - ls -al /packages
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
+    - ls -l /packages/${REGISTRY_KEY}/
+    
 
 pylint:
   stage: test
