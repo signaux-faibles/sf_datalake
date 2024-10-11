@@ -41,6 +41,9 @@ workflow:
     - ci
   image: python:3.6.8
   before_script:
+    - pwd
+    - ls -l
+    - cat venv/bin/activate
     - source venv/bin/activate
   cache:
     key: $CI_COMMIT_REF_SLUG
