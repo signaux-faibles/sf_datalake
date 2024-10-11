@@ -345,7 +345,7 @@ print-shell-env:
     - echo "ID_LIVY status = $(cat ${REGISTRY}/status_${ID_LIVY})"
     - echo "Spark config:"
     - cat ${REGISTRY}/spark_config.json
-    #- echo "MaacDo version = $(cat ${REGISTRY}/.maacdo_version"
+    - echo "MaacDo version = $(cat ${REGISTRY}/.maacdo_version)"
     - echo "MaacDo configuration:"
     - cat ${REGISTRY}/ci_job.par
   when: manual
