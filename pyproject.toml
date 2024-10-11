@@ -9,3 +9,5 @@ known_third_party = ["pyspark"]
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
+
+volumes = ["/packages", "/home/gitlab-runner/.ci-python_packages:packages"]
