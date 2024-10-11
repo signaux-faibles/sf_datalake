@@ -132,6 +132,11 @@ install_package:
   script:
     # Installing shap through wheel causes import failure when sent to the datalake servers.
     - pip install -v .[pack] --no-binary=shap
+  cache:
+    key: $CI_COMMIT_REF_SLUG
+    paths:
+      - .cache/pip
+      - venv/
 
 venv_pack:
   stage: build
