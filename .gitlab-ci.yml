@@ -50,8 +50,6 @@ workflow:
     paths:
       - .cache/pip
       - venv/
-  #volume:
-  #  - ${REGISTRY}:/packages/${REGISTRY_KEY}
 
 ##########################
 #  PIPELINE STARTS HERE  #
