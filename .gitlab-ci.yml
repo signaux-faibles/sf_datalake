@@ -36,6 +36,13 @@ workflow:
   after_script:
     - pwd
 
+
+cache:
+  key: $CI_COMMIT_REF_SLUG
+  paths:
+    - .cache/pip
+    - venv/
+
 .python:
   tags:
     - ci
