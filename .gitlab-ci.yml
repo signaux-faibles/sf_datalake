@@ -133,6 +133,8 @@ venv_pack:
     - echo "REGISTRY KEY = ${REGISTRY_KEY}"
     - echo "REGISTRY = ${REGISTRY}"
     - echo "CI_PROJECT_DIR (PIP_CACHE_DIR) = ${PIP_CACHE_DIR}"
+    - mkdir -p /packages/${REGISTRY_KEY}
+    - ls -al /packages
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
 
 pylint:
@@ -331,7 +333,7 @@ print-python-env:
     - env | sort
     - pwd
     - whoami
-    - ls -al /
+    - ls -al /home/
     - ls -al /packages
   when: manual
 
