@@ -85,6 +85,7 @@ prepare_python_venv:
     paths:
       - venv/
     expire_in: 1 hour
+#added from artifacts
 
 prepare_new_working_directory:
   stage: .pre
@@ -128,6 +129,8 @@ install_package:
   needs:
     - job: "prepare_new_working_directory"
     - job: "prepare_python_venv"
+  dependencies:
+    - prepare_python_env
   script:
     # Installing shap through wheel causes import failure when sent to the datalake servers.
     - pip install -v .[pack] --no-binary=shap
@@ -137,6 +140,8 @@ venv_pack:
   extends: .python
   needs:
     - job: "install_package"
+  dependencies:
+    - prepare_python_env
   script:
     - echo "REGISTRY KEY = ${REGISTRY_KEY}"
     - echo "REGISTRY = ${REGISTRY}"
