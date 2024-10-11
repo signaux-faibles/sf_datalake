@@ -137,7 +137,7 @@ venv_pack:
     - mkdir -p /packages/${REGISTRY_KEY}
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
     - ls -l /packages/${REGISTRY_KEY}/
-    - cp /packages/${REGISTRY_KEY}/${PACKAGE} ${REGISTRY}/
+    #- cp /packages/${REGISTRY_KEY}/${PACKAGE} ${REGISTRY}/
 
 pylint:
   stage: test
