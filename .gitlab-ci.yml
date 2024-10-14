@@ -142,6 +142,7 @@ venv_pack:
     - echo "CI_PROJECT_DIR (PIP_CACHE_DIR) = ${PIP_CACHE_DIR}"
     #- mkdir -p /packages/${REGISTRY_KEY}
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
+    - touch toto
     - ls -l /packages/${REGISTRY_KEY}/
     #- cp /packages/${REGISTRY_KEY}/${PACKAGE} ${REGISTRY}/
 
