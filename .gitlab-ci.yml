@@ -129,7 +129,6 @@ venv_pack:
   needs:
     - job: "install_package"
   script:
-    - mkdir -p /packages/${REGISTRY_KEY}
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
     - chmod 777 /packages/${REGISTRY_KEY}/${PACKAGE}
     - ls -l /packages/${REGISTRY_KEY}/
