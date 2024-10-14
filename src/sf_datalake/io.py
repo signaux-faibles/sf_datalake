@@ -141,7 +141,7 @@ def write_predictions(
         ["comp_probability", "probability"],
         assembled_col="probability",
         keep=["siren"],
-    ).select(["siren", "probability"]).repartition(n_rep).write.csv(
+    ).select(["siren", "code_naf", "probability"]).repartition(n_rep).write.csv(
         prediction_output_path, header=True
     )
 
