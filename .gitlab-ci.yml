@@ -82,6 +82,8 @@ prepare_python_venv:
     - virtualenv venv
     - ls -la venv
     - ls -la venv/bin
+    - touch /packages/${REGISTRY_KEY}/toto
+    - ls -al /packages/${REGISTRY_KEY}/
 
 prepare_new_working_directory:
   stage: .pre
@@ -142,7 +144,6 @@ venv_pack:
     - echo "CI_PROJECT_DIR (PIP_CACHE_DIR) = ${PIP_CACHE_DIR}"
     #- mkdir -p /packages/${REGISTRY_KEY}
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
-    - touch /packages/${REGISTRY_KEY}/toto
     - ls -l /packages/${REGISTRY_KEY}/
     #- cp /packages/${REGISTRY_KEY}/${PACKAGE} ${REGISTRY}/
 
