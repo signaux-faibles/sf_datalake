@@ -134,7 +134,6 @@ venv_pack:
     - chmod 777 /packages/${REGISTRY_KEY}/${PACKAGE}
     - echo ${REGISTRY_KEY}
     - ls -al /packages/${REGISTRY_KEY}/
-    - mv /packages/${REGISTRY_KEY}/${PACKAGE} ${REGISTRY}/
 
 pylint:
   stage: test
