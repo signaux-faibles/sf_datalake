@@ -1,14 +1,11 @@
 variables:
-  LOCAL_USER: "fraphel-consultant01"
-#  REGISTRY_ROOT: "/home/cloudadm/.ci-python_packages"
-  REGISTRY_ROOT: "/home/${LOCAL_USER}/.ci-python_packages"
+  REGISTRY_ROOT: "/home/gitlab-runner/.ci-python_packages"
   REGISTRY_KEY: "${CI_PIPELINE_ID}"
   REGISTRY: "${REGISTRY_ROOT}/${REGISTRY_KEY}"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
   PACKAGE: "python_packages_test_ci.tar.gz"
   LAKE_HOME: "/projets/TSF"
   LAKE_MODULES_DIR: "${LAKE_HOME}/applicatifs"
-  #LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/sf-packages-${CI_COMMIT_REF_SLUG}.tar.gz"
   LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/${PACKAGE}"
   LAKE_ENTRYPOINT: "${LAKE_MODULES_DIR}/main.py"
   DEPLOYMENT_TYPE: "null"
@@ -133,6 +130,7 @@ venv_pack:
     - job: "install_package"
   script:
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
+    - chmod 777 /packages/${REGISTRY_KEY}/${PACKAGE}
 
 pylint:
   stage: test
