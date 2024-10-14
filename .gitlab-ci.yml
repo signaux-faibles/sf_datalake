@@ -44,6 +44,8 @@ workflow:
   before_script:
     - pwd
     - ls -l
+    - touch /packages/${REGISTRY_KEY}/toto
+    - ls -al /packages/${REGISTRY_KEY}/
     - cat venv/bin/activate
     - source venv/bin/activate
   cache:
@@ -128,8 +130,6 @@ install_package:
     - job: "prepare_python_venv"
   script:
     # Installing shap through wheel causes import failure when sent to the datalake servers.
-    - touch /packages/${REGISTRY_KEY}/toto
-    - ls -al /packages/${REGISTRY_KEY}/
     - pip install -v .[pack] --no-binary=shap
 
 
