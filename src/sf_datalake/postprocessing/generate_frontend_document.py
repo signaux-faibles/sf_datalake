@@ -11,6 +11,7 @@ See the command-line interface for more details on expected inputs.
 
 import argparse
 import json
+from os import path
 from typing import Union
 
 import importlib_metadata
@@ -44,8 +45,8 @@ path_group.add_argument(
     "-x",
     "--explanation_data",
     required=True,
-    help="""Path to a directory containing csv files with partial categorized
-    'explanation' scores.""",
+    help="""Path to a directory containing csv files with "micro" and "macro"
+    explanation data.""",
 )
 path_group.add_argument(
     "-o",
@@ -58,18 +59,12 @@ path_group.add_argument(
     help="Path to the configuration file.",
     required=True,
 )
-path_group.add_argument(
-    "--concerning_data",
-    required=True,
-    help="""Path to a csv file containing data associated with the most 'concerning'
-    features (i.e., the ones with highest values) values.""",
-)
+
 parser.add_argument(
-    "--concerning_threshold",
+    "--algo_name",
+    type=str,
+    help="Name of the algorithm that produced the prediction",
     default=None,
-    type=float,
-    help="""Threshold above which a `feature * weight` product is considered
-    'concerning'.""",
 )
 
 
@@ -83,7 +78,7 @@ def normalize_siret(x: Union[pd.Series, pd.Index]) -> pd.Series:
     return x.astype(str).str.zfill(13)
 
 
-# Parse CLI arguments, load predictions configuration and supplementary data
+## Parse CLI arguments, load predictions configuration and supplementary data
 
 args = parser.parse_args()
 configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
@@ -110,7 +105,9 @@ prediction_set = pd.read_csv(args.prediction_set)
 prediction_set["siren"] = normalize_siren(prediction_set["siren"])
 prediction_set = prediction_set.set_index("siren")
 
-macro_explanation = pd.read_csv(args.explanation_data)
+macro_explanation = pd.read_csv(
+    path.join(args.explanation_data, "macro_explanation.csv")
+)
 macro_explanation["siren"] = normalize_siren(macro_explanation["siren"])
 macro_explanation = macro_explanation.set_index("siren")
 macro_explanation.columns = [
@@ -118,15 +115,17 @@ macro_explanation.columns = [
 ]
 macro_explanation.drop(columns="misc", inplace=True, errors="ignore")
 
-concerning_data = pd.read_csv(args.concerning_data)
-concerning_data["siren"] = normalize_siren(concerning_data["siren"])
-concerning_data = concerning_data.set_index("siren")
+micro_explanation = pd.read_csv(
+    path.join(args.explanation_data, "micro_explanation.csv")
+)
+micro_explanation["siren"] = normalize_siren(micro_explanation["siren"])
+micro_explanation = micro_explanation.set_index("siren")
 
 # Check for duplicated values
 for name, df in {
-    "prediction": prediction_set,
-    "macro radar": macro_explanation,
-    "concerning values": concerning_data,
+    "Prediction": prediction_set,
+    "Macro explanation": macro_explanation,
+    "Micro explanation": micro_explanation,
 }.items():
     if df.index.duplicated().any():
         raise ValueError(
@@ -146,24 +145,12 @@ prediction_set["alert_group"] = prediction_set["probability"].apply(
 
 # Decode alert groups
 alert_categories = pd.CategoricalDtype(
-    categories=["Pas d'alerte", "Alerte seuil F2", "Alerte seuil F1"], ordered=True
+    categories=["Pas d'alerte", "Alerte seuil F2", "Alerte seuil F1/2"], ordered=True
 )
 prediction_set["alert"] = pd.Categorical.from_codes(
     codes=prediction_set["alert_group"], dtype=alert_categories
 )
 
-## Score explanation per categories
-n_concerning_micro = configuration.explanation.n_concerning_micro
-concerning_micro_threshold = args.concerning_threshold
-concerning_values_columns = [f"concerning_val_{n}" for n in range(n_concerning_micro)]
-concerning_feats_columns = [f"concerning_feat_{n}" for n in range(n_concerning_micro)]
-if concerning_micro_threshold is not None:
-    mask = concerning_data[concerning_values_columns] > concerning_micro_threshold
-    concerning_micro_variables = concerning_data[concerning_feats_columns].where(
-        mask.values
-    )
-else:
-    concerning_micro_variables = concerning_data[concerning_feats_columns]
 
 ## Export front json document
 for field, value in additional_data.items():
@@ -177,18 +164,10 @@ output_entries = prediction_set.drop(
 for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
     output_entries[siren].update(
         {
-            "macroRadar": macro_explanation.loc[siren].to_dict(),
-            "explSelection": {
-                "selectConcerning": [
-                    [micro_macro[micro], micro]
-                    for micro in filter(
-                        pd.notna, concerning_micro_variables.loc[siren].values
-                    )
-                ]
-            },
+            "macroExpl": macro_explanation.loc[siren].to_dict(),
+            "microExpl": micro_explanation.loc[siren].to_dict(),
         }
     )
-
 
 with open(args.output_file, mode="w", encoding="utf-8") as f:
     json.dump(
