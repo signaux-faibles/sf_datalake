@@ -128,8 +128,10 @@ def write_predictions(
         test_data,
         ["comp_probability", "probability"],
         assembled_col="probability",
-        keep=["siren", "failure", "code_naf"],
-    ).select(["siren", "code_naf", "failure", "probability"]).repartition(
+        keep=["siren", "failure", "code_naf", "code_commune", "région"],
+    ).select(
+        ["siren", "code_naf", "failure", "probability", "code_commune", "région"]
+    ).repartition(
         n_rep
     ).write.csv(
         test_output_path, header=True
@@ -140,8 +142,12 @@ def write_predictions(
         prediction_data,
         ["comp_probability", "probability"],
         assembled_col="probability",
-        keep=["siren", "code_naf"],
-    ).select(["siren", "code_naf", "probability"]).repartition(n_rep).write.csv(
+        keep=["siren", "code_naf", "code_commune", "région"],
+    ).select(
+        ["siren", "code_naf", "probability", "code_commune", "région"]
+    ).repartition(
+        n_rep
+    ).write.csv(
         prediction_output_path, header=True
     )
 

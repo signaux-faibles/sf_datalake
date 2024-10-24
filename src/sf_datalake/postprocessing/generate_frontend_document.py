@@ -10,6 +10,7 @@ See the command-line interface for more details on expected inputs.
 """
 
 import argparse
+import datetime
 import json
 from os import path
 from typing import Union
@@ -89,8 +90,33 @@ micro_macro = {
     for micro in micros
 }
 
+# pour avoir les mois en francais
+mois = [
+    "Janvier",
+    "Février",
+    "Mars",
+    "Avril",
+    "Mai",
+    "Juin",
+    "Juillet",
+    "Août",
+    "Septembre",
+    "Octobre",
+    "Novembre",
+    "Décembre",
+]
+date = datetime.datetime.now()
+imois = date.date().month
+iyear = date.date().year
+
+# additional_data = {
+#    "idListe": "Mars 2024",
+#    "batch": "2403",
+#    "algo": importlib_metadata.version("sf_datalake"),
+#    "période": "2024-03-01T00:00:00Z",
+# }
 additional_data = {
-    "idListe": "Mars 2024",
+    "idListe": mois[imois - 1] + " " + str(iyear),
     "batch": "2403",
     "algo": importlib_metadata.version("sf_datalake"),
     "période": "2024-03-01T00:00:00Z",
@@ -113,7 +139,45 @@ macro_explanation = macro_explanation.set_index("siren")
 macro_explanation.columns = [
     col.replace("_macro_score", "") for col in macro_explanation.columns
 ]
-macro_explanation.drop(columns="misc", inplace=True, errors="ignore")
+# macro_explanation.drop(columns="misc", inplace=True, errors="ignore")
+
+
+#############################################################################
+# Convert macro_explanation for the waterfall :
+# include expectation in a non-invasive way
+# to keep interpretability of shap and by hinding expectation
+proba = prediction_set["probability"]
+
+# compute de sum of the macro expl
+sum_macro = macro_explanation.iloc[:, :].sum(axis=1)
+
+siren_index = macro_explanation.index.tolist()
+for isi in siren_index:
+    iproba = proba.loc[isi]
+    iexp = iproba - sum_macro.loc[isi]
+    ifactor = 100.0 * iproba / (iproba - iexp)
+    macro_explanation.loc[isi] = ifactor * macro_explanation.loc[isi]
+
+# rename quantities
+macro_explanation = macro_explanation.rename(
+    columns={"misc": "Variation de l'effectif de l'entreprise"}
+)
+macro_explanation = macro_explanation.rename(
+    columns={"santé_financière": "Données financières"}
+)
+macro_explanation = macro_explanation.rename(
+    columns={"activité_partielle": "Recours à l'activité partielle"}
+)
+macro_explanation = macro_explanation.rename(
+    columns={"dette_urssaf": "Dettes sociales"}
+)
+macro_explanation = macro_explanation.rename(
+    columns={"retards_paiement": "Retards de paiement fournisseurs"}
+)
+
+# End of rescaling part
+#############################################################################
+
 
 micro_explanation = pd.read_csv(
     path.join(args.explanation_data, "micro_explanation.csv")
@@ -150,6 +214,11 @@ alert_categories = pd.CategoricalDtype(
 prediction_set["alert"] = pd.Categorical.from_codes(
     codes=prediction_set["alert_group"], dtype=alert_categories
 )
+
+
+# Convert probability to percentage
+prediction_set["probability"] *= 100
+prediction_set = prediction_set.rename(columns={"probability": "Risque de défaillance"})
 
 
 ## Export front json document
