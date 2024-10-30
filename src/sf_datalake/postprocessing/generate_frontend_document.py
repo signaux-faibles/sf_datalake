@@ -12,7 +12,7 @@ See the command-line interface for more details on expected inputs.
 import argparse
 import datetime
 import json
-from os import path
+from os import environ, path
 from typing import Union
 
 import importlib_metadata
@@ -109,17 +109,11 @@ date = datetime.datetime.now()
 imois = date.date().month
 iyear = date.date().year
 
-# additional_data = {
-#    "idListe": "Mars 2024",
-#    "batch": "2403",
-#    "algo": importlib_metadata.version("sf_datalake"),
-#    "période": "2024-03-01T00:00:00Z",
-# }
 additional_data = {
     "idListe": mois[imois - 1] + " " + str(iyear),
-    "batch": "2403",
+    "batch": environ["SF_BATCH"] + " date " + str(date),
     "algo": importlib_metadata.version("sf_datalake"),
-    "période": "2024-03-01T00:00:00Z",
+    "période": str(iyear) + "-" + str(imois) + "-01",
 }
 
 # Load prediction lists
@@ -139,7 +133,6 @@ macro_explanation = macro_explanation.set_index("siren")
 macro_explanation.columns = [
     col.replace("_macro_score", "") for col in macro_explanation.columns
 ]
-# macro_explanation.drop(columns="misc", inplace=True, errors="ignore")
 
 
 #############################################################################
