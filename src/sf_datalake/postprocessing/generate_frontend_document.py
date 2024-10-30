@@ -236,4 +236,5 @@ with open(args.output_file, mode="w", encoding="utf-8") as f:
         [{"siren": siren, **props} for siren, props in output_entries.items()],
         f,
         indent=4,
+        ensure_ascii=False,
     )
