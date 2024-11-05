@@ -16,6 +16,7 @@ from os import environ, path
 from typing import Union
 
 import importlib_metadata
+import micro_macro_link as mml
 import pandas as pd
 
 import sf_datalake.configuration
@@ -167,7 +168,6 @@ macro_explanation = macro_explanation.rename(
 macro_explanation = macro_explanation.rename(
     columns={"retards_paiement": "Retards de paiement fournisseurs"}
 )
-
 # End of rescaling part
 #############################################################################
 
@@ -224,10 +224,16 @@ output_entries = prediction_set.drop(
 ).to_dict(orient="index")
 
 for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
+
+    ## We now convert micro_explanation to fit with macro
+    imacro = macro_explanation.loc[siren].to_dict()
+    imicro = micro_explanation.loc[siren].to_dict()
+    imicro_scaled = mml.getRescaledData(imacro, imicro)
+
     output_entries[siren].update(
         {
-            "macroExpl": macro_explanation.loc[siren].to_dict(),
-            "microExpl": micro_explanation.loc[siren].to_dict(),
+            "macroExpl": imacro,
+            "microExpl": imicro_scaled,
         }
     )
 
