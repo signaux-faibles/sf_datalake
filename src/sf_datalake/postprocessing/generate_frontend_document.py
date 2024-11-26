@@ -142,7 +142,8 @@ macro_explanation.columns = [
 # to keep interpretability of shap and by hinding expectation
 proba = prediction_set["probability"]
 
-# compute de sum of the macro expl
+# use micro_macro to avoid micro_macro_link ?
+# compute the sum of the macro expl
 sum_macro = macro_explanation.iloc[:, :].sum(axis=1)
 
 siren_index = macro_explanation.index.tolist()
