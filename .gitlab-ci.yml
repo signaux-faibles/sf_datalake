@@ -1,4 +1,5 @@
 variables:
+  #REGISTRY_ROOT: "/home/cloudadm/.ci-python_packages"
   REGISTRY_ROOT: "/home/gitlab-runner/.ci-python_packages"
   REGISTRY_KEY: "${CI_PIPELINE_ID}"
   REGISTRY: "${REGISTRY_ROOT}/${REGISTRY_KEY}"
@@ -35,18 +36,23 @@ workflow:
   after_script:
     - pwd
 
+
 .python:
   tags:
     - ci
   image: python:3.6.8
   before_script:
+    - pwd
+    - ls -l
+    - touch /packages/toto
+    - ls -al /packages/
+    - cat venv/bin/activate
     - source venv/bin/activate
   cache:
     key: $CI_COMMIT_REF_SLUG
     paths:
       - .cache/pip
       - venv/
-
 
 ##########################
 #  PIPELINE STARTS HERE  #
@@ -76,6 +82,9 @@ prepare_python_venv:
     - pip install -U pip
     - pip install virtualenv==20.16.2
     - virtualenv venv
+    - ls -la venv
+    - ls -la venv/bin
+
 
 prepare_new_working_directory:
   stage: .pre
@@ -123,12 +132,17 @@ install_package:
     # Installing shap through wheel causes import failure when sent to the datalake servers.
     - pip install -v .[pack] --no-binary=shap
 
+
+
 venv_pack:
   stage: build
   extends: .python
   needs:
     - job: "install_package"
   script:
+    - echo "REGISTRY KEY = ${REGISTRY_KEY}"
+    - echo "REGISTRY = ${REGISTRY}"
+    - echo "CI_PROJECT_DIR (PIP_CACHE_DIR) = ${PIP_CACHE_DIR}"
     - venv-pack -o /packages/${REGISTRY_KEY}/${PACKAGE}
     - chmod 644 /packages/${REGISTRY_KEY}/${PACKAGE}
     - ls -l /packages/${REGISTRY_KEY}/
@@ -329,6 +343,7 @@ print-python-env:
     - env | sort
     - pwd
     - whoami
+    - ls -al /home/
     - ls -al /packages
   when: manual
 
@@ -343,7 +358,7 @@ print-shell-env:
     - echo "ID_LIVY status = $(cat ${REGISTRY}/status_${ID_LIVY})"
     - echo "Spark config:"
     - cat ${REGISTRY}/spark_config.json
-    - echo "MaacDo version = $(cat ${REGISTRY}/.maacdo_version"
+    - echo "MaacDo version = $(cat ${REGISTRY}/.maacdo_version)"
     - echo "MaacDo configuration:"
     - cat ${REGISTRY}/ci_job.par
   when: manual
