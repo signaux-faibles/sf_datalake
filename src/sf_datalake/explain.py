@@ -2,7 +2,6 @@
 """
 from typing import Dict, List, Tuple
 
-import numpy as np
 import pandas as pd
 import pyspark.ml.classification
 import shap
@@ -42,6 +41,7 @@ def explanation_data(
         - The expected failure probability value over the prediction dataset.
 
     """
+
     X_prediction = sf_datalake.transform.vector_disassembler(
         df=prediction_data,
         columns=features_list,
@@ -86,7 +86,7 @@ def explanation_data(
 
     # Here tree-based models may output a list of two elements corresponding to the
     # two (complementary) classes. Weirdly enough, this seems to happen only with
-    # random forest or decision tree classifiers… Hence the `[1]` indexing.
+    # random forest or decision tree classifiers… Hence the `[1]` item getting.
     if isinstance(
         model,
         (
@@ -110,13 +110,8 @@ def explanation_data(
 def explanation_scores(
     shap_df: pd.DataFrame,
     topic_groups: Dict[str, List[str]],
-    n_concerning: int,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """Compute plot-ready feature contribution.
-
-    This computes individual, as well as aggregated, features contributions. The most
-    significant contributions (in favor of a positive prediction) are returned as a
-    DataFrame containing concerning feature names and values.
 
     Contributions are first summed within feature groups:
     - at a "feature" scale: lagged variables and such, for a given feature.
@@ -126,16 +121,13 @@ def explanation_scores(
     Args:
         shap_df: The shap values associated with the features used for machine learning.
         topic_groups: A grouping of features, by major topic.
-        n_concerning: Number of most significant features to return.
 
     Returns:
-        A 2-uple containing:
-        - A "macro scores" df, which contains aggregated features contrbutions across a
-          topic group.
-        - A "concerning scores" df, which contains the most significant individual
-          features contributions.
+        A "macro scores" df, which contains aggregated features contrbutions across a
+        topic group.
 
     """
+
     feature_groups: Dict[str, str] = {}
     macro_features = set(
         feature for flist in topic_groups.values() for feature in flist
@@ -161,17 +153,4 @@ def explanation_scores(
         macro_scores.loc[:, f"{group}_macro_score"] = feature_lvl_df[features].sum(
             axis=1
         )
-
-    # Concerning features (with the most significant feature-level shap values)
-    sorter = np.argsort(-feature_lvl_df.values, axis=1)[:, :n_concerning]
-    concerning_feat = pd.DataFrame(
-        feature_lvl_df.columns[sorter], index=feature_lvl_df.index
-    )
-    concerning_values = pd.DataFrame(
-        feature_lvl_df.values[np.arange(len(feature_lvl_df))[:, np.newaxis], sorter],
-        index=feature_lvl_df.index,
-    )
-    concerning_feat.columns = [f"concerning_feat_{n}" for n in range(n_concerning)]
-    concerning_values.columns = [f"concerning_val_{n}" for n in range(n_concerning)]
-
-    return macro_scores, concerning_feat.join(concerning_values)
+    return macro_scores

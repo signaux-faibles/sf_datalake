@@ -128,8 +128,12 @@ def write_predictions(
         test_data,
         ["comp_probability", "probability"],
         assembled_col="probability",
-        keep=["siren", "failure"],
-    ).select(["siren", "failure", "probability"]).repartition(n_rep).write.csv(
+        keep=["siren", "failure", "code_naf", "code_commune", "région"],
+    ).select(
+        ["siren", "code_naf", "failure", "probability", "code_commune", "région"]
+    ).repartition(
+        n_rep
+    ).write.csv(
         test_output_path, header=True
     )
 
@@ -138,8 +142,12 @@ def write_predictions(
         prediction_data,
         ["comp_probability", "probability"],
         assembled_col="probability",
-        keep=["siren"],
-    ).select(["siren", "probability"]).repartition(n_rep).write.csv(
+        keep=["siren", "code_naf", "code_commune", "région"],
+    ).select(
+        ["siren", "code_naf", "probability", "code_commune", "région"]
+    ).repartition(
+        n_rep
+    ).write.csv(
         prediction_output_path, header=True
     )
 
@@ -147,20 +155,15 @@ def write_predictions(
 def write_explanations(
     output_dir: str,
     macro_scores_df: pyspark.sql.DataFrame,
-    concerning_scores_df: pyspark.sql.DataFrame,
+    micro_scores_df: pyspark.sql.DataFrame,
     n_rep: int = 5,
 ):
     """Writes the explanations of a prediction to CSV files."""
-    concerning_output_path = path.join(output_dir, "concerning_values.csv")
-    explanation_output_path = path.join(output_dir, "explanation_data.csv")
-    logging.info("Writing concerning features to file %s", concerning_output_path)
-    concerning_scores_df.repartition(n_rep).write.csv(
-        concerning_output_path, header=True
-    )
-
-    logging.info(
-        "Writing explanation macro scores data to directory %s", explanation_output_path
-    )
+    micro_output_path = path.join(output_dir, "micro_explanation.csv")
+    macro_output_path = path.join(output_dir, "macro_explanation.csv")
+    logging.info("Writing micro explanation data to file %s", micro_output_path)
+    micro_scores_df.repartition(n_rep).write.csv(micro_output_path, header=True)
+    logging.info("Writing macro explanation data to directory %s", macro_output_path)
     macro_scores_df.repartition(n_rep).write.csv(
-        path.join(explanation_output_path), header=True
+        path.join(macro_output_path), header=True
     )

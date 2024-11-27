@@ -10,10 +10,13 @@ See the command-line interface for more details on expected inputs.
 """
 
 import argparse
+import datetime
 import json
+from os import environ, path
 from typing import Union
 
 import importlib_metadata
+import micro_macro_link as mml
 import pandas as pd
 
 import sf_datalake.configuration
@@ -44,8 +47,8 @@ path_group.add_argument(
     "-x",
     "--explanation_data",
     required=True,
-    help="""Path to a directory containing csv files with partial categorized
-    'explanation' scores.""",
+    help="""Path to a directory containing csv files with "micro" and "macro"
+    explanation data.""",
 )
 path_group.add_argument(
     "-o",
@@ -58,18 +61,12 @@ path_group.add_argument(
     help="Path to the configuration file.",
     required=True,
 )
-path_group.add_argument(
-    "--concerning_data",
-    required=True,
-    help="""Path to a csv file containing data associated with the most 'concerning'
-    features (i.e., the ones with highest values) values.""",
-)
+
 parser.add_argument(
-    "--concerning_threshold",
+    "--algo_name",
+    type=str,
+    help="Name of the algorithm that produced the prediction",
     default=None,
-    type=float,
-    help="""Threshold above which a `feature * weight` product is considered
-    'concerning'.""",
 )
 
 
@@ -83,7 +80,7 @@ def normalize_siret(x: Union[pd.Series, pd.Index]) -> pd.Series:
     return x.astype(str).str.zfill(13)
 
 
-# Parse CLI arguments, load predictions configuration and supplementary data
+## Parse CLI arguments, load predictions configuration and supplementary data
 
 args = parser.parse_args()
 configuration = sf_datalake.configuration.ConfigurationHelper(args.configuration)
@@ -94,11 +91,30 @@ micro_macro = {
     for micro in micros
 }
 
+# pour avoir les mois en francais
+mois = [
+    "Janvier",
+    "Février",
+    "Mars",
+    "Avril",
+    "Mai",
+    "Juin",
+    "Juillet",
+    "Août",
+    "Septembre",
+    "Octobre",
+    "Novembre",
+    "Décembre",
+]
+date = datetime.datetime.now()
+imois = date.date().month
+iyear = date.date().year
+
 additional_data = {
-    "idListe": "Mars 2024",
-    "batch": "2403",
+    "idListe": mois[imois - 1] + " " + str(iyear),
+    "batch": environ["SF_BATCH"] + " date " + str(date),
     "algo": importlib_metadata.version("sf_datalake"),
-    "période": "2024-03-01T00:00:00Z",
+    "période": str(iyear) + "-" + str(imois) + "-01",
 }
 
 # Load prediction lists
@@ -110,23 +126,64 @@ prediction_set = pd.read_csv(args.prediction_set)
 prediction_set["siren"] = normalize_siren(prediction_set["siren"])
 prediction_set = prediction_set.set_index("siren")
 
-macro_explanation = pd.read_csv(args.explanation_data)
+macro_explanation = pd.read_csv(
+    path.join(args.explanation_data, "macro_explanation.csv")
+)
 macro_explanation["siren"] = normalize_siren(macro_explanation["siren"])
 macro_explanation = macro_explanation.set_index("siren")
 macro_explanation.columns = [
     col.replace("_macro_score", "") for col in macro_explanation.columns
 ]
-macro_explanation.drop(columns="misc", inplace=True, errors="ignore")
 
-concerning_data = pd.read_csv(args.concerning_data)
-concerning_data["siren"] = normalize_siren(concerning_data["siren"])
-concerning_data = concerning_data.set_index("siren")
+
+#############################################################################
+# Convert macro_explanation for the waterfall :
+# include expectation in a non-invasive way
+# to keep interpretability of shap and by hinding expectation
+proba = prediction_set["probability"]
+
+# use micro_macro to avoid micro_macro_link ?
+# compute the sum of the macro expl
+sum_macro = macro_explanation.iloc[:, :].sum(axis=1)
+
+siren_index = macro_explanation.index.tolist()
+for isi in siren_index:
+    iproba = proba.loc[isi]
+    iexp = iproba - sum_macro.loc[isi]
+    ifactor = 100.0 * iproba / (iproba - iexp)
+    macro_explanation.loc[isi] = ifactor * macro_explanation.loc[isi]
+
+# rename quantities
+macro_explanation = macro_explanation.rename(
+    columns={"misc": "Variation de l'effectif de l'entreprise"}
+)
+macro_explanation = macro_explanation.rename(
+    columns={"santé_financière": "Données financières"}
+)
+macro_explanation = macro_explanation.rename(
+    columns={"activité_partielle": "Recours à l'activité partielle"}
+)
+macro_explanation = macro_explanation.rename(
+    columns={"dette_urssaf": "Dettes sociales"}
+)
+macro_explanation = macro_explanation.rename(
+    columns={"retards_paiement": "Retards de paiement fournisseurs"}
+)
+# End of rescaling part
+#############################################################################
+
+
+micro_explanation = pd.read_csv(
+    path.join(args.explanation_data, "micro_explanation.csv")
+)
+micro_explanation["siren"] = normalize_siren(micro_explanation["siren"])
+micro_explanation = micro_explanation.set_index("siren")
 
 # Check for duplicated values
 for name, df in {
-    "prediction": prediction_set,
-    "macro radar": macro_explanation,
-    "concerning values": concerning_data,
+    "Prediction": prediction_set,
+    "Macro explanation": macro_explanation,
+    "Micro explanation": micro_explanation,
 }.items():
     if df.index.duplicated().any():
         raise ValueError(
@@ -146,24 +203,17 @@ prediction_set["alert_group"] = prediction_set["probability"].apply(
 
 # Decode alert groups
 alert_categories = pd.CategoricalDtype(
-    categories=["Pas d'alerte", "Alerte seuil F2", "Alerte seuil F1"], ordered=True
+    categories=["Pas d'alerte", "Alerte seuil F2", "Alerte seuil F1/2"], ordered=True
 )
 prediction_set["alert"] = pd.Categorical.from_codes(
     codes=prediction_set["alert_group"], dtype=alert_categories
 )
 
-## Score explanation per categories
-n_concerning_micro = configuration.explanation.n_concerning_micro
-concerning_micro_threshold = args.concerning_threshold
-concerning_values_columns = [f"concerning_val_{n}" for n in range(n_concerning_micro)]
-concerning_feats_columns = [f"concerning_feat_{n}" for n in range(n_concerning_micro)]
-if concerning_micro_threshold is not None:
-    mask = concerning_data[concerning_values_columns] > concerning_micro_threshold
-    concerning_micro_variables = concerning_data[concerning_feats_columns].where(
-        mask.values
-    )
-else:
-    concerning_micro_variables = concerning_data[concerning_feats_columns]
+
+# Convert probability to percentage
+prediction_set["probability"] *= 100
+prediction_set = prediction_set.rename(columns={"probability": "Risque de défaillance"})
+
 
 ## Export front json document
 for field, value in additional_data.items():
@@ -175,24 +225,23 @@ output_entries = prediction_set.drop(
 ).to_dict(orient="index")
 
 for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
+
+    ## We now convert micro_explanation to fit with macro
+    imacro = macro_explanation.loc[siren].to_dict()
+    imicro = micro_explanation.loc[siren].to_dict()
+    imicro_scaled = mml.getRescaledData(imacro, imicro)
+
     output_entries[siren].update(
         {
-            "macroRadar": macro_explanation.loc[siren].to_dict(),
-            "explSelection": {
-                "selectConcerning": [
-                    [micro_macro[micro], micro]
-                    for micro in filter(
-                        pd.notna, concerning_micro_variables.loc[siren].values
-                    )
-                ]
-            },
+            "macroExpl": imacro,
+            "microExpl": imicro_scaled,
         }
     )
-
 
 with open(args.output_file, mode="w", encoding="utf-8") as f:
     json.dump(
         [{"siren": siren, **props} for siren, props in output_entries.items()],
         f,
         indent=4,
+        ensure_ascii=False,
     )

@@ -114,11 +114,6 @@ parser.add_argument(
     results.
     """,
 )
-parser.add_argument(
-    "--plot_type",
-    choices=["radar", "waterfall"],
-    help="Explanation plot type.",
-)
 
 args = vars(parser.parse_args())
 
@@ -174,6 +169,7 @@ prediction_data = pre_dataset.filter(
     == sf_datalake.utils.to_date(configuration.learning.prediction_date)
 )
 
+
 assert train_data.count() > 0, "Train dataset is empty."
 assert test_data.count() > 0, "Test dataset is empty."
 assert prediction_data.count() > 0, "Prediction dataset is empty."
@@ -193,7 +189,6 @@ classifier_model = classifier.fit(resampled_train_data)
 train_transformed = classifier_model.transform(resampled_train_data)
 test_transformed = classifier_model.transform(test_data)
 prediction_transformed = classifier_model.transform(prediction_data)
-
 
 # Retrieve features names
 def is_scaler_col(x: str) -> bool:
@@ -224,20 +219,11 @@ shap_values, expected_value = sf_datalake.explain.explanation_data(
     prediction_transformed,
     configuration.explanation.n_train_sample,
 )
-macro_scores, concerning_scores = sf_datalake.explain.explanation_scores(
+
+macro_scores = sf_datalake.explain.explanation_scores(
     shap_values,
     configuration.explanation.topic_groups,
-    configuration.explanation.n_concerning_micro,
 )
-
-# In a radar plot, we set each axis to [prediction set expectation] + topic group
-# shapley coefficient.
-#
-# We export the expected value as a macro score for the waterfall plot.
-if configuration.explanation.plot_type == "radar":
-    macro_scores.update((k, v + expected_value) for k, v in macro_scores.items())
-macro_scores["espérance"] = expected_value
-
 # Convert to [0, 1] range if shap values are expressed in log-odds units.
 if isinstance(
     classifier_model,
@@ -246,9 +232,10 @@ if isinstance(
         pyspark.ml.classification.GBTClassificationModel,
     ),
 ):
-    num_cols = concerning_scores.select_dtypes(include="number").columns
-    concerning_scores.loc[:, num_cols] = 1 / (1 + np.exp(-concerning_scores[num_cols]))
+    num_cols = shap_values.select_dtypes(include="number").columns
+    shap_values.loc[:, num_cols] = 1 / (1 + np.exp(-shap_values[num_cols]))
     macro_scores = 1 / (1 + np.exp(-macro_scores))
+
 
 # Write outputs.
 sf_datalake.io.write_predictions(
@@ -259,5 +246,5 @@ sf_datalake.io.write_predictions(
 sf_datalake.io.write_explanations(
     path.join(configuration.io.root_directory, configuration.io.prediction_path),
     spark.createDataFrame(macro_scores.reset_index()),
-    spark.createDataFrame(concerning_scores.reset_index()),
+    spark.createDataFrame(shap_values.reset_index()),
 )
