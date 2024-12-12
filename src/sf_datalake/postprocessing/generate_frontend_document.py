@@ -91,9 +91,6 @@ micro_macro = {
     for micro in micros
 }
 
-print(micro_macro)
-print("")
-
 # pour avoir les mois en francais
 mois = [
     "Janvier",
