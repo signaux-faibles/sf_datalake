@@ -44,7 +44,6 @@ workflow:
   before_script:
     - pwd
     - ls -l
-    - touch /packages/toto
     - ls -al /packages/
     - cat venv/bin/activate
     - source venv/bin/activate
