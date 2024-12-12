@@ -91,6 +91,9 @@ micro_macro = {
     for micro in micros
 }
 
+print(micro_macro)
+print("")
+
 # pour avoir les mois en francais
 mois = [
     "Janvier",
@@ -209,7 +212,7 @@ for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
     ## We now convert micro_explanation to fit with macro
     imacro = macro_explanation.loc[siren].to_dict()
     imicro = micro_explanation.loc[siren].to_dict()
-    imicro_scaled = mml.getRescaledData(imacro, imicro)
+    imicro_scaled = mml.getRescaledData(imacro, imicro, micro_macro)
 
     output_entries[siren].update(
         {
