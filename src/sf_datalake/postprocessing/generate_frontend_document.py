@@ -195,6 +195,11 @@ prediction_set["alert"] = pd.Categorical.from_codes(
 prediction_set["probability"] *= 100
 prediction_set = prediction_set.rename(columns={"probability": "Risque de défaillance"})
 
+
+## Add threshold to front json document
+additional_data["Seuil modéré"] = score_threshold[2]
+additional_data["Seuil fort"] = score_threshold[0.5]
+
 ## Export front json document
 for field, value in additional_data.items():
     prediction_set[field] = value
