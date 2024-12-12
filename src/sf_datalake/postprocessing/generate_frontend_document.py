@@ -135,7 +135,6 @@ macro_explanation.columns = [
     col.replace("_macro_score", "") for col in macro_explanation.columns
 ]
 
-
 #############################################################################
 # Convert macro_explanation for the waterfall :
 # include expectation in a non-invasive way
@@ -152,26 +151,8 @@ for isi in siren_index:
     iexp = iproba - sum_macro.loc[isi]
     ifactor = 100.0 * iproba / (iproba - iexp)
     macro_explanation.loc[isi] = ifactor * macro_explanation.loc[isi]
-
-# rename quantities
-macro_explanation = macro_explanation.rename(
-    columns={"misc": "Variation de l'effectif de l'entreprise"}
-)
-macro_explanation = macro_explanation.rename(
-    columns={"santé_financière": "Données financières"}
-)
-macro_explanation = macro_explanation.rename(
-    columns={"activité_partielle": "Recours à l'activité partielle"}
-)
-macro_explanation = macro_explanation.rename(
-    columns={"dette_urssaf": "Dettes sociales"}
-)
-macro_explanation = macro_explanation.rename(
-    columns={"retards_paiement": "Retards de paiement fournisseurs"}
-)
 # End of rescaling part
 #############################################################################
-
 
 micro_explanation = pd.read_csv(
     path.join(args.explanation_data, "micro_explanation.csv")
@@ -213,7 +194,6 @@ prediction_set["alert"] = pd.Categorical.from_codes(
 # Convert probability to percentage
 prediction_set["probability"] *= 100
 prediction_set = prediction_set.rename(columns={"probability": "Risque de défaillance"})
-
 
 ## Export front json document
 for field, value in additional_data.items():
