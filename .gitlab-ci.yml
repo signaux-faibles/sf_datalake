@@ -4,7 +4,7 @@ variables:
   REGISTRY_KEY: "${CI_PIPELINE_ID}"
   REGISTRY: "${REGISTRY_ROOT}/${REGISTRY_KEY}"
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
-  PACKAGE: "python_packages_test_ci.tar.gz"
+  PACKAGE: "python_packages_develop.tar.gz"
   LAKE_HOME: "/projets/TSF"
   LAKE_MODULES_DIR: "${LAKE_HOME}/applicatifs"
   LAKE_PKG_TARGET: "${LAKE_MODULES_DIR}/${PACKAGE}"
