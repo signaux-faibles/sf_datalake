@@ -13,41 +13,7 @@ import scipy.stats
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.linalg.distributed import RowMatrix
 
-import sf_datalake.transform
 import sf_datalake.utils
-
-
-def count_missing_values(df: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-    """Counts number of null values in each column.
-
-    Args:
-        df: The input DataFrame.
-
-    Returns:
-        A DataFrame specifying the number of null values for each column.
-
-    """
-    return df.select([F.count(F.when(F.isnull(c), c)).alias(c) for c in df.columns])
-
-
-def count_nan_values(
-    df: pyspark.sql.DataFrame,
-) -> pyspark.sql.DataFrame:
-    """Counts number of NaN values in numerical columns.
-
-    Args:
-        df: The input DataFrame.
-
-    Returns:
-        A DataFrame specifying the number of NaN values in numerical fields.
-
-    """
-    return df.select(
-        [
-            F.count(F.when(F.isnull(c), c)).alias(c)
-            for c in sf_datalake.utils.numerical_columns(df)
-        ]
-    )
 
 
 def accounting_time_span(
@@ -56,7 +22,7 @@ def accounting_time_span(
     """Computes global time spans of companies accouting years.
 
     Args:
-        df: The input DataFrame. It must have a "date_deb_exercice" and
+        df: The input DataFrame. It must have a "date_début_exercice" and
           "date_fin_exercice" columns.
 
     Returns:
@@ -64,11 +30,11 @@ def accounting_time_span(
           with the beginning and end of accounting years ("exercice comptable").
 
     """
-    assert {"date_deb_exercice", "date_fin_exercice"} <= set(df.columns)
+    assert {"date_début_exercice", "date_fin_exercice"} <= set(df.columns)
 
     date_deb_exercice_span = df.select(
-        F.min("date_deb_exercice"),
-        F.max("date_deb_exercice"),
+        F.min("date_début_exercice"),
+        F.max("date_début_exercice"),
     ).first()
     date_fin_exercice_span = df.select(
         F.min("date_fin_exercice"),
@@ -84,7 +50,7 @@ def accounting_year_distribution(
     """Computes declared accounting year duration distribution.
 
     Args:
-        df: The input DataFrame. It must have a "date_deb_exercice" and
+        df: The input DataFrame. It must have a "date_début_exercice" and
           "date_fin_exercice" columns.
         unit: The unit measuring accounting year duration. Should be "days" or "months".
         duration_col: The accounting year duration column name.
@@ -93,7 +59,7 @@ def accounting_year_distribution(
         The count of declared accounting years for each given duration.
 
     """
-    assert {"date_deb_exercice", "date_fin_exercice"} <= set(df.columns)
+    assert {"date_début_exercice", "date_fin_exercice"} <= set(df.columns)
 
     ayd = accounting_year_duration(df, unit, duration_col)
     return ayd.groupBy(duration_col).count().orderBy(duration_col)
@@ -105,7 +71,7 @@ def accounting_year_duration(
     """Computes declared accounting year duration.
 
     Args:
-        df: The input DataFrame. It must have a "date_deb_exercice" and
+        df: The input DataFrame. It must have a "date_début_exercice" and
           "date_fin_exercice" columns.
         unit: The unit measuring accounting year duration. Should be "days" or "months".
         duration_col: The accounting year duration column name.
@@ -114,7 +80,7 @@ def accounting_year_duration(
         A df with a new column of declared accounting years duration.
 
     """
-    assert {"date_deb_exercice", "date_fin_exercice"} <= set(df.columns)
+    assert {"date_début_exercice", "date_fin_exercice"} <= set(df.columns)
 
     if unit == "days":
         diff_function = F.datediff
@@ -127,7 +93,7 @@ def accounting_year_duration(
         F.round(
             diff_function(
                 F.to_date(df["date_fin_exercice"]),
-                F.to_date(df["date_deb_exercice"]),
+                F.to_date(df["date_début_exercice"]),
             )
         ).cast("int"),
     )
@@ -262,7 +228,7 @@ def convert_projections_to_dataframe(
     ]
     spark = sf_datalake.utils.get_spark_session()
     rdd = spark.sparkContext.parallelize(data)
-    return rdd.toDF(["siren", "periode", "cp1", "cp2"])
+    return rdd.toDF(["siren", "période", "cp1", "cp2"])
 
 
 def project_observations_on_eigenspace_over_time(
@@ -281,16 +247,16 @@ def project_observations_on_eigenspace_over_time(
         Data over time projected for each period on the eigenspace built
         from the first period.
     """
-    assert set(["siren", "periode"] + features) <= set(df.columns)
+    assert set(["siren", "période"] + features) <= set(df.columns)
 
     df_pca = (
-        df.filter(df.periode >= start)
-        .filter(df.periode < end)
-        .orderBy(["periode", "siren"])
+        df.filter(df["période"] >= start)
+        .filter(df.période < end)
+        .orderBy(["période", "siren"])
     )
-    periods = df_pca.select("periode").distinct().rdd.flatMap(lambda x: x).collect()
+    periods = df_pca.select("période").distinct().rdd.flatMap(lambda x: x).collect()
     eigenspace = build_eigenspace(
-        df_pca.filter(df_pca.periode == periods[0]), features, 2
+        df_pca.filter(df_pca.période == periods[0]), features, 2
     )
 
     spark = sf_datalake.utils.get_spark_session()
@@ -298,7 +264,7 @@ def project_observations_on_eigenspace_over_time(
     schema = T.StructType(
         [
             T.StructField("siren", T.StringType(), True),
-            T.StructField("periode", T.TimestampType(), True),
+            T.StructField("période", T.TimestampType(), True),
             T.StructField("cp1", T.DoubleType(), True),
             T.StructField("cp2", T.DoubleType(), True),
         ]
@@ -308,7 +274,7 @@ def project_observations_on_eigenspace_over_time(
     )
 
     for period in periods:  # groupBy() to optimize?
-        df_period = df_pca.filter(df.periode == period)
+        df_period = df_pca.filter(df.période == period)
         U_period = project_on_eigenspace(df_period, eigenspace, features)
         df_period_eigenspace = convert_projections_to_dataframe(
             U_period, df_period, period
@@ -343,7 +309,7 @@ def convert_features_projection_to_dataframe(
     ]
     spark = sf_datalake.utils.get_spark_session()
     rdd = spark.sparkContext.parallelize(data)
-    return rdd.toDF(["feature", "periode", "cp1", "cp2"])
+    return rdd.toDF(["feature", "période", "cp1", "cp2"])
 
 
 def project_features_on_eigenspace_over_time(
@@ -360,22 +326,22 @@ def project_features_on_eigenspace_over_time(
     Returns:
         Features over time projected on the eigenspace for each period.
     """
-    assert set(["siren", "periode"] + features) <= set(df.columns)
+    assert set(["siren", "période"] + features) <= set(df.columns)
 
     df_pca = (
-        df.filter(df.periode >= start)
-        .filter(df.periode < end)
-        .orderBy(["periode", "siren"])
-        .select(features + ["periode", "siren"])
+        df.filter(df.période >= start)
+        .filter(df.période < end)
+        .orderBy(["période", "siren"])
+        .select(features + ["période", "siren"])
     )
-    periods = df_pca.select("periode").distinct().rdd.flatMap(lambda x: x).collect()
+    periods = df_pca.select("période").distinct().rdd.flatMap(lambda x: x).collect()
 
     spark = sf_datalake.utils.get_spark_session()
 
     schema = T.StructType(
         [
             T.StructField("feature", T.StringType(), True),
-            T.StructField("periode", T.TimestampType(), True),
+            T.StructField("période", T.TimestampType(), True),
             T.StructField("cp1", T.DoubleType(), True),
             T.StructField("cp2", T.DoubleType(), True),
         ]
@@ -386,7 +352,7 @@ def project_features_on_eigenspace_over_time(
 
     for period in periods:  # groupBy() to optimize?
         eigenspace = build_eigenspace(
-            df_pca.filter(df_pca.periode == period), features, 2
+            df_pca.filter(df_pca.période == period), features, 2
         )
         V_period = eigenspace["V"]
         df_period_eigenspace = convert_features_projection_to_dataframe(

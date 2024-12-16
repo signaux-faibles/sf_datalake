@@ -1,12 +1,10 @@
 """Utility functions for data handling."""
 
 import argparse
-import json
 import logging
 from os import path
-from typing import Dict, Iterable, Optional
+from typing import Dict
 
-import pkg_resources
 import pyspark.sql
 
 import sf_datalake.utils
@@ -40,14 +38,32 @@ def data_path_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def write_data(
+    dataset: pyspark.sql.DataFrame,
+    output_path: str,
+    file_format: str,
+    sep: str = ",",
+):
+    """Loads one or more orc-stored datasets and returns them in a dict.
+
+    Args:
+        dataset: A dataset.
+        output_path: The output path.
+        file_format: The file format, can be either "csv" or "orc".
+        sep: Separator character, in case `file_format` is "csv".
+
+    """
+    write_options = {"header": True, "sep": sep} if file_format == "csv" else {}
+    dataset.write.format(file_format).options(**write_options).save(output_path)
+
+
 def load_data(
     data_paths: Dict[str, str],
     file_format: str = None,
     sep: str = ",",
-    spl_ratio: float = None,
-    seed: int = 1234,
+    infer_schema: bool = True,
 ) -> Dict[str, pyspark.sql.DataFrame]:
-    """Loads one or more orc-stored datasets and returns them in a dict.
+    """Loads one or more datasets and returns them through a dict.
 
     Args:
         data_paths: A dict[str, str] structured as follows: {dataframe_name: file_path}
@@ -55,28 +71,25 @@ def load_data(
           the returned dict.
         file_format: The file format, can be either "csv" or "orc".
         sep: Separator character, in case `file_format` is "csv".
-        spl_ratio: If stated, the size of the return sampled datasets, as a fraction of
-          the full datasets respective sizes.
-        seed: A random seed, used for sub-sampling in case spl_ratio is < 1.
+        infer_schema: If true, spark will infer types, in case `file_format` is "csv".
 
     Returns:
         A dictionary of datasets as pyspark DataFrame objects.
 
     """
-    datasets = {}
+    read_options = (
+        {"inferSchema": infer_schema, "header": True, "sep": sep}
+        if file_format == "csv"
+        else {}
+    )
+    datasets: Dict[str, pyspark.sql.DataFrame] = {}
 
     spark = sf_datalake.utils.get_spark_session()
     for name, file_path in data_paths.items():
-        if file_format is None:
-            file_format = path.splitext(file_path)[-1][1:]
-        if file_format == "csv":
-            df = spark.read.csv(file_path, sep=sep, inferSchema=True, header=True)
-        elif file_format == "orc":
-            df = spark.read.orc(file_path)
+        if file_format in ("csv", "orc"):
+            df = spark.read.format(file_format).options(**read_options).load(file_path)
         else:
             raise ValueError(f"Unknown file format {file_format}.")
-        if spl_ratio is not None:
-            df = df.sample(fraction=spl_ratio, seed=seed)
         datasets[name] = df
     return datasets
 
@@ -115,8 +128,12 @@ def write_predictions(
         test_data,
         ["comp_probability", "probability"],
         assembled_col="probability",
-        keep=["siren", "failure"],
-    ).select(["siren", "failure", "probability"]).repartition(n_rep).write.csv(
+        keep=["siren", "failure", "code_naf", "code_commune", "région"],
+    ).select(
+        ["siren", "code_naf", "failure", "probability", "code_commune", "région"]
+    ).repartition(
+        n_rep
+    ).write.csv(
         test_output_path, header=True
     )
 
@@ -125,8 +142,12 @@ def write_predictions(
         prediction_data,
         ["comp_probability", "probability"],
         assembled_col="probability",
-        keep=["siren"],
-    ).select(["siren", "probability"]).repartition(n_rep).write.csv(
+        keep=["siren", "code_naf", "code_commune", "région"],
+    ).select(
+        ["siren", "code_naf", "probability", "code_commune", "région"]
+    ).repartition(
+        n_rep
+    ).write.csv(
         prediction_output_path, header=True
     )
 
@@ -134,89 +155,15 @@ def write_predictions(
 def write_explanations(
     output_dir: str,
     macro_scores_df: pyspark.sql.DataFrame,
-    concerning_scores_df: pyspark.sql.DataFrame,
+    micro_scores_df: pyspark.sql.DataFrame,
     n_rep: int = 5,
 ):
     """Writes the explanations of a prediction to CSV files."""
-    concerning_output_path = path.join(output_dir, "concerning_values.csv")
-    explanation_output_path = path.join(output_dir, "explanation_data.csv")
-    logging.info("Writing concerning features to file %s", concerning_output_path)
-    concerning_scores_df.repartition(n_rep).write.csv(
-        concerning_output_path, header=True
-    )
-
-    logging.info(
-        "Writing explanation macro scores data to directory %s", explanation_output_path
-    )
+    micro_output_path = path.join(output_dir, "micro_explanation.csv")
+    macro_output_path = path.join(output_dir, "macro_explanation.csv")
+    logging.info("Writing micro explanation data to file %s", micro_output_path)
+    micro_scores_df.repartition(n_rep).write.csv(micro_output_path, header=True)
+    logging.info("Writing macro explanation data to directory %s", macro_output_path)
     macro_scores_df.repartition(n_rep).write.csv(
-        path.join(explanation_output_path), header=True
+        path.join(macro_output_path), header=True
     )
-
-
-def load_parameters(fname: str) -> dict:
-    """Loads a model run parameters from a preset config json file.
-
-    Args:
-        fname: Basename of a config file (including .json extension).
-
-    Returns:
-        The model parameters to use during the learning procedure and prediction.
-
-    """
-    with pkg_resources.resource_stream(
-        "sf_datalake", f"config/parameters/{fname}"
-    ) as f:
-        config = json.load(f)
-    return config
-
-
-def load_variables(fname: str) -> dict:
-    """Loads a list of variables / features from a preset config json file.
-
-    Args:
-        fname: Basename of a config file (including .json extension).
-
-    Returns:
-        The variables, features and corresponding default values to use during the
-          learning procedure and prediction.
-
-    """
-    with pkg_resources.resource_stream("sf_datalake", f"config/variables/{fname}") as f:
-        config = json.load(f)
-    return config
-
-
-def dump_configuration(
-    output_dir: str, config: dict, dump_keys: Optional[Iterable] = None
-):
-    """Dumps a subset of the configuration used during a prediction run.
-
-    Args:
-        output_dir: The path where configuration should be dumped.
-        config: Model configuration, as loaded by io.load_parameters().
-        dump_keys: An Iterable of configuration parameters that should be dumped.
-          All elements of `dump_keys` must be part of `config`'s keys.
-
-    """
-    spark = sf_datalake.utils.get_spark_session()
-
-    config["VERSION"] = pkg_resources.get_distribution("sf_datalake").version
-    if dump_keys is None:
-        dump_keys = {
-            "SEED",
-            "SAMPLE_RATIO",
-            "VERSION",
-            "FILL_MISSING_VALUES",
-            "TRAIN_TEST_SPLIT_RATIO",
-            "TARGET_OVERSAMPLING_RATIO",
-            "N_CONCERNING_MICRO",
-            "TRAIN_DATES",
-            "TEST_DATES",
-            "PREDICTION_DATE",
-            "MODEL",
-            "FEATURES",
-        }
-    sub_config = {k: v for k, v in config.items() if k in dump_keys}
-
-    config_df = spark.createDataFrame(pyspark.sql.Row(sub_config))
-    config_df.repartition(1).write.json(path.join(output_dir, "run_configuration.json"))

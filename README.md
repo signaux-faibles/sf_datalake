@@ -13,7 +13,7 @@ git clone https://forge.dgfip.finances.rie.gouv.fr/dge/signaux-faibles/sf_datala
 
 The virtual environment allows one to install specific version of python packages independantly without messing with the system installation.
 
-Create a virtual environment
+Create a python 3.6.8 virtual environment. If your system python version is not 3.6.8 (check using python3 --version), you may use [pyenv](https://github.com/pyenv/pyenv) to manage multiple python versions at once.
 
 ``` shell
 virtualenv -p `which python3` <virtualenv_dir>
@@ -31,7 +31,11 @@ Make sure the pip version packaged with the env is up to date (it should be >= 1
 pip install -U pip
 ```
 
-Install the package inside the environment
+## Installing the package
+
+### User
+
+To install the package locally, run this command while inside the virtual environment
 
 ``` shell
 pip install .
@@ -39,12 +43,20 @@ pip install .
 
 from the repository root.
 
-## Activate git hooks
+### Developer
 
-Activate git hooks using
+If you're contributing to the package development, you must install the package in editable mode and add some extra requirements for code testing: run this command while inside the virtual environment
 
 ``` shell
-pre-commit install
+pip install -e .[test]
+```
+
+from the repository root.
+
+Then, activate git hooks using
+
+``` shell
+pre-commit install --install-hooks -t pre-commit -t pre-push
 ```
 
 This will install git hooks that should enforce a set of properties before committing / pushing code. These properties can be customized through the `pre-commit` config file and can cover a wide scope : coding style, code linting, tests, etc.
@@ -54,8 +66,10 @@ This will install git hooks that should enforce a set of properties before commi
 - `.ci/` - Contains configuration associated with the maacdo API in order to execute jobs on a cluster using a CI pipeline. This is quite specific to the infrastructure used within the "signaux faibles" project.
 - `docs/` - Sphinx auto-documentation sources.
 - `src/` Contains all the python package source code, see the docs pages for a thorough description or the `__init__.py` module docstring.
+    - `configuration/` - Configuration files and associated helper class and module.
     - `preprocessing/` - Production of datasets from raw data. Datasets loading and handling, exploration and feature engineering utilities.
-- `test/` - Tests (unitary, integration) associated with the code. They may be executed anytime using `pytest`.
+    - `postprocessing/` - Generation of front-end ready documents, statistical evaluation of predictions.
+- `tests/` - Tests associated with the code. They may be executed anytime using `pytest`.
 - `.gitlab-ci.yml` - The gitlab CI/CD tools configuration file.
 - `LICENSE` - The legal license associated with this repository.
 - `MANIFEST.in` - Declaration of data resources used by the package.

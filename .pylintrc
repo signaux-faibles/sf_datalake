@@ -15,6 +15,7 @@ ignore=CVS
 # Add files or directories matching the regex patterns to the blacklist. The
 # regex matches against base names, not paths.
 ignore-patterns=
+ignore-paths=^tests/.*$
 
 # As a temporary workaround for https://github.com/PyCQA/pylint/issues/4577
 init-hook = "import astroid; astroid.context.InferenceContext.max_inferred = 500"

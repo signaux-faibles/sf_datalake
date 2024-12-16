@@ -3,9 +3,7 @@
 import datetime as dt
 import itertools
 import logging
-import math
-import re
-from typing import List
+from typing import List, Tuple, Union
 
 import numpy as np
 import pyspark.ml
@@ -14,7 +12,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 from pyspark import keyword_only
 from pyspark.ml import PipelineModel, Transformer
-from pyspark.ml.feature import OneHotEncoder, StandardScaler, VectorAssembler
+from pyspark.ml.feature import Imputer
 from pyspark.ml.param.shared import (
     HasInputCol,
     HasInputCols,
@@ -24,67 +22,7 @@ from pyspark.ml.param.shared import (
 )
 from pyspark.sql import Window
 
-
-def get_transformer(name: str) -> Transformer:
-    """Gets a pre-configured Transformer object by specifying its name.
-
-    Args:
-        name: Transformer object's name
-
-    Returns:
-        The selected Transformer with prepared parameters.
-
-    """
-    factory = {
-        "StandardScaler": StandardScaler(
-            withMean=True,
-            withStd=True,
-            inputCol="to_StandardScaler",
-            outputCol="from_StandardScaler",
-        ),
-        "OneHotEncoder": OneHotEncoder(dropLast=False),
-    }
-    return factory[name]
-
-
-def generate_transforming_stages(config: dict) -> List[Transformer]:
-    """Generates all stages related to feature transformation.
-
-    The stages are ready to be included in a pyspark.ml.Pipeline.
-
-    Args:
-        config: model configuration, as loaded by io.load_parameters().
-
-    Returns:
-        List of prepared Transformers.
-
-    """
-    stages: List[Transformer] = []
-    concat_input_cols: List[str] = []
-
-    for transformer_name, features in config["TRANSFORMER_FEATURES"].items():
-        # OneHotEncoder takes an un-assembled numeric column as input.
-        if transformer_name == "OneHotEncoder":
-            for feature in features:
-                ohe = get_transformer(transformer_name)
-                ohe.setInputCol(feature)
-                ohe.setOutputCol(f"ohe_{feature}")
-                concat_input_cols.append(f"ohe_{feature}")
-                stages.append(ohe)
-        else:
-            stages.extend(
-                [
-                    VectorAssembler(
-                        inputCols=features, outputCol=f"to_{transformer_name}"
-                    ),
-                    get_transformer(transformer_name),
-                ]
-            )
-            concat_input_cols.append(f"from_{transformer_name}")
-
-    # We add a final concatenation stage of all columns that should be fed to the model.
-    stages.append(VectorAssembler(inputCols=concat_input_cols, outputCol="features"))
-    return stages
+from sf_datalake.utils import count_missing_values
 
 
 def vector_disassembler(
@@ -132,9 +70,9 @@ class DateParser(
     initial string format should be specified using a datetime pattern.
 
     Args:
-        inputCol: The column containing data to be parsed.
-        outputCol: The output column to be created.
-        format: The input column datetime format. Defaults to "yyyyMMdd".
+        inputCol (str): The column containing data to be parsed.
+        outputCol (str): The output column to be created.
+        format (str): The input column datetime format. Defaults to "yyyyMMdd".
 
     """
 
@@ -152,14 +90,7 @@ class DateParser(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCol: The column containing data to be parsed.
-            outputCol: The output column to be created.
-            format: The input column datetime format. Defaults to "yyyyMMdd".
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -181,155 +112,55 @@ class DateParser(
         )
 
 
-class DeltaDebtPerWorkforceColumnAdder(
-    Transformer
-):  # pylint: disable=too-few-public-methods
-    """A transformer to compute the change in social debt / nb of employees.
-
-    The diff over `n_months` is divided by the chosen duration (in months).
-
-    Args:
-        n_months: Number of months over which the diff is computed. Defaults to 3.
-
-    """
-
-    n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "n_months",
-        "Number of months for moving average computation.",
-    )
-
-    @keyword_only
-    def __init__(self, **kwargs):
-        super().__init__()
-        self._setDefault(n_months=3)
-        self.setParams(**kwargs)
-
-    @keyword_only
-    def setParams(self, **kwargs):
-        """Set parameters for this DeltaDebtPerWorkforceColumnAdder transformer.
-
-        Args:
-            n_months (int): Number of months that will be considered for diff.
-
-        """
-        return self._set(**kwargs)
-
-    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Computes the average change in social debt / nb of employees.
-
-        Args:
-            dataset: DataFrame to transform. It should contain debt and workforce data.
-
-        Returns:
-            Transformed DataFrame with an extra debt/workforce column.
-
-        """
-        assert {
-            "montant_part_ouvriere",
-            "montant_part_patronale",
-            "effectif",
-        } <= set(dataset.columns)
-
-        n_months = self.getOrDefault("n_months")
-        dataset = dataset.withColumn(
-            "dette_par_effectif",
-            (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
-            / dataset["effectif"],
-        )
-        return DiffOperator(
-            inputCol="dette_par_effectif",
-            n_months=n_months,
-            slope=True,
-        ).transform(dataset)
-
-
-class DebtRatioColumnAdder(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to compute the social debt/contribution ratio."""
-
-    def _transform(  # pylint: disable=no-self-use
-        self, dataset: pyspark.sql.DataFrame
-    ) -> pyspark.sql.DataFrame:
-        """Computes the social debt/contribution ratio.
-
-        Args:
-            dataset: DataFrame to transform.
-
-        Returns:
-            Transformed DataFrame with an extra `ratio_dette` column.
-
-        """
-        assert {
-            "montant_part_ouvriere",
-            "montant_part_patronale",
-            "cotisation_moy12m",
-        } <= set(dataset.columns)
-
-        return dataset.withColumn(
-            "ratio_dette",
-            (dataset["montant_part_ouvriere"] + dataset["montant_part_patronale"])
-            / dataset["cotisation_moy12m"],
-        )
-
-
-class PaydexOneHotEncoder(
+class BinsOrdinalEncoder(
     Transformer, HasInputCol, HasOutputCol
 ):  # pylint: disable=too-few-public-methods
-    """A transformer to compute one-hot encoded features associated with Paydex data.
+    """A transformer that bins continuous features into ordered buckets.
+
+    The transformed feature will be encoded as a float ordinal feature (0.0, 1.0, ...)
+    and can be further one-hot encoded if needed using another Transformer.
 
     Args:
-        inputCol (str): The variable to be one-hot encoded.
+        inputCol (str): The variable to be encoded.
         bins (list): A list of bins, with adjacent and increasing number of days values,
           e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will be cast to
           floats.
-        outputCol (str): The one-hot encoded column name.
+        outputCol (str): The ordinal encoded column name.
 
     """
 
     bins = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "bins",
-        "Bins for paydex number of days one hot encoding.",
+        "Bins edges to be used to bucketize variable.",
     )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol="paydex_nb_jours", outputCol="paydex_bin", bins=None)
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCol (str): The variable to be one-hot encoded.
-            bins (list): A list of bins, with adjacent and increasing number of days
-              values, e.g.: `[[0, 2], [2, 10], [10, inf]]`. All values inside bins will
-              be cast to floats.
-            outputCol (str): The one-hot encoded column name.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Computes the quantile bins of payment delay (in days).
+        """Ordinal encode the variable using input bins.
 
         Args:
             dataset: DataFrame to transform.
 
         Returns:
-             Transformed DataFrame with extra `paydex_bins` columns.
+            Transformed DataFrame with extra `{var}_bins` columns.
 
         """
 
         ## Binned paydex
-        days_bins = self.getOrDefault("bins")
-        days_splits = np.unique(
-            np.array([float(v) for v in itertools.chain(*days_bins)])
-        )
+        bins = self.getOrDefault("bins")
+        splits = np.unique(np.array([float(v) for v in itertools.chain(*bins)]))
         bucketizer = pyspark.ml.feature.Bucketizer(
-            splits=days_splits,
+            splits=splits,
             handleInvalid="error",
             inputCol=self.getOrDefault("inputCol"),
             outputCol=self.getOrDefault("outputCol"),
@@ -342,80 +173,193 @@ class MissingValuesHandler(
 ):  # pylint: disable=too-few-public-methods
     """A transformer to handle missing values.
 
-    Uses pyspark.sql.DataFrame.fillna method to fill missing values if required.
+    Uses pyspark.sql.DataFrame.fillna, statistical Imputer object or backward/forward
+    filling to fill missing values. Use either the `value` or `strategy` argument as
+    both are mutually exclusive. If `strategy` is set to bfill or ffill, missing values
+    are filled by using the next valid observation to fill the gap in the forward (resp.
+    backward) direction.
+
+    Median convention: for an even number of samples, the median is computed as the
+    `n/2`th sample.
 
     Args:
-      inputCols: The input dataset columns to consider for filling.
-      fill: If True, fill missing values using the `value` arg. Defaults to True.
-      value: Value to replace null values with. It must be a mapping from column name
-        (string) to replacement value. The replacement value must be an int, float,
-        boolean, or string.
+        inputCols (list[str]): The input dataset columns to consider for filling.
+        value (dict): Value to replace null values with. It must be a mapping from
+          column name to replacement value. If None, stat imputation is applied.
+        strategy (str): For statistical imputation, use : 'mean', 'median' or
+          'mode'. For forward / backward filling use 'ffill'/'bfill'
 
     """
 
-    fill = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "fill",
-        "Switch for filling null values.",
-    )
     value = Param(
         Params._dummy(),  # pylint: disable=protected-access
         "value",
         "Value to replace null values with.",
     )
+    strategy = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "strategy",
+        "Method to use for imputation.",
+    )
 
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(fill=True, value=None)
+        self._setDefault(value=None, strategy=None)
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        inputCols (list[str]): The input dataset columns to consider for filling.
-        fill (bool): If True, fill missing values using the `value` arg. Defaults to
-          True.
-        value (dict): Value to replace null values with. It must be a mapping from
-          column name (string) to replacement value. The replacement value must be an
-          int, float, boolean, or string.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Fills or drop entries containing missing values.
-
-        If `fill` patameter is true, missing data is filled with predefined values from
-        the `value` parameter.
+        """Fill entries containing missing values inplace.
 
         Args:
             dataset: DataFrame to transform containing missing values.
 
         Returns:
-            DataFrame where previously missing values are either filled, or
-            corresponding entries are dropped.
+            DataFrame where previously missing values are filled using selected method.
+
+        Raises:
+            ValueError if:
+            - both `value` and `strategy` or neither are set.
+            - statistical imputation is required on non-numerical columns.
 
         """
-        fill: bool = self.getOrDefault("fill")
+        strategy: str = self.getOrDefault("strategy")
         value: dict = self.getOrDefault("value")
-        features: List[str] = self.getOrDefault("inputCols")
-        if fill:
-            for feature in features:
-                for var, val in value.items():
-                    if re.match(rf"{var}_(diff|slope|moy|lag)\d+m$", feature):
-                        value[feature] = val
-                        break
-            if not set(features) <= set(value):
-                logging.warning(
-                    "No corresponding fill value found for features %s",
-                    set(features) - set(value),
-                )
-            dataset = dataset.fillna(
-                {feature: val for feature, val in value.items() if feature in features}
+        input_cols: List[str] = self.getOrDefault("inputCols")
+
+        # Check arguments
+        if value is not None and strategy is not None:
+            raise ValueError(
+                "`value` and `strategy` are mutually exclusive. Use either one."
             )
-        return dataset.dropna()
+        if value is None and strategy is None:
+            raise ValueError("Either `value` or `strategy` must be set.")
+
+        # Use values
+        if value is not None:
+            return dataset.fillna(
+                {var: val for var, val in value.items() if var in input_cols}
+            )
+
+        # Use a strategy
+        ## Filling strategy
+        if strategy in ["bfill", "ffill"]:
+            forward_window = (
+                Window()
+                .partitionBy("siren")
+                .orderBy(F.col("période").asc())
+                .rowsBetween(Window.currentRow, Window.unboundedFollowing)
+            )
+            backward_window = (
+                Window()
+                .partitionBy("siren")
+                .orderBy(F.col("période").asc())
+                .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+            )
+            fill_window = forward_window if strategy == "bfill" else backward_window
+            lookup_function = F.first if strategy == "bfill" else F.last
+            for col in input_cols:
+                dataset = dataset.withColumn(
+                    col, lookup_function(col, ignorenulls=True).over(fill_window)
+                )
+        ## Statistical imputation
+        if strategy in ["median", "mean", "mode"]:
+            # Check that columns are of numerical type and non-empty
+            if any(
+                dtype in {"bool", "timestamp", "date", "string"}
+                for dtype in [dtype for _, dtype in dataset.select(input_cols).dtypes]
+            ):
+                raise ValueError(
+                    "Statistical imputation of a non-numerical variable is not "
+                    "supported."
+                )
+            n_rows = dataset.count()
+            n_missing_values = count_missing_values(dataset)
+            for col in input_cols:
+                if n_missing_values[col] == n_rows:
+                    raise ValueError(
+                        "Statistical imputation of a null column is not supported."
+                    )
+
+            imputer = Imputer(strategy=strategy)
+            imputer.setInputCols(input_cols)
+            imputer.setOutputCols(input_cols)
+            dataset = imputer.fit(dataset).transform(dataset)
+        return dataset
+
+
+class MissingValuesDropper(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods
+    """Drops missing values.
+
+    This Transformer is only a way to simply drop null values inside a Pipeline.
+    pyspark.sql.DataFrame.dropna() is called using `how=any`, meaning that any row
+    containing at least one missing value found among `inputCols` will be dropped.
+
+    Args:
+        inputCols (list[str]): The input dataset columns to consider for dropping.
+        ignore_type (tuple[str]): Ignore any inputCol if its type is found inside
+          ignore_type.
+
+    """
+
+    ignore_type = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "ignore_type",
+        "Columns of these types will be ignored.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(
+            ignore_type=(
+                T.ArrayType,
+                T.MapType,
+                T.StructType,
+                T.StructField,
+                T.UserDefinedType,
+            )
+        )
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer."""
+        return self._set(**kwargs)
+
+    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
+        """Applies dropna to a dataset.
+
+        Args:
+            dataset: DataFrame containing missing values.
+
+        Returns:
+            DataFrame where rows with missing values are dropped.
+
+        """
+        input_cols: List[str] = self.getOrDefault("inputCols")
+        ignore_type: Tuple[str] = self.getOrDefault("ignore_type")
+        dropna_dataset = dataset.dropna(
+            subset=[
+                feature
+                for feature in input_cols
+                if not isinstance(dataset.schema[feature].dataType, ignore_type)
+            ]
+        )
+
+        if dropna_dataset.count() != dataset.count():
+            logging.info(
+                "Some rows containing null values in subset %s were dropped",
+                input_cols,
+            )
+        return dropna_dataset
 
 
 class IdentifierNormalizer(
@@ -450,14 +394,7 @@ class IdentifierNormalizer(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this IdentifierNormalizer.
-
-        Args:
-            inputCol: The column containing SIRENs to normalize. Default to "siren".
-            n_pad: Length of string to be zero-padded. A SIREN is 9 characters long,
-              while a SIRET is 14 characters long.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -505,13 +442,7 @@ class SiretToSiren(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this SiretToSiren.
-
-        Args:
-            inputCol: The column containing SIRET values. Default to "siret".
-            outputCol: The column containing SIREN values. Default to "siren".
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -538,14 +469,50 @@ class SiretToSiren(
 
 
 class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to aggregate data at a SIREN level."""
+    """A transformer to aggregate data at a SIREN level.
 
-    def __init__(self, config):
+    Args:
+        grouping_cols (list[str]): A list of columns to groupby before aggregation.
+        aggregation_map (dict[str, str]): A mapping between variables names and
+          aggregation operation.
+        no_aggregation (list[str]): A list of columns that should not be aggregated
+          but should be preserved in the output.
+
+    """
+
+    grouping_cols = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "grouping_cols",
+        "Column to group by begore aggregation",
+    )
+    aggregation_map = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "aggregation_map",
+        "Mapping between feature names and an aggregation operation.",
+    )
+    no_aggregation = Param(
+        Params._dummy(),  # pylint: disable=protected-access
+        "no_aggregation",
+        "Column that should be kept as-is.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(
+            grouping_cols=["siren", "période"],
+            aggregation_map=None,
+            no_aggregation=None,
+        )
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer."""
+        return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Aggregate data at a SIREN level by sum or average.
+        """Aggregate data at a SIREN level by sum, average, etc.
 
         Args:
             dataset: DataFrame to transform containing data at a SIRET level.
@@ -554,21 +521,20 @@ class SirenAggregator(Transformer):  # pylint: disable=too-few-public-methods
             Transformed DataFrame at a SIREN level.
 
         """
-        assert {"IDENTIFIERS", "SIREN_AGGREGATION", "NO_AGGREGATION"} <= set(
-            self.config
-        )
 
-        aggregated = dataset.groupBy(self.config["IDENTIFIERS"]).agg(
-            self.config["SIREN_AGGREGATION"]
-        )
-        for colname, func in self.config["SIREN_AGGREGATION"].items():
+        grouping_cols = self.getOrDefault("grouping_cols")
+        no_aggregation = self.getOrDefault("no_aggregation")
+        agg_map = self.getOrDefault("aggregation_map")
+        if no_aggregation is None:
+            no_aggregation = []
+
+        aggregated = dataset.groupBy(grouping_cols).agg(agg_map)
+        for colname, func in agg_map.items():
             aggregated = aggregated.withColumnRenamed(f"{func}({colname})", colname)
-        siren_level = dataset.select(
-            self.config["NO_AGGREGATION"] + self.config["IDENTIFIERS"]
-        ).distinct()
+            siren_level = dataset.select(grouping_cols + no_aggregation).distinct()
         return aggregated.join(
             siren_level,
-            on=["siren", "periode"],
+            on=self.getOrDefault("grouping_cols"),
             how="left",
         )
 
@@ -608,14 +574,7 @@ class TimeNormalizer(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this TimeNormalizer.
-
-        Args:
-            inputCols: A list of the columns that will be normalized.
-            start: The columns that holds start dates of periods.
-            end: The columns that holds end dates of periods.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -639,22 +598,24 @@ class TimeNormalizer(
         return dataset
 
 
-class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
+class MovingAverage(
+    Transformer, HasInputCol
+):  # pylint: disable=too-few-public-methods,protected-access
     """A transformer that computes moving averages of time-series variables.
 
     Args:
-        inputCol: The column that will be averaged.
-        n_months: Number of months over which the average is computed.
+        inputCol (str): The column that will be averaged.
+        n_months (int or list): Number of months over which the average is computed.
 
     """
 
     n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "n_months",
         "Number of months for moving average computation.",
     )
     ref_date = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "ref_date",
         "A reference date, used to compute number of months between rows.",
     )
@@ -667,13 +628,7 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this MovingAverage transformer.
-
-        Args:
-            inputCol (str): The column that will be averaged.
-            n_months (int or list): Number of months over which the average is computed.
-
-        """
+        """Set parameters for this MovingAverage transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -689,8 +644,8 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
             dataset: DataFrame to transform containing time-series data.
 
         Returns:
-            DataFrame with new "var_moy[n]m" columns, where [n] is a number of months
-            over which `var`'s average is computed.
+            DataFrame with new "var_mean[n]m" columns, where [n] is a number of months
+              over which `var`'s average is computed.
 
         """
         n_months = self.getOrDefault("n_months")
@@ -705,7 +660,7 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
             "ref_date", F.lit(self.getOrDefault("ref_date"))
         ).withColumn(
             "months_from_ref",
-            F.months_between("periode", "ref_date").cast(T.IntegerType()),
+            F.months_between("période", "ref_date").cast(T.IntegerType()),
         )
 
         time_windows = {
@@ -718,14 +673,16 @@ class MovingAverage(Transformer, HasInputCol):  # pylint: disable=too-few-public
         feat = self.getOrDefault("inputCol")
         for n in n_months:
             dataset = dataset.withColumn(
-                f"{feat}_moy{n}m",
+                f"{feat}_mean{n}m",
                 F.avg(F.col(feat)).over(time_windows[n]),
             )
 
         return dataset.drop("ref_date", "months_from_ref")
 
 
-class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
+class LagOperator(
+    Transformer, HasInputCol
+):  # pylint: disable=too-few-public-methods,protected-access
     """A transformer that computes lagged values of a given time-indexed variable.
 
     Args:
@@ -735,13 +692,13 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
     """
 
     n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "n_months",
         "Number of months for lag computation.",
     )
 
     ref_date = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "ref_date",
         "A reference date, used to compute number of months between rows.",
     )
@@ -749,18 +706,16 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, n_months=None, ref_date=dt.date(2014, 1, 1))
+        self._setDefault(
+            inputCol=None,
+            n_months=None,
+            ref_date=dt.date(2014, 1, 1),
+        )
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this LagOperator transformer.
-
-        Args:
-            inputCol (str): The column that will be used to derive lagged variables.
-            n_months (int or list): Number of months that will be considered for lags.
-
-        """
+        """Set parameters for this LagOperator transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -793,43 +748,39 @@ class LagOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-m
             "ref_date", F.lit(self.getOrDefault("ref_date"))
         ).withColumn(
             "months_from_ref",
-            F.months_between("periode", "ref_date").cast(T.IntegerType()),
+            F.months_between("période", "ref_date").cast(T.IntegerType()),
         )
 
         lag_window = (
             Window().partitionBy("siren").orderBy(F.col("months_from_ref").asc())
         )
-        for n in n_months:
-            dataset = dataset.withColumn(
-                f"{input_col}_lag{n}m",
-                F.lag(F.col(input_col), n, 0.0).over(lag_window),
-            )
 
+        for n in n_months:
+            output_col = f"{input_col}_lag{n}m"
+            dataset = dataset.withColumn(
+                output_col,
+                F.lag(F.col(input_col), n).over(lag_window),
+            )
         return dataset.drop("ref_date", "months_from_ref")
 
 
-class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-methods
+class DiffOperator(
+    Transformer, HasInputCol
+):  # pylint: disable=too-few-public-methods,protected-access
     """A transformer that computes the time evolution of a given time-indexed variable.
 
     This transformer creates a LagOperator under the hood if the required lagged
-    variable is not found in the dataset. The output(s) can either be a difference,
-    or a slope, computed as the ratio of the slope over the duration, i.e. the
-    `n_months` parameter.
+    variable is not found in the dataset.
 
     Args:
-        inputCol: The column that will be used to derive the diff.
-        n_months: Number of months that will be considered for the difference.
-        slope: If True, divide the computed difference by its duration in months.
+        inputCol (str): The column that will be used to derive the diff.
+        n_months (int or list): Number of months that will be considered for the
+          difference.
 
     """
 
-    slope = Param(
-        Params._dummy(),  # pylint: disable=protected-access
-        "slope",
-        "Divide difference by the duration.",
-    )
     n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "n_months",
         "Number of months for diff computation.",
     )
@@ -837,19 +788,15 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
     @keyword_only
     def __init__(self, **kwargs):
         super().__init__()
-        self._setDefault(inputCol=None, n_months=None, slope=False)
+        self._setDefault(
+            inputCol=None,
+            n_months=None,
+        )
         self.setParams(**kwargs)
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this LagOperator transformer.
-
-        Args:
-            inputCol (str): The column that will be used to derive lagged variables.
-            n_months (int or list): Number of months that will be considered for lags.
-            slope: If True, divide the computed difference by its duration in months.
-
-        """
+        """Set parameters for this LagOperator transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
@@ -871,15 +818,12 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         """
         input_col = self.getOrDefault("inputCol")
         n_months = self.getOrDefault("n_months")
-        compute_slope = self.getOrDefault("slope")
         if isinstance(n_months, int):
             n_months = [n_months]
         elif isinstance(n_months, list):
             pass
         else:
             raise ValueError("`n_months` should either be an int or a list of ints.")
-        var_coeff = [1 / n if compute_slope else 1 for n in n_months]
-        var_name = "slope" if compute_slope else "diff"
 
         # Compute lagged variables if needed
         missing_lags = [
@@ -890,10 +834,10 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
         ).transform(dataset)
 
         # Compute diffs
-        for i, n in enumerate(n_months):
+        for n in n_months:
             dataset = dataset.withColumn(
-                f"{input_col}_{var_name}{n}m",
-                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")) * var_coeff[i],
+                f"{input_col}_diff{n}m",
+                (F.col(f"{input_col}") - F.col(f"{input_col}_lag{n}m")),
             )
 
         return dataset.drop(*[f"{input_col}_lag{n}m" for n in missing_lags])
@@ -901,11 +845,19 @@ class DiffOperator(Transformer, HasInputCol):  # pylint: disable=too-few-public-
 
 class TargetVariable(
     Transformer, HasInputCol, HasOutputCol
-):  # pylint: disable=too-few-public-methods
-    """A transformer to compute the company failure target variable."""
+):  # pylint: disable=too-few-public-methods, protected-access
+    """A transformer to compute the company failure target variable.
+
+    Args:
+        inputCol (str): The column that will be used to derive target. It should contain
+          the failure (judgment) date.
+        outputCol (str): The new target variable column.
+        n_months (int): Number of months that will be considered as target threshold.
+
+    """
 
     n_months = Param(
-        Params._dummy(),  # pylint: disable=protected-access
+        Params._dummy(),
         "n_months",
         "Number of months for failure forecast.",
     )
@@ -918,15 +870,7 @@ class TargetVariable(
 
     @keyword_only
     def setParams(self, **kwargs):
-        """Set parameters for this transformer.
-
-        Args:
-            inputCol (str): The column that will be used to derive target.
-            outputCol (str): The new target variable column.
-            n_months (int): Number of months that will be considered as target
-              threshold.
-
-        """
+        """Set parameters for this transformer."""
         return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame):
@@ -939,48 +883,15 @@ class TargetVariable(
             Transformed DataFrame with an extra target column.
 
         """
-        dataset = dataset.fillna(value={self.getOrDefault("inputCol"): math.inf})
         return dataset.withColumn(
             self.getOrDefault("outputCol"),
             (
-                dataset[self.getOrDefault("inputCol")] <= self.getOrDefault("n_months")
-            ).cast(T.IntegerType()),
-        )  # Pyspark models except integer or floating labels.
-
-
-class ColumnSelector(
-    Transformer, HasInputCols
-):  # pylint: disable=too-few-public-methods
-    """A transformer to select the columns of the dataset used in the model."""
-
-    @keyword_only
-    def __init__(self, **kwargs):
-        super().__init__()
-        self._setDefault(inputCols=None)
-        self.setParams(**kwargs)
-
-    @keyword_only
-    def setParams(self, inputCols: List[str]):
-        """Set parameters for this ColumnSelector transformer.
-
-        Args:
-            inputCols (list): The columns that will be used in the ML process.
-
-        """
-        return self._set(inputCols=inputCols)
-
-    def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Select the columns of the dataset used in ML process.
-
-        Args:
-            dataset: DataFrame to select columns from.
-
-        Returns:
-            Transformed DataFrame.
-
-        """
-        dataset = dataset.select(self.getOrDefault("inputCols"))
-        return dataset
+                F.add_months(dataset["période"], months=self.getOrDefault("n_months"))
+                >= dataset[self.getOrDefault("inputCol")]
+            ).cast(
+                T.IntegerType()
+            ),  # Pyspark models except integer or floating labels.
+        ).fillna(value={self.getOrDefault("outputCol"): 0})
 
 
 class PrivateCompanyFilter(Transformer):  # pylint: disable=too-few-public-methods
@@ -1021,66 +932,230 @@ class HasPaydexFilter(Transformer):  # pylint: disable=too-few-public-methods
 
         """
         return dataset.filter(
-            F.col("paydex_nb_jours").isNotNull()
-            & F.col("paydex_nb_jours_diff12m").isNotNull()
+            F.col("paydex").isNotNull() & F.col("paydex_diff12m").isNotNull()
         )
 
 
-class WorkforceFilter(Transformer):  # pylint: disable=too-few-public-methods
-    """A transformer to filter the dataset according to workforce size."""
+class LinearInterpolationOperator(
+    Transformer, HasInputCols
+):  # pylint: disable=too-few-public-methods,protected-access
+    """A transformer that fills missing values using linear interpolation.
 
-    def _transform(  # pylint: disable=no-self-use
-        self, dataset: pyspark.sql.DataFrame
-    ) -> pyspark.sql.DataFrame:
-        """Filters out small companies
+    Data is grouped using the `id_cols` columns and ordered using the `time_col`, any
+    null values gap between non-null values will be filled.
 
-        Only keeps companies with more than 10 employees.
+    Args:
+        inputCols (list[str]): Columns to fill.
+        id_cols (str or list[str]): Entity index, along which the dataset will be
+          partitioned.
+        time_col (str): Time index, used to sort the dataset.
 
-        Args:
-            dataset: DataFrame to filter.
+    """
 
-        Returns:
-            Filtered DataFrame.
+    id_cols = Param(
+        Params._dummy(),
+        "id_cols",
+        "Id columns to group for interpolation.",
+    )
+    time_col = Param(
+        Params._dummy(),
+        "time_col",
+        "Columns to follow for interpolation.",
+    )
 
-        """
-        if "effectif" not in dataset.columns:
-            raise KeyError("Dataset has no 'effectif' column.")
-        return dataset.filter(F.col("effectif") >= 10)
-
-
-class Covid19Adapter(Transformer):  # pylint: disable=too-few-public-methods
-    """Adapt post-pandemic data using linear fits of features quantiles."""
-
-    def __init__(self, config):
+    @keyword_only
+    def __init__(self, **kwargs):
         super().__init__()
-        self.config = config
+        self._setDefault(id_cols="siren", time_col="période", inputCols=None)
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer."""
+        return self._set(**kwargs)
 
     def _transform(self, dataset: pyspark.sql.DataFrame) -> pyspark.sql.DataFrame:
-        """Adapts post-pandemic data using linear fits of features quantiles.
-
-        Adapt post-pandemic event data through linear fits of the pre-pandemic quantiles
-        --> post-pandemic quantiles mappings (for each variable that ).
+        """Use linear interpolation to fill missing time-series values.
 
         Args:
-            dataset: DataFrame to transform.
+            dataset: DataFrame with time-series columns containing missing values.
 
         Returns:
-            Transformed DataFrame with post-pandemic data adapted to fit pre-pandemic
-              distribution.
+            DataFrame where time-series missing values are filled through interpolation.
 
         """
-        if not self.config["USE_COVID19ADAPTER"]:
-            return dataset
+        id_cols: Union[str, List[str]] = self.getOrDefault("id_cols")
+        time_col: str = self.getOrDefault("time_col")
+        input_cols: List[str] = self.getOrDefault("inputCols")
 
-        assert set(self.config["FEATURES_TO_ADAPT"]) <= set(dataset.columns)
-        for feat in self.config["FEATURES_TO_ADAPT"]:
-            dataset = dataset.withColumn(
-                feat,
-                F.when(
-                    F.col("periode") > self.config["PANDEMIC_EVENT_DATE"],
-                    self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][0]
-                    + self.config["COVID_ADAPTER_PARAMETERS"][feat]["params"][1]
-                    * F.col(feat),
-                ).otherwise(F.col(feat)),
+        w = Window.partitionBy(id_cols).orderBy(time_col)
+        w_start = (
+            Window.partitionBy(id_cols)
+            .orderBy(time_col)
+            .rowsBetween(Window.unboundedPreceding, -1)
+        )
+        w_end = (
+            Window.partitionBy(id_cols)
+            .orderBy(time_col)
+            .rowsBetween(0, Window.unboundedFollowing)
+        )
+        output_df = dataset.withColumn("rn", F.row_number().over(w))
+
+        for col in input_cols:
+
+            # Assign index for non-null rows within partitioned windows
+            output_df = output_df.withColumn(
+                "rn_not_null", F.when(F.col(col).isNotNull(), F.col("rn"))
             )
-        return dataset
+
+            # Create relative references to the gap start value (left bound)
+            output_df = output_df.withColumn(
+                "left_bound_val", F.last(col, ignorenulls=True).over(w_start)
+            )
+            output_df = output_df.withColumn(
+                "left_bound_rn", F.last("rn_not_null", ignorenulls=True).over(w_start)
+            )
+
+            # Create relative references to the gap end value (right bound)
+            output_df = output_df.withColumn(
+                "right_bound_val", F.first(col, ignorenulls=True).over(w_end)
+            )
+            output_df = output_df.withColumn(
+                "right_bound_rn", F.first("rn_not_null", ignorenulls=True).over(w_end)
+            )
+
+            # Create references to gap length and current gap position.
+            output_df = output_df.withColumn(
+                "interval_length_rn", F.col("right_bound_rn") - F.col("left_bound_rn")
+            )
+            output_df = output_df.withColumn(
+                "curr_rn",
+                F.col("interval_length_rn") - (F.col("right_bound_rn") - F.col("rn")),
+            )
+
+            # Compute linear interpolation value
+            lin_interp_col = F.col("left_bound_val") + (
+                F.col("right_bound_val") - F.col("left_bound_val")
+            ) / F.col("interval_length_rn") * F.col("curr_rn")
+            output_df = output_df.withColumn(
+                col,
+                F.when(F.col(col).isNull(), lin_interp_col).otherwise(F.col(col)),
+            )
+
+        return output_df.drop(
+            "rn",
+            "rn_not_null",
+            "left_bound_val",
+            "right_bound_val",
+            "left_bound_rn",
+            "right_bound_rn",
+            "interval_length_rn",
+            "curr_rn",
+        )
+
+
+class RandomResampler(
+    Transformer
+):  # pylint: disable=too-few-public-methods,protected-access
+    """Resample dataset to attain some specific (binary) classes ratio.
+
+    The dataset is resampled according to the min_class_ratio parameter so as to obtain
+    the requested balance between the two classes. If `method` is "undersampling", the
+    majority class samples are subsampled, if `method` is "oversampling", the minority
+    class samples are oversampled using random sampling with replacement.
+
+    Args:
+        seed (int): Sampling random seed.
+        method (str): "undersampling" will delete majority class samples, while
+          "oversampling" will sample with replacement from minority class.
+        class_col (str): Class label column.
+        min_class_ratio (float): Requested (minority class / dataset size) ratio.
+
+    """
+
+    seed = Param(
+        Params._dummy(),
+        "seed",
+        "Sampling random seed.",
+    )
+    method = Param(
+        Params._dummy(),
+        "method",
+        "Resampling method.",
+    )
+    min_class_ratio = Param(
+        Params._dummy(),
+        "min_class_ratio",
+        "Requested (minority class / total n samples) output ratio.",
+    )
+    class_col = Param(
+        Params._dummy(),
+        "class_col",
+        "Class label column.",
+    )
+
+    @keyword_only
+    def __init__(self, **kwargs):
+        super().__init__()
+        self._setDefault(
+            class_col="failure",
+        )
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, **kwargs):
+        """Set parameters for this transformer."""
+        return self._set(**kwargs)
+
+    def _transform(  # pylint:disable=too-many-locals
+        self, dataset: pyspark.sql.DataFrame
+    ) -> pyspark.sql.DataFrame:
+        """Resamples the dataset.
+
+        Returns:
+            DataFrame, resampled according to requested ratio.
+
+        """
+        seed: int = self.getOrDefault("seed")
+        class_col: str = self.getOrDefault("class_col")
+        method: str = self.getOrDefault("method")
+        min_class_ratio: float = self.getOrDefault("min_class_ratio")
+        maj_class_ratio: float = 1.0 - min_class_ratio
+
+        if method not in {"undersampling", "oversampling"}:
+            raise ValueError(f"Unknown resampling method {method}.")
+
+        # Get class counts and filter subsets
+        class_counts = dataset.groupBy(class_col).count().rdd.collectAsMap()
+        majority_class_label = max(class_counts, key=class_counts.get)
+        minority_class_label = min(class_counts, key=class_counts.get)
+        majority_class_count: int = class_counts[majority_class_label]
+        minority_class_count: int = class_counts[minority_class_label]
+        if len(class_counts) == 1:
+            raise ValueError("There is only 1 class in the dataset.")
+        majority_class_df = dataset.filter(F.col(class_col) == majority_class_label)
+        minority_class_df = dataset.filter(F.col(class_col) == minority_class_label)
+        if method == "undersampling":
+            # We compute total number of samples in resampled dataset given fixed
+            # minority class samples, then we undersample the majority class subset.
+            subset_size = int(minority_class_count / min_class_ratio)
+            n_post_sampling_maj_class = int(maj_class_ratio * subset_size)
+            downsampled_df = majority_class_df.sample(
+                withReplacement=False,
+                fraction=n_post_sampling_maj_class / majority_class_count,
+                seed=seed,
+            )
+            resampled_df = downsampled_df.union(minority_class_df)
+        elif method == "oversampling":
+            # We compute total number of samples in resampled dataset given fixed
+            # majority class samples, then we oversample the minority class subset.
+            subset_size = int(majority_class_count / maj_class_ratio)
+            n_post_sampling_min_class = int(min_class_ratio * subset_size)
+            upsampled_df = minority_class_df.sample(
+                withReplacement=True,
+                fraction=n_post_sampling_min_class / minority_class_count,
+                seed=seed,
+            )
+            resampled_df = upsampled_df.union(majority_class_df)
+
+        return resampled_df
