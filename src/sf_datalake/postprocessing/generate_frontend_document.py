@@ -35,20 +35,26 @@ path_group = parser.add_argument_group(
 )
 
 path_group.add_argument(
-    "-t", "--test_set", required=True, help="Path to the test set csv file."
+    "-t", "--test_set", required=True, help="Path to the test set file."
 )
 path_group.add_argument(
     "-p",
     "--prediction_set",
     required=True,
-    help="Path to the prediction set csv file.",
+    help="Path to the prediction set file.",
 )
 path_group.add_argument(
     "-x",
     "--explanation_data",
     required=True,
-    help="""Path to a directory containing csv files with "micro" and "macro"
+    help="""Path to a directory containing files with "micro" and "macro"
     explanation data.""",
+)
+path_group.add_argument(
+    "-e",
+    "--input_ext",
+    required=True,
+    help="""Extension of file to read.""",
 )
 path_group.add_argument(
     "-o",
@@ -118,17 +124,34 @@ additional_data = {
 }
 
 # Load prediction lists
-test_set = pd.read_csv(args.test_set)
+test_set = None
+if args.input_ext == "csv":
+    test_set = pd.read_csv(args.test_set + args.input_ext)
+elif args.input_ext == "parquet":
+    test_set = pd.read_parquet(args.test_set + args.input_ext)
+else:
+    raise ValueError(f"Unknown file format {args.input_ext}.")
 test_set["siren"] = normalize_siren(test_set["siren"])
 test_set = test_set.set_index("siren")
 
-prediction_set = pd.read_csv(args.prediction_set)
+prediction_set = None
+if args.input_ext == "csv":
+    prediction_set = pd.read_csv(args.prediction_set + args.input_ext)
+elif args.input_ext == "parquet":
+    prediction_set = pd.read_parquet(args.prediction_set + args.input_ext)
 prediction_set["siren"] = normalize_siren(prediction_set["siren"])
 prediction_set = prediction_set.set_index("siren")
 
-macro_explanation = pd.read_csv(
-    path.join(args.explanation_data, "macro_explanation.csv")
-)
+macro_explanation = None
+if args.input_ext == "csv":
+    macro_explanation = pd.read_csv(
+        path.join(args.explanation_data, "macro_explanation.csv")
+    )
+elif args.input_ext == "parquet":
+    macro_explanation = pd.read_parquet(
+        path.join(args.explanation_data, "macro_explanation.parquet")
+    )
+
 macro_explanation["siren"] = normalize_siren(macro_explanation["siren"])
 macro_explanation = macro_explanation.set_index("siren")
 macro_explanation.columns = [
@@ -154,9 +177,17 @@ for isi in siren_index:
 # End of rescaling part
 #############################################################################
 
-micro_explanation = pd.read_csv(
-    path.join(args.explanation_data, "micro_explanation.csv")
-)
+micro_explanation = None
+if args.input_ext == "csv":
+    micro_explanation = pd.read_csv(
+        path.join(args.explanation_data, "micro_explanation.csv")
+    )
+elif args.input_ext == "parquet":
+    micro_explanation = pd.read_parquet(
+        path.join(args.explanation_data, "micro_explanation.parquet")
+    )
+
+
 micro_explanation["siren"] = normalize_siren(micro_explanation["siren"])
 micro_explanation = micro_explanation.set_index("siren")
 
