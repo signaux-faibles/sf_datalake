@@ -117,12 +117,12 @@ def write_predictions(
     output_dir: str,
     test_data: pyspark.sql.DataFrame,
     prediction_data: pyspark.sql.DataFrame,
-    file_format: str,
+    output_format: str,
     n_rep: int = 5,
 ):
     """Writes the results of a prediction to CSV or parquet files."""
-    test_output_path = path.join(output_dir, "test_data." + file_format)
-    prediction_output_path = path.join(output_dir, "prediction_data." + file_format)
+    test_output_path = path.join(output_dir, "test_data." + output_format)
+    prediction_output_path = path.join(output_dir, "prediction_data." + output_format)
 
     output_test = (
         sf_datalake.transform.vector_disassembler(
@@ -148,39 +148,39 @@ def write_predictions(
         .repartition(n_rep)
     )
 
-    if file_format == "csv":
+    if output_format == "csv":
         logging.info("Writing test data to file %s", test_output_path)
         output_test.write.csv(test_output_path, header=True)
         logging.info("Writing prediction data to file %s", prediction_output_path)
         output_prediction.write.csv(prediction_output_path, header=True)
-    elif file_format == "parquet":
+    elif output_format == "parquet":
         logging.info("Writing test data to file %s", test_output_path)
         output_test.write.parquet(test_output_path)
         logging.info("Writing prediction data to file %s", prediction_output_path)
         output_prediction.write.parquet(prediction_output_path)
     else:
-        raise ValueError(f"Unknown file format {file_format}.")
+        raise ValueError(f"Unknown file format {output_format}.")
 
 
 def write_explanations(
     output_dir: str,
     macro_scores_df: pyspark.sql.DataFrame,
     micro_scores_df: pyspark.sql.DataFrame,
-    file_format: str,
+    output_format: str,
     n_rep: int = 5,
 ):
     """Writes the explanations of a prediction to CSV or parquet files."""
-    micro_output_path = path.join(output_dir, "micro_explanation." + file_format)
-    macro_output_path = path.join(output_dir, "macro_explanation." + file_format)
+    micro_output_path = path.join(output_dir, "micro_explanation." + output_format)
+    macro_output_path = path.join(output_dir, "macro_explanation." + output_format)
 
-    if file_format == "csv":
+    if output_format == "csv":
         logging.info("Writing micro explanation data to file %s", micro_output_path)
         micro_scores_df.repartition(n_rep).write.csv(micro_output_path, header=True)
         logging.info(
             "Writing macro explanation data to directory %s", macro_output_path
         )
         macro_scores_df.repartition(n_rep).write.csv(macro_output_path, header=True)
-    elif file_format == "parquet":
+    elif output_format == "parquet":
         logging.info("Writing micro explanation data to file %s", micro_output_path)
         micro_scores_df.repartition(n_rep).write.parquet(micro_output_path)
         logging.info(
@@ -188,4 +188,4 @@ def write_explanations(
         )
         macro_scores_df.repartition(n_rep).write.parquet(macro_output_path)
     else:
-        raise ValueError(f"Unknown file format {file_format}.")
+        raise ValueError(f"Unknown file format {output_format}.")
