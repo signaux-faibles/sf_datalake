@@ -155,11 +155,13 @@ def write_predictions(
         output_prediction.write.csv(prediction_output_path, header=True)
     elif output_format == "parquet":
         logging.info("Writing test data to file %s", test_output_path)
-        output_test.write.option("compression", "none").parquet(test_output_path)
-        logging.info("Writing prediction data to file %s", prediction_output_path)
-        output_prediction.write.option("compression", "none").parquet(
-            prediction_output_path
+        output_test.repartition(n_rep).write.option("compression", "none").parquet(
+            test_output_path
         )
+        logging.info("Writing prediction data to file %s", prediction_output_path)
+        output_prediction.repartition(n_rep).write.option(
+            "compression", "none"
+        ).parquet(prediction_output_path)
     else:
         raise ValueError(f"Unknown file format {output_format}.")
 
@@ -188,6 +190,8 @@ def write_explanations(
         logging.info(
             "Writing macro explanation data to directory %s", macro_output_path
         )
-        macro_scores_df.write.option("compression", "none").parquet(macro_output_path)
+        macro_scores_df.repartition(n_rep).write.option("compression", "none").parquet(
+            macro_output_path
+        )
     else:
         raise ValueError(f"Unknown file format {output_format}.")
