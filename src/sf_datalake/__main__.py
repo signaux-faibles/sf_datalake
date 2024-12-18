@@ -123,6 +123,9 @@ parser.add_argument(
 )
 args = vars(parser.parse_args())
 
+print("COUCOU")
+print(args)
+
 # Parse configuration files and possibly override parameters.
 # Then, dump all used configuration inside the output directory.
 config_file: str = args.pop("configuration")

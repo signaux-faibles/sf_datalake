@@ -265,8 +265,6 @@ class ConfigurationHelper:
 
     def __init__(self, config_file: str = None, cli_args: Dict[str, Any] = None):
         override_args: Dict[str, Any] = {}
-        print("COUCOU")
-        print(cli_args)
         if config_file is not None:
             with importlib_resources.files("sf_datalake.configuration").joinpath(
                 f"{config_file}"
