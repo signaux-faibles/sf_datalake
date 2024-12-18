@@ -155,9 +155,11 @@ def write_predictions(
         output_prediction.write.csv(prediction_output_path, header=True)
     elif output_format == "parquet":
         logging.info("Writing test data to file %s", test_output_path)
-        output_test.write.parquet(test_output_path)
+        output_test.write.option("compression", "none").parquet(test_output_path)
         logging.info("Writing prediction data to file %s", prediction_output_path)
-        output_prediction.write.parquet(prediction_output_path)
+        output_prediction.write.option("compression", "none").parquet(
+            prediction_output_path
+        )
     else:
         raise ValueError(f"Unknown file format {output_format}.")
 
@@ -182,10 +184,10 @@ def write_explanations(
         macro_scores_df.repartition(n_rep).write.csv(macro_output_path, header=True)
     elif output_format == "parquet":
         logging.info("Writing micro explanation data to file %s", micro_output_path)
-        micro_scores_df.write.parquet(micro_output_path)
+        micro_scores_df.write.option("compression", "none").parquet(micro_output_path)
         logging.info(
             "Writing macro explanation data to directory %s", macro_output_path
         )
-        macro_scores_df.write.parquet(macro_output_path)
+        macro_scores_df.write.option("compression", "none").parquet(macro_output_path)
     else:
         raise ValueError(f"Unknown file format {output_format}.")
