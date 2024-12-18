@@ -143,7 +143,6 @@ class PreprocessingConfiguration:
           representing continuous values bins for ordinal encoding such as one-hot
           encoding.
         scalers_params: Scalers kwargs used for instanciation of these objects.
-
     """
 
     identifiers: List[str] = dataclasses.field(
@@ -230,6 +229,7 @@ class IOConfiguration:
           runtime parameters will be saved.
         sample_ratio: Loaded data sample size as a fraction of its full size.
         random_seed: An integer random seed (used during sampling operations).
+        output_format : csv or parquet
 
     """
 
@@ -238,6 +238,7 @@ class IOConfiguration:
     prediction_path: str = path.join(f"predictions/{dt.datetime.now().timestamp()}")
     sample_ratio: float = 1.0
     random_seed: int = random.randint(0, 10000)
+    output_format: str = "csv"
 
 
 class ConfigurationHelper:
@@ -264,6 +265,8 @@ class ConfigurationHelper:
 
     def __init__(self, config_file: str = None, cli_args: Dict[str, Any] = None):
         override_args: Dict[str, Any] = {}
+        print("COUCOU")
+        print(cli_args)
         if config_file is not None:
             with importlib_resources.files("sf_datalake.configuration").joinpath(
                 f"{config_file}"
