@@ -123,9 +123,6 @@ parser.add_argument(
 )
 args = vars(parser.parse_args())
 
-print("COUCOU")
-print(args)
-
 # Parse configuration files and possibly override parameters.
 # Then, dump all used configuration inside the output directory.
 config_file: str = args.pop("configuration")
@@ -251,11 +248,11 @@ sf_datalake.io.write_predictions(
     path.join(configuration.io.root_directory, configuration.io.prediction_path),
     test_transformed,
     prediction_transformed,
-    args.output_format,
+    configuration.io.output_format,
 )
 sf_datalake.io.write_explanations(
     path.join(configuration.io.root_directory, configuration.io.prediction_path),
     spark.createDataFrame(macro_scores.reset_index()),
     spark.createDataFrame(shap_values.reset_index()),
-    args.output_format,
+    configuration.io.output_format,
 )
