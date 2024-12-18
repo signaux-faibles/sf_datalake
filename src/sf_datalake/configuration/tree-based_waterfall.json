@@ -83,7 +83,7 @@
         ]
     },
     "topic_groups": {
-        "Données financières": [
+        "Données-financières": [
             "dette_nette_sur_caf",
             "dette_à_terme_sur_k_propres",
             "ebe_sur_ca",
@@ -100,22 +100,22 @@
             "rentabilité_économique",
             "solidité_financière"
         ],
-        "Recours à l'activité partielle": [
+        "Recours-à-l'activité-partielle": [
             "ap_heures_consommées"
         ],
-        "Dettes sociales": [
+        "Dettes-sociales": [
             "cotisation",
             "dette_sociale_ouvrière",
             "dette_sociale_patronale",
             "dette_sur_cotisation_mean12m",
             "dette_par_effectif"
         ],
-        "Retards de paiement fournisseurs": [
+        "Retards-de-paiement-fournisseurs": [
             "paydex",
             "fpi_30",
             "fpi_90"
         ],
-        "Variation de l'effectif de l'entreprise": [
+        "Variation-de-l'effectif-de-l'entreprise": [
             "effectif"
         ]
     },
