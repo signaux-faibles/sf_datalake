@@ -18,12 +18,15 @@ from typing import Union
 import importlib_metadata
 import micro_macro_link as mml
 import pandas as pd
+from pyspark.sql import SparkSession
 
 import sf_datalake.configuration
 import sf_datalake.evaluation
 import sf_datalake.io
 import sf_datalake.predictions
 import sf_datalake.utils
+
+spark = SparkSession.builder.appName("Json list").getOrCreate()
 
 parser = argparse.ArgumentParser(
     description="""Generate a JSON document to be fed to the Signaux Faibles front-end
@@ -128,7 +131,8 @@ test_set = None
 if args.input_ext == "csv":
     test_set = pd.read_csv(args.test_set + "." + args.input_ext)
 elif args.input_ext == "parquet":
-    test_set = pd.read_parquet(args.test_set + "." + args.input_ext)
+    df = spark.read.parquet(args.test_set + "." + args.input_ext)
+    test_set = df.toPandas()
 else:
     raise ValueError(f"Unknown file format {args.input_ext}.")
 test_set["siren"] = normalize_siren(test_set["siren"])
@@ -138,7 +142,8 @@ prediction_set = None
 if args.input_ext == "csv":
     prediction_set = pd.read_csv(args.prediction_set + "." + args.input_ext)
 elif args.input_ext == "parquet":
-    prediction_set = pd.read_parquet(args.prediction_set + "." + args.input_ext)
+    df = spark.read.parquet(args.prediction_set + "." + args.input_ext)
+    prediction_set = df.toPandas()
 prediction_set["siren"] = normalize_siren(prediction_set["siren"])
 prediction_set = prediction_set.set_index("siren")
 
@@ -148,9 +153,10 @@ if args.input_ext == "csv":
         path.join(args.explanation_data, "macro_explanation.csv")
     )
 elif args.input_ext == "parquet":
-    macro_explanation = pd.read_parquet(
+    df = spark.read.parquet(
         path.join(args.explanation_data, "macro_explanation.parquet")
     )
+    macro_explanation = df.toPandas()
 
 macro_explanation["siren"] = normalize_siren(macro_explanation["siren"])
 macro_explanation = macro_explanation.set_index("siren")
@@ -183,10 +189,10 @@ if args.input_ext == "csv":
         path.join(args.explanation_data, "micro_explanation.csv")
     )
 elif args.input_ext == "parquet":
-    micro_explanation = pd.read_parquet(
+    df = spark.read.parquet(
         path.join(args.explanation_data, "micro_explanation.parquet")
     )
-
+    micro_explanation = df.toPandas()
 
 micro_explanation["siren"] = normalize_siren(micro_explanation["siren"])
 micro_explanation = micro_explanation.set_index("siren")

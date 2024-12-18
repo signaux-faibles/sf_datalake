@@ -182,10 +182,10 @@ def write_explanations(
         macro_scores_df.repartition(n_rep).write.csv(macro_output_path, header=True)
     elif output_format == "parquet":
         logging.info("Writing micro explanation data to file %s", micro_output_path)
-        micro_scores_df.repartition(n_rep).write.parquet(micro_output_path)
+        micro_scores_df.write.parquet(micro_output_path)
         logging.info(
             "Writing macro explanation data to directory %s", macro_output_path
         )
-        macro_scores_df.repartition(n_rep).write.parquet(macro_output_path)
+        macro_scores_df.write.parquet(macro_output_path)
     else:
         raise ValueError(f"Unknown file format {output_format}.")
