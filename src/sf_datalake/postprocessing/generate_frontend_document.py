@@ -126,9 +126,9 @@ additional_data = {
 # Load prediction lists
 test_set = None
 if args.input_ext == "csv":
-    test_set = pd.read_csv(args.test_set + args.input_ext)
+    test_set = pd.read_csv(args.test_set + "." + args.input_ext)
 elif args.input_ext == "parquet":
-    test_set = pd.read_parquet(args.test_set + args.input_ext)
+    test_set = pd.read_parquet(args.test_set + "." + args.input_ext)
 else:
     raise ValueError(f"Unknown file format {args.input_ext}.")
 test_set["siren"] = normalize_siren(test_set["siren"])
@@ -136,9 +136,9 @@ test_set = test_set.set_index("siren")
 
 prediction_set = None
 if args.input_ext == "csv":
-    prediction_set = pd.read_csv(args.prediction_set + args.input_ext)
+    prediction_set = pd.read_csv(args.prediction_set + "." + args.input_ext)
 elif args.input_ext == "parquet":
-    prediction_set = pd.read_parquet(args.prediction_set + args.input_ext)
+    prediction_set = pd.read_parquet(args.prediction_set + "." + args.input_ext)
 prediction_set["siren"] = normalize_siren(prediction_set["siren"])
 prediction_set = prediction_set.set_index("siren")
 
