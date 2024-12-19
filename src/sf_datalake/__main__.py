@@ -265,8 +265,11 @@ output_dir = path.join(
 fn = path.join(output_dir, "test_data." + configuration.io.output_format)
 
 print("INFO")
+print(os.listdir("./"))
+print("SUITE")
 print(fn)
 files = os.listdir(output_dir)
+print(files)
 
 check = os.system(f"sha256sum {fn}")
 print("COUCOU = ", check)
