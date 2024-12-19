@@ -7,6 +7,7 @@ import inspect
 import json
 import random
 import shutil
+import time
 from dataclasses import dataclass
 from os import path, remove
 from typing import Any, Dict, Iterable, List, Tuple
@@ -340,6 +341,7 @@ class ConfigurationHelper:
         )
         if path.exists(file_path):
             shutil.rmtree(file_path)
+            time.sleep(2)
         config_rdd.repartition(1).saveAsTextFile(file_path)
 
     def encoding_scaling_stages(self) -> List[Transformer]:
