@@ -6,6 +6,7 @@ import datetime as dt
 import inspect
 import json
 import random
+import shutil
 from dataclasses import dataclass
 from os import path, remove
 from typing import Any, Dict, Iterable, List, Tuple
@@ -338,7 +339,7 @@ class ConfigurationHelper:
             self.io.root_directory, self.io.prediction_path, "run_configuration"
         )
         if path.exists(file_path):
-            remove(file_path)
+            shutil.rmtree(file_path)
         config_rdd.repartition(1).saveAsTextFile(file_path)
 
     def encoding_scaling_stages(self) -> List[Transformer]:
