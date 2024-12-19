@@ -6,6 +6,7 @@ Processes datasets according to provided configuration to make predictions.
 # pylint: disable=unsubscriptable-object,wrong-import-position
 
 import argparse
+import logging
 import os
 import sys
 from os import path
@@ -256,3 +257,12 @@ sf_datalake.io.write_explanations(
     spark.createDataFrame(shap_values.reset_index()),
     configuration.io.output_format,
 )
+
+
+output_dir = path.join(
+    configuration.io.root_directory, configuration.io.prediction_path
+)
+fn = path.join(output_dir, "test_data." + configuration.io.output_format)
+check = os.system(f"sha256sum {fn}")
+print("COUCOU = ", check)
+logging.info("Writing test data to file %s", check)
