@@ -7,7 +7,7 @@ import inspect
 import json
 import random
 from dataclasses import dataclass
-from os import path
+from os import path, remove
 from typing import Any, Dict, Iterable, List, Tuple
 
 import importlib_metadata
@@ -334,13 +334,12 @@ class ConfigurationHelper:
             else complete_dump
         )
         config_rdd = spark.sparkContext.parallelize([json.dumps(dump_dict)])
-        config_rdd.repartition(1).saveAsTextFile(
-            path.join(
-                self.io.root_directory,
-                self.io.prediction_path,
-                "run_configuration",
-            )
+        file_path = path.join(
+            self.io.root_directory, self.io.prediction_path, "run_configuration"
         )
+        if path.exists(file_path):
+            remove(file_path)
+        config_rdd.repartition(1).saveAsTextFile(file_path)
 
     def encoding_scaling_stages(self) -> List[Transformer]:
         """Generates all stages related to feature encoding and sclaing.
