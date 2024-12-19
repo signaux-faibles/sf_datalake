@@ -263,6 +263,11 @@ output_dir = path.join(
     configuration.io.root_directory, configuration.io.prediction_path
 )
 fn = path.join(output_dir, "test_data." + configuration.io.output_format)
+
+print("INFO")
+print(fn)
+files = os.listdir(output_dir)
+
 check = os.system(f"sha256sum {fn}")
 print("COUCOU = ", check)
 logging.info("Writing test data to file %s", check)
