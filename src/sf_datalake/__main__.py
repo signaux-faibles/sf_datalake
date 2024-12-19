@@ -256,3 +256,29 @@ sf_datalake.io.write_explanations(
     spark.createDataFrame(shap_values.reset_index()),
     configuration.io.output_format,
 )
+
+input_ = path.join(configuration.io.root_directory, configuration.io.prediction_path)
+output_format = configuration.io.output_format
+
+test_input_path = path.join(input_, "test_data." + output_format)
+prediction_input_path = path.join(input_, "prediction_data." + output_format)
+
+micro_input_path = path.join(input_, "micro_explanation." + output_format)
+macro_input_path = path.join(input_, "macro_explanation." + output_format)
+
+print("COUCOU")
+print("")
+df = spark.read.parquet(test_input_path)
+print("")
+df.show()
+df = spark.read.parquet(prediction_input_path)
+print("")
+df.show()
+df = spark.read.parquet(micro_input_path)
+print("")
+df.show()
+df = spark.read.parquet(macro_input_path)
+print("")
+df.show()
+print("FIN")
+print(df["blabla"])
