@@ -12,6 +12,7 @@ See the command-line interface for more details on expected inputs.
 import argparse
 import datetime
 import json
+import sys
 from os import environ, path
 from typing import Union
 
@@ -100,6 +101,9 @@ micro_macro = {
     for micro in micros
 }
 
+print(micro_macro)
+sys.exit()
+
 # pour avoir les mois en francais
 mois = [
     "Janvier",
@@ -163,6 +167,8 @@ macro_explanation = macro_explanation.set_index("siren")
 macro_explanation.columns = [
     col.replace("_macro_score", "") for col in macro_explanation.columns
 ]
+macro_explanation.columns = [col.replace("-", " ") for col in macro_explanation.columns]
+
 
 #############################################################################
 # Convert macro_explanation for the waterfall :
