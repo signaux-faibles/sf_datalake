@@ -148,6 +148,7 @@ if configuration.io.sample_ratio != 1.0:
         fraction=configuration.io.sample_ratio, seed=configuration.io.random_seed
     )
 
+print("Hello World")
 
 ## Pre-processing pipeline
 preprocessing_pipeline = Pipeline(stages=configuration.encoding_scaling_stages())

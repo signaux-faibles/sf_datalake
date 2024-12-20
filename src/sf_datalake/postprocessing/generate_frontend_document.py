@@ -167,7 +167,6 @@ macro_explanation = macro_explanation.set_index("siren")
 macro_explanation.columns = [
     col.replace("_macro_score", "") for col in macro_explanation.columns
 ]
-macro_explanation.columns = [col.replace("-", " ") for col in macro_explanation.columns]
 
 
 #############################################################################
