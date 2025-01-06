@@ -7,7 +7,7 @@ import inspect
 import json
 import random
 from dataclasses import dataclass
-from os import path, remove
+from os import path
 from typing import Any, Dict, Iterable, List, Tuple
 
 import importlib_metadata
