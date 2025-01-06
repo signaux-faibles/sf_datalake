@@ -117,53 +117,75 @@ def write_predictions(
     output_dir: str,
     test_data: pyspark.sql.DataFrame,
     prediction_data: pyspark.sql.DataFrame,
+    output_format: str,
     n_rep: int = 5,
 ):
-    """Writes the results of a prediction to CSV files."""
-    test_output_path = path.join(output_dir, "test_data.csv")
-    prediction_output_path = path.join(output_dir, "prediction_data.csv")
+    """Writes the results of a prediction to CSV or parquet files."""
+    test_output_path = path.join(output_dir, "test_data." + output_format)
+    prediction_output_path = path.join(output_dir, "prediction_data." + output_format)
 
-    logging.info("Writing test data to file %s", test_output_path)
-    sf_datalake.transform.vector_disassembler(
-        test_data,
-        ["comp_probability", "probability"],
-        assembled_col="probability",
-        keep=["siren", "failure", "code_naf", "code_commune", "région"],
-    ).select(
-        ["siren", "code_naf", "failure", "probability", "code_commune", "région"]
-    ).repartition(
-        n_rep
-    ).write.csv(
-        test_output_path, header=True
+    output_test = (
+        sf_datalake.transform.vector_disassembler(
+            test_data,
+            ["comp_probability", "probability"],
+            assembled_col="probability",
+            keep=["siren", "failure", "code_naf", "code_commune", "région"],
+        )
+        .select(
+            ["siren", "code_naf", "failure", "probability", "code_commune", "région"]
+        )
+        .repartition(n_rep)
     )
 
-    logging.info("Writing prediction data to file %s", prediction_output_path)
-    sf_datalake.transform.vector_disassembler(
-        prediction_data,
-        ["comp_probability", "probability"],
-        assembled_col="probability",
-        keep=["siren", "code_naf", "code_commune", "région"],
-    ).select(
-        ["siren", "code_naf", "probability", "code_commune", "région"]
-    ).repartition(
-        n_rep
-    ).write.csv(
-        prediction_output_path, header=True
+    output_prediction = (
+        sf_datalake.transform.vector_disassembler(
+            prediction_data,
+            ["comp_probability", "probability"],
+            assembled_col="probability",
+            keep=["siren", "code_naf", "code_commune", "région"],
+        )
+        .select(["siren", "code_naf", "probability", "code_commune", "région"])
+        .repartition(n_rep)
     )
+
+    if output_format == "csv":
+        logging.info("Writing test data to file %s", test_output_path)
+        output_test.write.csv(test_output_path, header=True)
+        logging.info("Writing prediction data to file %s", prediction_output_path)
+        output_prediction.write.csv(prediction_output_path, header=True)
+    elif output_format == "parquet":
+        logging.info("Writing test data to file %s", test_output_path)
+        output_test.coalesce(1).write.parquet(test_output_path)
+        logging.info("Writing prediction data to file %s", prediction_output_path)
+        output_prediction.coalesce(1).write.parquet(prediction_output_path)
+    else:
+        raise ValueError(f"Unknown file format {output_format}.")
 
 
 def write_explanations(
     output_dir: str,
     macro_scores_df: pyspark.sql.DataFrame,
     micro_scores_df: pyspark.sql.DataFrame,
+    output_format: str,
     n_rep: int = 5,
 ):
-    """Writes the explanations of a prediction to CSV files."""
-    micro_output_path = path.join(output_dir, "micro_explanation.csv")
-    macro_output_path = path.join(output_dir, "macro_explanation.csv")
-    logging.info("Writing micro explanation data to file %s", micro_output_path)
-    micro_scores_df.repartition(n_rep).write.csv(micro_output_path, header=True)
-    logging.info("Writing macro explanation data to directory %s", macro_output_path)
-    macro_scores_df.repartition(n_rep).write.csv(
-        path.join(macro_output_path), header=True
-    )
+    """Writes the explanations of a prediction to CSV or parquet files."""
+    micro_output_path = path.join(output_dir, "micro_explanation." + output_format)
+    macro_output_path = path.join(output_dir, "macro_explanation." + output_format)
+
+    if output_format == "csv":
+        logging.info("Writing micro explanation data to file %s", micro_output_path)
+        micro_scores_df.repartition(n_rep).write.csv(micro_output_path, header=True)
+        logging.info(
+            "Writing macro explanation data to directory %s", macro_output_path
+        )
+        macro_scores_df.repartition(n_rep).write.csv(macro_output_path, header=True)
+    elif output_format == "parquet":
+        logging.info("Writing micro explanation data to file %s", micro_output_path)
+        micro_scores_df.coalesce(1).write.parquet(micro_output_path)
+        logging.info(
+            "Writing macro explanation data to directory %s", macro_output_path
+        )
+        macro_scores_df.coalesce(1).write.parquet(macro_output_path)
+    else:
+        raise ValueError(f"Unknown file format {output_format}.")
