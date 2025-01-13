@@ -161,7 +161,7 @@ df = df.withColumn("date_fin_exercice", F.to_date("date_fin_exercice"))
 
 # Point out which variables are used as source for feature computation
 feature_cols: List[str] = configuration.explanation.topic_groups.get(
-    "Données-financière"
+    "Données-financières"
 )
 source_variables: List[str] = [
     "mnt_af_endettement_net",
