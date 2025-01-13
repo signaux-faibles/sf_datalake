@@ -41,6 +41,10 @@ df = spark.read.csv(
     inferSchema=True,
     header=True,
 )
+
+print("coucou")
+df.show()
+
 df = df.filter(
     (F.col("date_effet") >= args.start_date) & (F.col("date_effet") <= args.end_date)
 )
