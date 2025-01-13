@@ -36,11 +36,13 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Filter to restricted input time period.
-df = spark.read.csv(
-    args.input,
-    inferSchema=True,
-    header=True,
-)
+# df = spark.read.csv(
+#    args.input,
+#    inferSchema=True,
+#    header=True,
+# )
+df = spark.read.csv(args.input, header=True)
+
 
 print("coucou")
 print(args.input)
