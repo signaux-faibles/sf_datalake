@@ -36,17 +36,12 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Filter to restricted input time period.
-# df = spark.read.csv(
-#    args.input,
-#    inferSchema=True,
-#    header=True,
-# )
-df = spark.read.csv(args.input, header=True)
+df = spark.read.csv(
+    args.input,
+    inferSchema=True,
+    header=True,
+)
 
-
-print("coucou")
-print(args.input)
-df.show(10)
 
 df = df.filter(
     (F.col("date_effet") >= args.start_date) & (F.col("date_effet") <= args.end_date)
