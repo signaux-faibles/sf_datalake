@@ -18,12 +18,15 @@ from typing import Union
 import importlib_metadata
 import micro_macro_link as mml
 import pandas as pd
+from pyspark.sql import SparkSession
 
 import sf_datalake.configuration
 import sf_datalake.evaluation
 import sf_datalake.io
 import sf_datalake.predictions
 import sf_datalake.utils
+
+spark = SparkSession.builder.appName("Json list").getOrCreate()
 
 parser = argparse.ArgumentParser(
     description="""Generate a JSON document to be fed to the Signaux Faibles front-end
@@ -35,20 +38,26 @@ path_group = parser.add_argument_group(
 )
 
 path_group.add_argument(
-    "-t", "--test_set", required=True, help="Path to the test set csv file."
+    "-t", "--test_set", required=True, help="Path to the test set file."
 )
 path_group.add_argument(
     "-p",
     "--prediction_set",
     required=True,
-    help="Path to the prediction set csv file.",
+    help="Path to the prediction set file.",
 )
 path_group.add_argument(
     "-x",
     "--explanation_data",
     required=True,
-    help="""Path to a directory containing csv files with "micro" and "macro"
+    help="""Path to a directory containing files with "micro" and "macro"
     explanation data.""",
+)
+path_group.add_argument(
+    "-e",
+    "--input_ext",
+    required=True,
+    help="""Extension of file to read.""",
 )
 path_group.add_argument(
     "-o",
@@ -91,6 +100,7 @@ micro_macro = {
     for micro in micros
 }
 
+
 # pour avoir les mois en francais
 mois = [
     "Janvier",
@@ -118,23 +128,43 @@ additional_data = {
 }
 
 # Load prediction lists
-test_set = pd.read_csv(args.test_set)
+test_set = None
+if args.input_ext == "csv":
+    test_set = pd.read_csv(args.test_set + "." + args.input_ext)
+elif args.input_ext == "parquet":
+    df = spark.read.parquet(args.test_set + "." + args.input_ext)
+    test_set = df.toPandas()
+else:
+    raise ValueError(f"Unknown file format {args.input_ext}.")
 test_set["siren"] = normalize_siren(test_set["siren"])
 test_set = test_set.set_index("siren")
 
-prediction_set = pd.read_csv(args.prediction_set)
+prediction_set = None
+if args.input_ext == "csv":
+    prediction_set = pd.read_csv(args.prediction_set + "." + args.input_ext)
+elif args.input_ext == "parquet":
+    df = spark.read.parquet(args.prediction_set + "." + args.input_ext)
+    prediction_set = df.toPandas()
 prediction_set["siren"] = normalize_siren(prediction_set["siren"])
 prediction_set = prediction_set.set_index("siren")
 
-macro_explanation = pd.read_csv(
-    path.join(args.explanation_data, "macro_explanation.csv")
-)
+macro_explanation = None
+if args.input_ext == "csv":
+    macro_explanation = pd.read_csv(
+        path.join(args.explanation_data, "macro_explanation.csv")
+    )
+elif args.input_ext == "parquet":
+    df = spark.read.parquet(
+        path.join(args.explanation_data, "macro_explanation.parquet")
+    )
+    macro_explanation = df.toPandas()
+
 macro_explanation["siren"] = normalize_siren(macro_explanation["siren"])
 macro_explanation = macro_explanation.set_index("siren")
 macro_explanation.columns = [
     col.replace("_macro_score", "") for col in macro_explanation.columns
 ]
-
+macro_explanation.columns = [col.replace("-", " ") for col in macro_explanation.columns]
 
 #############################################################################
 # Convert macro_explanation for the waterfall :
@@ -152,30 +182,20 @@ for isi in siren_index:
     iexp = iproba - sum_macro.loc[isi]
     ifactor = 100.0 * iproba / (iproba - iexp)
     macro_explanation.loc[isi] = ifactor * macro_explanation.loc[isi]
-
-# rename quantities
-macro_explanation = macro_explanation.rename(
-    columns={"misc": "Variation de l'effectif de l'entreprise"}
-)
-macro_explanation = macro_explanation.rename(
-    columns={"santé_financière": "Données financières"}
-)
-macro_explanation = macro_explanation.rename(
-    columns={"activité_partielle": "Recours à l'activité partielle"}
-)
-macro_explanation = macro_explanation.rename(
-    columns={"dette_urssaf": "Dettes sociales"}
-)
-macro_explanation = macro_explanation.rename(
-    columns={"retards_paiement": "Retards de paiement fournisseurs"}
-)
 # End of rescaling part
 #############################################################################
 
+micro_explanation = None
+if args.input_ext == "csv":
+    micro_explanation = pd.read_csv(
+        path.join(args.explanation_data, "micro_explanation.csv")
+    )
+elif args.input_ext == "parquet":
+    df = spark.read.parquet(
+        path.join(args.explanation_data, "micro_explanation.parquet")
+    )
+    micro_explanation = df.toPandas()
 
-micro_explanation = pd.read_csv(
-    path.join(args.explanation_data, "micro_explanation.csv")
-)
 micro_explanation["siren"] = normalize_siren(micro_explanation["siren"])
 micro_explanation = micro_explanation.set_index("siren")
 
@@ -215,6 +235,10 @@ prediction_set["probability"] *= 100
 prediction_set = prediction_set.rename(columns={"probability": "Risque de défaillance"})
 
 
+## Add threshold to front json document
+additional_data["Seuil modéré"] = score_threshold[2]
+additional_data["Seuil fort"] = score_threshold[0.5]
+
 ## Export front json document
 for field, value in additional_data.items():
     prediction_set[field] = value
@@ -229,7 +253,7 @@ for siren in prediction_set[prediction_set["alert"] != "Pas d'alerte"].index:
     ## We now convert micro_explanation to fit with macro
     imacro = macro_explanation.loc[siren].to_dict()
     imicro = micro_explanation.loc[siren].to_dict()
-    imicro_scaled = mml.getRescaledData(imacro, imicro)
+    imicro_scaled = mml.getRescaledData(imacro, imicro, micro_macro)
 
     output_entries[siren].update(
         {

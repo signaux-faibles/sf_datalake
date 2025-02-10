@@ -114,7 +114,13 @@ parser.add_argument(
     results.
     """,
 )
-
+parser.add_argument(
+    "--output_format",
+    type=str,
+    help="""
+    Output file format of the classification. Should be csv or parquet.
+    """,
+)
 args = vars(parser.parse_args())
 
 # Parse configuration files and possibly override parameters.
@@ -242,9 +248,11 @@ sf_datalake.io.write_predictions(
     path.join(configuration.io.root_directory, configuration.io.prediction_path),
     test_transformed,
     prediction_transformed,
+    configuration.io.output_format,
 )
 sf_datalake.io.write_explanations(
     path.join(configuration.io.root_directory, configuration.io.prediction_path),
     spark.createDataFrame(macro_scores.reset_index()),
     spark.createDataFrame(shap_values.reset_index()),
+    configuration.io.output_format,
 )
